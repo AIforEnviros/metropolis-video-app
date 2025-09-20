@@ -6,6 +6,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('fileInput');
     const clipsMatrix = document.getElementById('clipsMatrix');
 
+    // Track the currently selected clip
+    let selectedClipSlot = null;
+
     // Generate 6x6 grid of clip slots
     function createClipMatrix() {
         clipsMatrix.innerHTML = '';
@@ -14,9 +17,30 @@ document.addEventListener('DOMContentLoaded', function() {
             clipSlot.className = 'clip-slot';
             clipSlot.textContent = `Clip ${i}`;
             clipSlot.dataset.clipNumber = i;
+
+            // Add click handler for selection
+            clipSlot.addEventListener('click', function() {
+                selectClipSlot(clipSlot);
+            });
+
             clipsMatrix.appendChild(clipSlot);
         }
         console.log('Created 6x6 clip matrix with 36 slots');
+    }
+
+    // Handle clip selection
+    function selectClipSlot(clipSlot) {
+        // Remove selected class from previously selected slot
+        if (selectedClipSlot) {
+            selectedClipSlot.classList.remove('selected');
+        }
+
+        // Add selected class to new slot
+        clipSlot.classList.add('selected');
+        selectedClipSlot = clipSlot;
+
+        const clipNumber = clipSlot.dataset.clipNumber;
+        console.log(`Selected clip slot ${clipNumber}`);
     }
 
     // Initialize the matrix

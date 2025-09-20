@@ -1,8 +1,8 @@
 # Metropolis Video App - Development Plan
 
 ## Progress Tracker
-- **Current Step:** Ready for Step 2 - Add Clip Selection
-- **Completed Steps:** 1/16
+- **Current Step:** Ready for Step 3 - Load Videos into Grid Slots
+- **Completed Steps:** 2/16
 - **Current Phase:** Foundation & Layout
 
 ---
@@ -44,8 +44,8 @@
 
 ---
 
-### Step 2: Add Clip Selection ⏸️
-**Status:** Not Started
+### Step 2: Add Clip Selection ✅
+**Status:** Completed
 **What to build:**
 - Click on grid slots to select active clip
 - Visual feedback showing which slot is selected
@@ -53,10 +53,10 @@
 - Only one slot can be selected at a time
 
 **Testing checklist:**
-- [ ] Click different slots and verify selection changes
-- [ ] Visual highlight appears on selected slot
-- [ ] Previous selection is cleared when new slot clicked
-- [ ] No functionality broken from step 1
+- [x] Click different slots and verify selection changes
+- [x] Visual highlight appears on selected slot
+- [x] Previous selection is cleared when new slot clicked
+- [x] No functionality broken from step 1
 
 **Commit message:** `Add clip selection system with visual feedback`
 
@@ -66,8 +66,8 @@
 
 ---
 
-### Step 3: Load Videos into Grid Slots ⏸️
-**Status:** Not Started
+### Step 3: Load Videos into Grid Slots ⏳
+**Status:** Ready to Start
 **What to build:**
 - Modify "Load Test Video" to load into currently selected slot
 - File input loads video into currently selected slot
