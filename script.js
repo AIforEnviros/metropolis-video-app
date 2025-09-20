@@ -53,9 +53,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // If this slot has a video, load it in the preview
         if (clipVideos[clipNumber]) {
+            const wasPlaying = isPlaying;
             video.src = clipVideos[clipNumber].url;
             video.load();
             console.log('Loaded video for selected slot:', clipVideos[clipNumber].name);
+
+            // If we were playing before, continue playing the new clip
+            if (wasPlaying) {
+                video.addEventListener('loadeddata', function() {
+                    video.play().then(() => {
+                        console.log('Auto-playing new clip due to global play state');
+                        isPlaying = true;
+                        updatePlayButtonState();
+                    }).catch(e => {
+                        console.error('Error auto-playing new clip:', e);
+                        isPlaying = false;
+                        updatePlayButtonState();
+                    });
+                }, { once: true });
+            } else {
+                // Make sure button state is correct when not playing
+                isPlaying = false;
+                updatePlayButtonState();
+            }
+        } else {
+            // No video in this slot
+            isPlaying = false;
+            updatePlayButtonState();
         }
     }
 
@@ -138,6 +162,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         // Update the video player to show this video
+        const wasPlaying = isPlaying;
         video.src = videoUrl;
         video.load();
 
@@ -146,7 +171,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
         video.addEventListener('loadeddata', function() {
             console.log('Test video loaded successfully into slot', clipNumber);
-        });
+            // Continue playing if we were playing before
+            if (wasPlaying) {
+                video.play().then(() => {
+                    console.log('Auto-continuing playback after loading test video');
+                }).catch(e => {
+                    console.error('Error continuing playback:', e);
+                });
+            }
+        }, { once: true });
 
         video.addEventListener('error', function(e) {
             console.error('Error loading test video:', e);
@@ -176,6 +209,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
 
             // Update the video player to show this video
+            const wasPlaying = isPlaying;
             video.src = url;
             video.load();
 
@@ -184,7 +218,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
             video.addEventListener('loadeddata', function() {
                 console.log('File loaded successfully into slot', clipNumber);
-            });
+                // Continue playing if we were playing before
+                if (wasPlaying) {
+                    video.play().then(() => {
+                        console.log('Auto-continuing playback after loading file');
+                    }).catch(e => {
+                        console.error('Error continuing playback:', e);
+                    });
+                }
+            }, { once: true });
         }
     });
 
@@ -257,6 +299,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     video.addEventListener('ended', function() {
         console.log('Video ended');
+        isPlaying = false;
+        updatePlayButtonState();
     });
 
     video.addEventListener('timeupdate', function() {
