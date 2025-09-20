@@ -1,8 +1,8 @@
 # Metropolis Video App - Development Plan
 
 ## Progress Tracker
-- **Current Step:** Ready for Step 3 - Load Videos into Grid Slots
-- **Completed Steps:** 2/16
+- **Current Step:** Ready for Step 4 - Add Global Transport Controls
+- **Completed Steps:** 3/16
 - **Current Phase:** Foundation & Layout
 
 ---
@@ -66,8 +66,8 @@
 
 ---
 
-### Step 3: Load Videos into Grid Slots ⏳
-**Status:** Ready to Start
+### Step 3: Load Videos into Grid Slots ✅
+**Status:** Completed
 **What to build:**
 - Modify "Load Test Video" to load into currently selected slot
 - File input loads video into currently selected slot
@@ -75,10 +75,10 @@
 - Empty slots remain clearly marked as empty
 
 **Testing checklist:**
-- [ ] Select slot 1, load test video → slot 1 shows it contains video
-- [ ] Select slot 5, load different video → slot 5 shows it contains video
-- [ ] Visual distinction between empty and loaded slots
-- [ ] Can load videos into multiple different slots
+- [x] Select slot 1, load test video → slot 1 shows it contains video
+- [x] Select slot 5, load different video → slot 5 shows it contains video
+- [x] Visual distinction between empty and loaded slots
+- [x] Can load videos into multiple different slots
 
 **Commit message:** `Enable loading videos into selected grid slots`
 
@@ -89,8 +89,8 @@
 
 ---
 
-### Step 4: Add Global Transport Controls ⏸️
-**Status:** Not Started
+### Step 4: Add Global Transport Controls ⏳
+**Status:** Ready to Start
 **What to build:**
 - Add 5 circular transport buttons as specified:
   1. Previous Clip (skip to previous clip in matrix)

@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track the currently selected clip
     let selectedClipSlot = null;
 
+    // Track videos loaded into each slot (clipNumber -> video data)
+    const clipVideos = {};
+
     // Generate 6x6 grid of clip slots
     function createClipMatrix() {
         clipsMatrix.innerHTML = '';
@@ -41,6 +44,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const clipNumber = clipSlot.dataset.clipNumber;
         console.log(`Selected clip slot ${clipNumber}`);
+
+        // If this slot has a video, load it in the preview
+        if (clipVideos[clipNumber]) {
+            video.src = clipVideos[clipNumber].url;
+            video.load();
+            console.log('Loaded video for selected slot:', clipVideos[clipNumber].name);
+        }
+    }
+
+    // Update visual appearance of slot based on whether it has video
+    function updateSlotAppearance(slot, hasVideo) {
+        if (hasVideo) {
+            slot.classList.add('has-video');
+            const clipNumber = slot.dataset.clipNumber;
+            const videoData = clipVideos[clipNumber];
+            slot.innerHTML = `<div>Clip ${clipNumber}</div><div style="font-size: 10px; margin-top: 2px;">${videoData.name}</div>`;
+        } else {
+            slot.classList.remove('has-video');
+            slot.textContent = `Clip ${slot.dataset.clipNumber}`;
+        }
     }
 
     // Initialize the matrix
@@ -48,12 +71,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Load test video functionality
     loadTestVideoBtn.addEventListener('click', function() {
-        console.log('Loading test video...');
-        video.src = 'test-videos/test-video.mp4';
+        if (!selectedClipSlot) {
+            alert('Please select a clip slot first');
+            return;
+        }
+
+        console.log('Loading test video into slot', selectedClipSlot.dataset.clipNumber);
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const videoUrl = 'test-videos/test-video.mp4';
+
+        // Store video data for this slot
+        clipVideos[clipNumber] = {
+            url: videoUrl,
+            name: 'Test Video',
+            type: 'test'
+        };
+
+        // Update the video player to show this video
+        video.src = videoUrl;
         video.load();
 
+        // Update the visual appearance of the slot
+        updateSlotAppearance(selectedClipSlot, true);
+
         video.addEventListener('loadeddata', function() {
-            console.log('Test video loaded successfully');
+            console.log('Test video loaded successfully into slot', clipNumber);
         });
 
         video.addEventListener('error', function(e) {
@@ -66,13 +108,32 @@ document.addEventListener('DOMContentLoaded', function() {
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file) {
-            console.log('Loading file:', file.name);
+            if (!selectedClipSlot) {
+                alert('Please select a clip slot first');
+                return;
+            }
+
+            console.log('Loading file into slot', selectedClipSlot.dataset.clipNumber, ':', file.name);
+            const clipNumber = selectedClipSlot.dataset.clipNumber;
             const url = URL.createObjectURL(file);
+
+            // Store video data for this slot
+            clipVideos[clipNumber] = {
+                url: url,
+                name: file.name,
+                type: 'file',
+                file: file
+            };
+
+            // Update the video player to show this video
             video.src = url;
             video.load();
 
+            // Update the visual appearance of the slot
+            updateSlotAppearance(selectedClipSlot, true);
+
             video.addEventListener('loadeddata', function() {
-                console.log('File loaded successfully');
+                console.log('File loaded successfully into slot', clipNumber);
             });
         }
     });
