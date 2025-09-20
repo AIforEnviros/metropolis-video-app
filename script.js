@@ -1,7 +1,13 @@
 document.addEventListener('DOMContentLoaded', function() {
     const video = document.getElementById('videoPlayer');
-    const playBtn = document.getElementById('playBtn');
-    const pauseBtn = document.getElementById('pauseBtn');
+    const prevClipBtn = document.getElementById('prevClipBtn');
+    const reverseBtn = document.getElementById('reverseBtn');
+    const pausePlayBtn = document.getElementById('pausePlayBtn');
+    const forwardBtn = document.getElementById('forwardBtn');
+    const nextClipBtn = document.getElementById('nextClipBtn');
+
+    // Track current playing state
+    let isPlaying = false;
     const loadTestVideoBtn = document.getElementById('loadTestVideo');
     const fileInput = document.getElementById('fileInput');
     const clipsMatrix = document.getElementById('clipsMatrix');
@@ -66,8 +72,52 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Navigate between clips with video content
+    function navigateToClip(direction) {
+        const allSlots = Array.from(document.querySelectorAll('.clip-slot'));
+        const loadedSlots = allSlots.filter(slot => {
+            const clipNumber = slot.dataset.clipNumber;
+            return clipVideos[clipNumber];
+        });
+
+        if (loadedSlots.length === 0) {
+            alert('No clips with videos loaded');
+            return;
+        }
+
+        let currentIndex = -1;
+        if (selectedClipSlot) {
+            currentIndex = loadedSlots.findIndex(slot => slot === selectedClipSlot);
+        }
+
+        let nextIndex;
+        if (direction === 'next') {
+            nextIndex = (currentIndex + 1) % loadedSlots.length;
+        } else {
+            nextIndex = (currentIndex - 1 + loadedSlots.length) % loadedSlots.length;
+        }
+
+        const targetSlot = loadedSlots[nextIndex];
+        selectClipSlot(targetSlot);
+        console.log(`Navigated ${direction} to clip ${targetSlot.dataset.clipNumber}`);
+    }
+
+    // Update pause/play button appearance
+    function updatePlayButtonState() {
+        if (isPlaying) {
+            pausePlayBtn.textContent = '⏸';
+            pausePlayBtn.classList.add('playing');
+        } else {
+            pausePlayBtn.textContent = '▶';
+            pausePlayBtn.classList.remove('playing');
+        }
+    }
+
     // Initialize the matrix
     createClipMatrix();
+
+    // Initialize UI state
+    updatePlayButtonState();
 
     // Load test video functionality
     loadTestVideoBtn.addEventListener('click', function() {
@@ -138,39 +188,71 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Play button
-    playBtn.addEventListener('click', function() {
-        console.log('Play button clicked');
-        if (video.src) {
+    // Previous Clip button
+    prevClipBtn.addEventListener('click', function() {
+        console.log('Previous clip button clicked');
+        navigateToClip('previous');
+    });
+
+    // Reverse Play button (placeholder for now)
+    reverseBtn.addEventListener('click', function() {
+        console.log('Reverse play button clicked');
+        alert('Reverse play functionality coming soon!');
+    });
+
+    // Pause/Play toggle button
+    pausePlayBtn.addEventListener('click', function() {
+        console.log('Pause/Play button clicked');
+        if (!video.src) {
+            alert('Please select a clip with video first');
+            return;
+        }
+
+        if (isPlaying) {
+            video.pause();
+        } else {
             video.play().then(() => {
                 console.log('Video started playing');
             }).catch(e => {
                 console.error('Error playing video:', e);
                 alert('Error playing video: ' + e.message);
             });
-        } else {
-            alert('Please load a video first');
         }
     });
 
-    // Pause button
-    pauseBtn.addEventListener('click', function() {
-        console.log('Pause button clicked');
-        if (video.src) {
-            video.pause();
-            console.log('Video paused');
-        } else {
-            alert('Please load a video first');
+    // Forward Play button
+    forwardBtn.addEventListener('click', function() {
+        console.log('Forward play button clicked');
+        if (!video.src) {
+            alert('Please select a clip with video first');
+            return;
         }
+
+        video.play().then(() => {
+            console.log('Video started playing forward');
+        }).catch(e => {
+            console.error('Error playing video:', e);
+            alert('Error playing video: ' + e.message);
+        });
     });
 
-    // Video event listeners for debugging
+    // Next Clip button
+    nextClipBtn.addEventListener('click', function() {
+        console.log('Next clip button clicked');
+        navigateToClip('next');
+    });
+
+    // Video event listeners for debugging and state management
     video.addEventListener('play', function() {
         console.log('Video play event fired');
+        isPlaying = true;
+        updatePlayButtonState();
     });
 
     video.addEventListener('pause', function() {
         console.log('Video pause event fired');
+        isPlaying = false;
+        updatePlayButtonState();
     });
 
     video.addEventListener('ended', function() {

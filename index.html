@@ -118,11 +118,48 @@
             border-radius: 6px;
         }
 
-        .controls {
+        .transport-controls {
             display: flex;
             justify-content: center;
-            gap: 10px;
+            gap: 15px;
             flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .transport-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: #333;
+            color: white;
+            border: 2px solid #555;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .transport-btn:hover {
+            background-color: #555;
+            border-color: #777;
+            transform: scale(1.05);
+        }
+
+        .transport-btn:active {
+            transform: scale(0.95);
+        }
+
+        .transport-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .transport-btn.playing {
+            background-color: #0066cc;
+            border-color: #0088ff;
         }
 
         button {
@@ -190,10 +227,13 @@
                 </video>
             </div>
 
-            <h3>Controls</h3>
-            <div class="controls">
-                <button id="playBtn">Play</button>
-                <button id="pauseBtn">Pause</button>
+            <h3>Global Transport Controls</h3>
+            <div class="transport-controls">
+                <button id="prevClipBtn" class="transport-btn" title="Previous Clip">⏮</button>
+                <button id="reverseBtn" class="transport-btn" title="Reverse Play">⏪</button>
+                <button id="pausePlayBtn" class="transport-btn" title="Pause/Play">⏸</button>
+                <button id="forwardBtn" class="transport-btn" title="Forward Play">⏩</button>
+                <button id="nextClipBtn" class="transport-btn" title="Next Clip">⏭</button>
             </div>
         </div>
     </div>

@@ -1,9 +1,9 @@
 # Metropolis Video App - Development Plan
 
 ## Progress Tracker
-- **Current Step:** Ready for Step 4 - Add Global Transport Controls
-- **Completed Steps:** 3/16
-- **Current Phase:** Foundation & Layout
+- **Current Step:** Ready for Step 5 - Add Basic Cue Point Storage
+- **Completed Steps:** 4/16
+- **Current Phase:** Foundation & Layout → Cue Point System
 
 ---
 
@@ -89,8 +89,8 @@
 
 ---
 
-### Step 4: Add Global Transport Controls ⏳
-**Status:** Ready to Start
+### Step 4: Add Global Transport Controls ✅
+**Status:** Completed
 **What to build:**
 - Add 5 circular transport buttons as specified:
   1. Previous Clip (skip to previous clip in matrix)
@@ -101,11 +101,11 @@
 - Replace current simple play/pause with these controls
 
 **Testing checklist:**
-- [ ] Previous/Next buttons cycle through loaded clips
-- [ ] Play button starts video of currently selected clip
-- [ ] Pause button stops video
-- [ ] All 5 buttons are clickable and responsive
-- [ ] Auto-select next available clip when using Prev/Next
+- [x] Previous/Next buttons cycle through loaded clips
+- [x] Play button starts video of currently selected clip
+- [x] Pause button stops video
+- [x] All 5 buttons are clickable and responsive
+- [x] Auto-select next available clip when using Prev/Next
 
 **Commit message:** `Add global transport controls with clip navigation`
 
@@ -118,8 +118,8 @@
 
 ## PHASE 2: CUE POINT SYSTEM
 
-### Step 5: Add Basic Cue Point Storage ⏸️
-**Status:** Not Started
+### Step 5: Add Basic Cue Point Storage ⏳
+**Status:** Ready to Start
 **What to build:**
 - Data structure to store cue points per clip
 - Add "Record Cue Point" button in right panel
