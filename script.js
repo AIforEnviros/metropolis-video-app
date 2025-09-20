@@ -6,11 +6,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const forwardBtn = document.getElementById('forwardBtn');
     const nextClipBtn = document.getElementById('nextClipBtn');
 
-    // Track current playing state
-    let isPlaying = false;
     const loadTestVideoBtn = document.getElementById('loadTestVideo');
     const fileInput = document.getElementById('fileInput');
     const clipsMatrix = document.getElementById('clipsMatrix');
+
+    // Track global play intent (user's desired state)
+    let globalPlayIntent = false; // true = user wants playing, false = user wants paused
+
+    // Track current video playing state (actual video state)
+    let currentVideoPlaying = false;
 
     // Track the currently selected clip
     let selectedClipSlot = null;
@@ -53,7 +57,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // If this slot has a video, load it in the preview
         if (clipVideos[clipNumber]) {
-            const wasPlaying = isPlaying;
+            const wasPlaying = globalPlayIntent;
             video.src = clipVideos[clipNumber].url;
             video.load();
             console.log('Loaded video for selected slot:', clipVideos[clipNumber].name);
@@ -63,22 +67,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 video.addEventListener('loadeddata', function() {
                     video.play().then(() => {
                         console.log('Auto-playing new clip due to global play state');
-                        isPlaying = true;
-                        updatePlayButtonState();
+                        // globalPlayIntent unchanged - was already true
                     }).catch(e => {
                         console.error('Error auto-playing new clip:', e);
-                        isPlaying = false;
-                        updatePlayButtonState();
+                        // globalPlayIntent unchanged - keep user's intent
                     });
                 }, { once: true });
             } else {
                 // Make sure button state is correct when not playing
-                isPlaying = false;
+                // globalPlayIntent unchanged - keep user's intent
                 updatePlayButtonState();
             }
         } else {
             // No video in this slot
-            isPlaying = false;
+            // globalPlayIntent unchanged - keep user's intent
             updatePlayButtonState();
         }
     }
@@ -126,9 +128,9 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Navigated ${direction} to clip ${targetSlot.dataset.clipNumber}`);
     }
 
-    // Update pause/play button appearance
+    // Update pause/play button appearance based on global intent
     function updatePlayButtonState() {
-        if (isPlaying) {
+        if (globalPlayIntent) {
             pausePlayBtn.textContent = '⏸';
             pausePlayBtn.classList.add('playing');
         } else {
@@ -209,7 +211,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
 
             // Update the video player to show this video
-            const wasPlaying = isPlaying;
+            const wasPlaying = globalPlayIntent;
             video.src = url;
             video.load();
 
@@ -250,15 +252,20 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        if (isPlaying) {
-            video.pause();
-        } else {
+        // Toggle the global play intent based on user action
+        globalPlayIntent = !globalPlayIntent;
+        updatePlayButtonState();
+
+        if (globalPlayIntent) {
             video.play().then(() => {
                 console.log('Video started playing');
             }).catch(e => {
                 console.error('Error playing video:', e);
                 alert('Error playing video: ' + e.message);
             });
+        } else {
+            video.pause();
+            console.log('Video paused by user');
         }
     });
 
@@ -269,6 +276,10 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Please select a clip with video first');
             return;
         }
+
+        // Set global intent to play when Forward Play is pressed
+        globalPlayIntent = true;
+        updatePlayButtonState();
 
         video.play().then(() => {
             console.log('Video started playing forward');
@@ -287,20 +298,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // Video event listeners for debugging and state management
     video.addEventListener('play', function() {
         console.log('Video play event fired');
-        isPlaying = true;
-        updatePlayButtonState();
+        currentVideoPlaying = true;
+        // Note: Don't change globalPlayIntent here - only user actions should
     });
 
     video.addEventListener('pause', function() {
         console.log('Video pause event fired');
-        isPlaying = false;
-        updatePlayButtonState();
+        currentVideoPlaying = false;
+        // Note: Don't change globalPlayIntent here - only user actions should
     });
 
     video.addEventListener('ended', function() {
-        console.log('Video ended');
-        isPlaying = false;
-        updatePlayButtonState();
+        console.log('Video ended - global play intent remains unchanged');
+        currentVideoPlaying = false;
+        // Key change: Don't change globalPlayIntent when video ends
+        // The user's intent to "play" should persist until they choose "pause"
     });
 
     video.addEventListener('timeupdate', function() {
