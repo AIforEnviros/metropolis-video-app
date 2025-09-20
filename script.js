@@ -4,6 +4,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const pauseBtn = document.getElementById('pauseBtn');
     const loadTestVideoBtn = document.getElementById('loadTestVideo');
     const fileInput = document.getElementById('fileInput');
+    const clipsMatrix = document.getElementById('clipsMatrix');
+
+    // Generate 6x6 grid of clip slots
+    function createClipMatrix() {
+        clipsMatrix.innerHTML = '';
+        for (let i = 1; i <= 36; i++) {
+            const clipSlot = document.createElement('div');
+            clipSlot.className = 'clip-slot';
+            clipSlot.textContent = `Clip ${i}`;
+            clipSlot.dataset.clipNumber = i;
+            clipsMatrix.appendChild(clipSlot);
+        }
+        console.log('Created 6x6 clip matrix with 36 slots');
+    }
+
+    // Initialize the matrix
+    createClipMatrix();
 
     // Load test video functionality
     loadTestVideoBtn.addEventListener('click', function() {
