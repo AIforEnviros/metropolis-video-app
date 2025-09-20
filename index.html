@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metropolis Video Player</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .video-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        video {
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+            background-color: #000;
+        }
+
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        button {
+            background-color: #333;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            margin: 0 10px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #555;
+        }
+
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
+        .load-section {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        input[type="file"] {
+            margin: 10px;
+            padding: 10px;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Metropolis Video Player</h1>
+
+        <div class="load-section">
+            <button id="loadTestVideo">Load Test Video</button>
+            <br>
+            <input type="file" id="fileInput" accept="video/*">
+        </div>
+
+        <div class="video-container">
+            <video id="videoPlayer" controls>
+                Your browser does not support the video tag.
+            </video>
+        </div>
+
+        <div class="controls">
+            <button id="playBtn">Play</button>
+            <button id="pauseBtn">Pause</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
