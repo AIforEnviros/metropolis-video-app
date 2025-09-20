@@ -8,12 +8,15 @@
 ---
 
 ## Current State ✅
-- Basic video player with HTML interface
-- JavaScript for video loading and playback
-- Test video file (test-videos/test-video.mp4)
-- Working play/pause buttons
-- File input for custom videos
-- Last commit: `Add basic working video player implementation`
+- Professional 6x6 clip matrix grid layout (36 slots)
+- Smart clip selection with visual feedback
+- Video loading into selected slots with visual indicators
+- 5 circular global transport controls with professional behavior
+- User-controlled global play intent (persists through video endings)
+- Smart navigation between clips with loaded videos
+- File input for loading custom videos (working perfectly)
+- Note: Load Test Video button currently non-functional (not essential)
+- Last commit: `Implement user-controlled global play intent`
 
 ---
 
@@ -275,7 +278,13 @@ When working on each step:
 - Future improvement needed: Fixed-size slots with tooltip/popup for video info
 - Consider: hover tooltips, status icons, or abbreviated names that fit in fixed space
 
+**Load Test Video Button Issue:**
+- Load Test Video button currently non-functional after global play intent refactor
+- File input (Choose File) works perfectly and is sufficient for development
+- Can be removed or fixed in future step if needed
+- Priority: Low (file input provides all necessary functionality)
+
 ---
 
-**Last Updated:** Initial creation
-**Next Step:** Start Step 1 - Add Basic Grid Layout
+**Last Updated:** Step 4 completion - Ready for Step 5
+**Next Step:** Step 5 - Add Basic Cue Point Storage (beginning Cue Point System phase)
