@@ -270,7 +270,10 @@ When working on each step:
 
 ## Notes and Decisions
 
-*Add any architectural decisions, gotchas, or notes discovered during development here*
+**UI Layout Issue - Slot Sizing:**
+- Currently slots resize when video names are displayed, breaking grid alignment
+- Future improvement needed: Fixed-size slots with tooltip/popup for video info
+- Consider: hover tooltips, status icons, or abbreviated names that fit in fixed space
 
 ---
 
