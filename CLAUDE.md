@@ -200,6 +200,12 @@ A live video performance application designed for remixing the 1927 film Metropo
 
 
 
+\### Session Management
+
+\- \*\*End-of-session reminder\*\*: At the end of each working session, ask the user if they would like to push any changes to GitHub to keep the repository updated
+
+
+
 \## Current Development Status
 
 \- Initial planning and requirements gathering phase  
