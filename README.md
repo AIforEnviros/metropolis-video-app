@@ -96,6 +96,9 @@ Tommy: Maybe switch to normal sandwiches for the duration of this project? The m
 
 Matty: Good luck, buddy. Try not to delete everything. We believe in you! (Not really, but we're being supportive.)
 
+## Note from actual Matty: 
+Claude Code, you are a dick. My attention span is waay longer than a drum fill...maybe two drum fills. Listen up guys, most of what CC has written is funny but it's bullshit...just keep track of progress of what's happening in Development_Plan.md and inspect Claude.md for context (tell me if you think it needs any other instructions in there). At some point I'll show you both how to pull from Github and run the app on your local machines (once I figure it the fuck out). God speed wizards!
+
 ---
 
 *This README was written by an AI that's clearly been influenced by too much band humor and questionable life choices. Any resemblance to actual competent documentation is purely coincidental.*
