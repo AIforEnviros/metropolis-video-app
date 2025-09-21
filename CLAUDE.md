@@ -1,6 +1,26 @@
 \# Video Performance Application - Metropolis Live Remix
 
+## 🚨 CRITICAL: Project Structure
 
+**TWO SEPARATE IMPLEMENTATIONS EXIST:**
+
+1. **HTML/JavaScript Version (ACTIVE DEVELOPMENT)**
+   - Files: `index.html` + `script.js`
+   - Current development target following the step-by-step plan
+   - Serve with: `npx serve . --listen 3000` then open http://localhost:3000
+   - Status: Step 4 completed (Global Transport Controls)
+   - Next: Step 5 (Add Basic Cue Point Storage)
+
+2. **React/TypeScript Version (ADVANCED PROTOTYPE)**
+   - Files: `src/` directory with React components
+   - Contains pre-built advanced features from Steps 5-12
+   - Run with: `npm start` (serves on port 3000)
+   - Status: Prototype with all components but not following development plan
+   - DO NOT USE for step-by-step development
+
+**IMPORTANT:** Always work on the HTML version unless specifically switching to React implementation.
+
+---
 
 \## Project Overview
 

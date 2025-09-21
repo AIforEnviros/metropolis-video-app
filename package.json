@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "start": "react-scripts start",
+    "start-html": "npx serve . --listen 3000",
+    "start-react": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
