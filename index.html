@@ -199,6 +199,61 @@
             margin: 0 0 15px 0;
             font-size: 16px;
         }
+
+        .cue-point-controls {
+            text-align: center;
+        }
+
+        .cue-btn {
+            background-color: #d65d0e;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .cue-btn:hover {
+            background-color: #e6741f;
+        }
+
+        .cue-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
+        .cue-points-list {
+            background-color: #1a1a1a;
+            border-radius: 5px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .cue-point-item {
+            background-color: #333;
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cue-point-time {
+            font-weight: bold;
+            color: #90ee90;
+        }
+
+        .no-cue-points {
+            text-align: center;
+            color: #888;
+            font-style: italic;
+            margin: 0;
+        }
     </style>
 </head>
 <body>
@@ -234,6 +289,16 @@
                 <button id="pausePlayBtn" class="transport-btn" title="Pause/Play">⏸</button>
                 <button id="forwardBtn" class="transport-btn" title="Forward Play">⏩</button>
                 <button id="nextClipBtn" class="transport-btn" title="Next Clip">⏭</button>
+            </div>
+
+            <h3>Cue Point Controls</h3>
+            <div class="cue-point-controls">
+                <button id="recordCuePointBtn" class="cue-btn">Record Cue Point</button>
+            </div>
+
+            <h3>Cue Points</h3>
+            <div class="cue-points-list" id="cuePointsList">
+                <p class="no-cue-points">No cue points recorded</p>
             </div>
         </div>
     </div>

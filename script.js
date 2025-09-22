@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const loadTestVideoBtn = document.getElementById('loadTestVideo');
     const fileInput = document.getElementById('fileInput');
     const clipsMatrix = document.getElementById('clipsMatrix');
+    const recordCuePointBtn = document.getElementById('recordCuePointBtn');
+    const cuePointsList = document.getElementById('cuePointsList');
 
     // Track global play intent (user's desired state)
     let globalPlayIntent = false; // true = user wants playing, false = user wants paused
@@ -21,6 +23,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Track videos loaded into each slot (clipNumber -> video data)
     const clipVideos = {};
+
+    // Track cue points for each clip (clipNumber -> array of cue point objects)
+    const clipCuePoints = {};
 
     // Generate 6x6 grid of clip slots
     function createClipMatrix() {
@@ -83,6 +88,9 @@ document.addEventListener('DOMContentLoaded', function() {
             // globalPlayIntent unchanged - keep user's intent
             updatePlayButtonState();
         }
+
+        // Update cue points list for the newly selected clip
+        updateCuePointsList();
     }
 
     // Update visual appearance of slot based on whether it has video
@@ -139,11 +147,93 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Format time for display (convert seconds to MM:SS.ss)
+    function formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${minutes.toString().padStart(2, '0')}:${secs.toFixed(2).padStart(5, '0')}`;
+    }
+
+    // Add a cue point for the current clip at the current video time
+    function recordCuePoint() {
+        if (!selectedClipSlot) {
+            alert('Please select a clip first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        if (!clipVideos[clipNumber]) {
+            alert('Please load a video into the selected clip first');
+            return;
+        }
+
+        if (!video.src) {
+            alert('No video is currently loaded');
+            return;
+        }
+
+        const currentTime = video.currentTime;
+
+        // Initialize cue points array for this clip if it doesn't exist
+        if (!clipCuePoints[clipNumber]) {
+            clipCuePoints[clipNumber] = [];
+        }
+
+        // Create cue point object
+        const cuePoint = {
+            time: currentTime,
+            timestamp: Date.now(),
+            id: `cue_${clipNumber}_${Date.now()}`
+        };
+
+        // Add to the clip's cue points array
+        clipCuePoints[clipNumber].push(cuePoint);
+
+        // Sort cue points by time
+        clipCuePoints[clipNumber].sort((a, b) => a.time - b.time);
+
+        console.log(`Recorded cue point at ${formatTime(currentTime)} for clip ${clipNumber}`);
+
+        // Update the display
+        updateCuePointsList();
+    }
+
+    // Update the visual display of cue points for the currently selected clip
+    function updateCuePointsList() {
+        if (!selectedClipSlot) {
+            cuePointsList.innerHTML = '<p class="no-cue-points">No clip selected</p>';
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const cuePoints = clipCuePoints[clipNumber] || [];
+
+        if (cuePoints.length === 0) {
+            cuePointsList.innerHTML = '<p class="no-cue-points">No cue points recorded</p>';
+            return;
+        }
+
+        // Build the cue points list HTML
+        let html = '';
+        cuePoints.forEach((cuePoint, index) => {
+            html += `
+                <div class="cue-point-item">
+                    <span>Cue ${index + 1}</span>
+                    <span class="cue-point-time">${formatTime(cuePoint.time)}</span>
+                </div>
+            `;
+        });
+
+        cuePointsList.innerHTML = html;
+    }
+
     // Initialize the matrix
     createClipMatrix();
 
     // Initialize UI state
     updatePlayButtonState();
+    updateCuePointsList();
 
     // Load test video functionality
     loadTestVideoBtn.addEventListener('click', function() {
@@ -293,6 +383,12 @@ document.addEventListener('DOMContentLoaded', function() {
     nextClipBtn.addEventListener('click', function() {
         console.log('Next clip button clicked');
         navigateToClip('next');
+    });
+
+    // Record Cue Point button
+    recordCuePointBtn.addEventListener('click', function() {
+        console.log('Record cue point button clicked');
+        recordCuePoint();
     });
 
     // Video event listeners for debugging and state management
