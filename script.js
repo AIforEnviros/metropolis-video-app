@@ -14,6 +14,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const restartClipBtn = document.getElementById('restartClipBtn');
     const prevCuePointBtn = document.getElementById('prevCuePointBtn');
     const nextCuePointBtn = document.getElementById('nextCuePointBtn');
+    const timelineTrack = document.getElementById('timelineTrack');
+    const timelineProgress = document.getElementById('timelineProgress');
+    const timelineHandle = document.getElementById('timelineHandle');
+    const cueMarkers = document.getElementById('cueMarkers');
+    const currentTimeDisplay = document.getElementById('currentTime');
+    const totalDurationDisplay = document.getElementById('totalDuration');
 
     // Track global play intent (user's desired state)
     let globalPlayIntent = false; // true = user wants playing, false = user wants paused
@@ -94,6 +100,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Update cue points list for the newly selected clip
         updateCuePointsList();
+        updateCueMarkersOnTimeline();
     }
 
     // Update visual appearance of slot based on whether it has video
@@ -200,6 +207,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Update the display
         updateCuePointsList();
+        updateCueMarkersOnTimeline();
     }
 
     // Update the visual display of cue points for the currently selected clip
@@ -356,6 +364,115 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             alert('No more cue points ahead');
         }
+    }
+
+    // Timeline functionality
+    let isDragging = false;
+    let videoDuration = 0;
+
+    // Format time for timeline display (MM:SS)
+    function formatTimeShort(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // Update timeline progress and handle position
+    function updateTimeline() {
+        if (!video.src || videoDuration === 0) {
+            timelineProgress.style.width = '0%';
+            timelineHandle.style.left = '0%';
+            currentTimeDisplay.textContent = '00:00';
+            totalDurationDisplay.textContent = '00:00';
+            return;
+        }
+
+        const currentTime = video.currentTime;
+        const progress = (currentTime / videoDuration) * 100;
+
+        if (!isDragging) {
+            timelineProgress.style.width = `${progress}%`;
+            timelineHandle.style.left = `${progress}%`;
+        }
+
+        currentTimeDisplay.textContent = formatTimeShort(currentTime);
+        totalDurationDisplay.textContent = formatTimeShort(videoDuration);
+    }
+
+    // Update cue point markers on timeline
+    function updateCueMarkersOnTimeline() {
+        if (!selectedClipSlot) {
+            cueMarkers.innerHTML = '';
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const cuePoints = clipCuePoints[clipNumber] || [];
+
+        // Clear existing markers
+        cueMarkers.innerHTML = '';
+
+        if (videoDuration === 0 || cuePoints.length === 0) {
+            return;
+        }
+
+        // Create markers for each cue point
+        cuePoints.forEach((cuePoint, index) => {
+            const marker = document.createElement('div');
+            marker.className = 'cue-marker';
+            const position = (cuePoint.time / videoDuration) * 100;
+            marker.style.left = `${position}%`;
+            marker.title = `Cue ${index + 1}: ${formatTime(cuePoint.time)}`;
+            cueMarkers.appendChild(marker);
+        });
+    }
+
+    // Handle timeline click to scrub
+    function handleTimelineClick(event) {
+        if (!video.src || videoDuration === 0) {
+            return;
+        }
+
+        const rect = timelineTrack.getBoundingClientRect();
+        const clickX = event.clientX - rect.left;
+        const percentage = clickX / rect.width;
+        const newTime = Math.max(0, Math.min(videoDuration, percentage * videoDuration));
+
+        video.currentTime = newTime;
+        updateTimeline();
+    }
+
+    // Handle timeline drag functionality
+    function handleTimelineDrag(event) {
+        event.preventDefault();
+        isDragging = true;
+
+        const rect = timelineTrack.getBoundingClientRect();
+
+        function onMouseMove(e) {
+            if (!isDragging || videoDuration === 0) return;
+
+            const moveX = e.clientX - rect.left;
+            const percentage = Math.max(0, Math.min(1, moveX / rect.width));
+            const newTime = percentage * videoDuration;
+
+            video.currentTime = newTime;
+
+            // Update visual feedback immediately
+            timelineProgress.style.width = `${percentage * 100}%`;
+            timelineHandle.style.left = `${percentage * 100}%`;
+            currentTimeDisplay.textContent = formatTimeShort(newTime);
+        }
+
+        function onMouseUp() {
+            isDragging = false;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            updateTimeline(); // Final update
+        }
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
     }
 
     // Initialize the matrix
@@ -539,6 +656,10 @@ document.addEventListener('DOMContentLoaded', function() {
         navigateToNextCuePoint();
     });
 
+    // Timeline event listeners
+    timelineTrack.addEventListener('click', handleTimelineClick);
+    timelineHandle.addEventListener('mousedown', handleTimelineDrag);
+
     // Video event listeners for debugging and state management
     video.addEventListener('play', function() {
         console.log('Video play event fired');
@@ -560,9 +681,24 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     video.addEventListener('timeupdate', function() {
+        updateTimeline();
         // Only log occasionally to avoid spam
         if (Math.floor(video.currentTime) % 5 === 0) {
             console.log('Video time:', video.currentTime);
         }
+    });
+
+    video.addEventListener('loadedmetadata', function() {
+        videoDuration = video.duration;
+        updateTimeline();
+        updateCueMarkersOnTimeline();
+        console.log('Video loaded, duration:', videoDuration);
+    });
+
+    video.addEventListener('durationchange', function() {
+        videoDuration = video.duration;
+        updateTimeline();
+        updateCueMarkersOnTimeline();
+        console.log('Video duration changed:', videoDuration);
     });
 });
