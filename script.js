@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const clipsMatrix = document.getElementById('clipsMatrix');
     const recordCuePointBtn = document.getElementById('recordCuePointBtn');
     const cuePointsList = document.getElementById('cuePointsList');
+    const restartClipBtn = document.getElementById('restartClipBtn');
+    const prevCuePointBtn = document.getElementById('prevCuePointBtn');
+    const nextCuePointBtn = document.getElementById('nextCuePointBtn');
 
     // Track global play intent (user's desired state)
     let globalPlayIntent = false; // true = user wants playing, false = user wants paused
@@ -228,6 +231,133 @@ document.addEventListener('DOMContentLoaded', function() {
         cuePointsList.innerHTML = html;
     }
 
+    // Jump to the first cue point of the current clip, or beginning if no cue points
+    function restartClip() {
+        if (!selectedClipSlot) {
+            alert('Please select a clip first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        if (!clipVideos[clipNumber]) {
+            alert('Please load a video into the selected clip first');
+            return;
+        }
+
+        if (!video.src) {
+            alert('No video is currently loaded');
+            return;
+        }
+
+        const cuePoints = clipCuePoints[clipNumber] || [];
+
+        if (cuePoints.length > 0) {
+            // Jump to first cue point
+            const firstCuePoint = cuePoints[0];
+            video.currentTime = firstCuePoint.time;
+            console.log(`Restarted clip to first cue point: ${formatTime(firstCuePoint.time)}`);
+        } else {
+            // Jump to beginning if no cue points
+            video.currentTime = 0;
+            console.log('Restarted clip to beginning (no cue points)');
+        }
+    }
+
+    // Navigate to the previous cue point
+    function navigateToPreviousCuePoint() {
+        if (!selectedClipSlot) {
+            alert('Please select a clip first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        if (!clipVideos[clipNumber]) {
+            alert('Please load a video into the selected clip first');
+            return;
+        }
+
+        if (!video.src) {
+            alert('No video is currently loaded');
+            return;
+        }
+
+        const cuePoints = clipCuePoints[clipNumber] || [];
+
+        if (cuePoints.length === 0) {
+            alert('No cue points to navigate to');
+            return;
+        }
+
+        const currentTime = video.currentTime;
+
+        // Find the previous cue point (the last one that's before current time)
+        let targetCuePoint = null;
+
+        for (let i = cuePoints.length - 1; i >= 0; i--) {
+            if (cuePoints[i].time < currentTime - 0.1) { // 0.1 second tolerance
+                targetCuePoint = cuePoints[i];
+                break;
+            }
+        }
+
+        if (targetCuePoint) {
+            video.currentTime = targetCuePoint.time;
+            console.log(`Navigated to previous cue point: ${formatTime(targetCuePoint.time)}`);
+        } else {
+            // If no previous cue point found, go to beginning
+            video.currentTime = 0;
+            console.log('Navigated to beginning (no previous cue point)');
+        }
+    }
+
+    // Navigate to the next cue point
+    function navigateToNextCuePoint() {
+        if (!selectedClipSlot) {
+            alert('Please select a clip first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        if (!clipVideos[clipNumber]) {
+            alert('Please load a video into the selected clip first');
+            return;
+        }
+
+        if (!video.src) {
+            alert('No video is currently loaded');
+            return;
+        }
+
+        const cuePoints = clipCuePoints[clipNumber] || [];
+
+        if (cuePoints.length === 0) {
+            alert('No cue points to navigate to');
+            return;
+        }
+
+        const currentTime = video.currentTime;
+
+        // Find the next cue point (the first one that's after current time)
+        let targetCuePoint = null;
+
+        for (let i = 0; i < cuePoints.length; i++) {
+            if (cuePoints[i].time > currentTime + 0.1) { // 0.1 second tolerance
+                targetCuePoint = cuePoints[i];
+                break;
+            }
+        }
+
+        if (targetCuePoint) {
+            video.currentTime = targetCuePoint.time;
+            console.log(`Navigated to next cue point: ${formatTime(targetCuePoint.time)}`);
+        } else {
+            alert('No more cue points ahead');
+        }
+    }
+
     // Initialize the matrix
     createClipMatrix();
 
@@ -389,6 +519,24 @@ document.addEventListener('DOMContentLoaded', function() {
     recordCuePointBtn.addEventListener('click', function() {
         console.log('Record cue point button clicked');
         recordCuePoint();
+    });
+
+    // Restart Clip button
+    restartClipBtn.addEventListener('click', function() {
+        console.log('Restart clip button clicked');
+        restartClip();
+    });
+
+    // Previous Cue Point button
+    prevCuePointBtn.addEventListener('click', function() {
+        console.log('Previous cue point button clicked');
+        navigateToPreviousCuePoint();
+    });
+
+    // Next Cue Point button
+    nextCuePointBtn.addEventListener('click', function() {
+        console.log('Next cue point button clicked');
+        navigateToNextCuePoint();
     });
 
     // Video event listeners for debugging and state management

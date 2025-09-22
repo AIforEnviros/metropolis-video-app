@@ -1,8 +1,8 @@
 # Metropolis Video App - Development Plan
 
 ## Progress Tracker
-- **Current Step:** Ready for Step 6 - Add Cue Point Navigation
-- **Completed Steps:** 5/16
+- **Current Step:** Ready for Step 7 - Visual Cue Point Timeline
+- **Completed Steps:** 6/16
 - **Current Phase:** Cue Point System
 
 ---
@@ -145,8 +145,8 @@
 
 ---
 
-### Step 6: Add Cue Point Navigation ⏸️
-**Status:** Not Started
+### Step 6: Add Cue Point Navigation ✅
+**Status:** Completed
 **What to build:**
 - Add cue point transport controls:
   - Restart Clip (<<): Jump to first cue point or beginning
@@ -155,11 +155,11 @@
 - Navigation should jump video to exact cue point times
 
 **Testing checklist:**
-- [ ] Record multiple cue points in a video
-- [ ] Use Forward button to jump between cue points
-- [ ] Use Back button to go to previous cue points
-- [ ] Restart button returns to first cue point or start
-- [ ] Video time updates correctly when jumping
+- [x] Record multiple cue points in a video
+- [x] Use Forward button to jump between cue points
+- [x] Use Back button to go to previous cue points
+- [x] Restart button returns to first cue point or start
+- [x] Video time updates correctly when jumping
 
 **Commit message:** `Add cue point navigation controls`
 
