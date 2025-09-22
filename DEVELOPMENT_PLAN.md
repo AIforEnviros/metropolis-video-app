@@ -1,9 +1,9 @@
 # Metropolis Video App - Development Plan
 
 ## Progress Tracker
-- **Current Step:** Ready for Step 5 - Add Basic Cue Point Storage
-- **Completed Steps:** 4/16
-- **Current Phase:** Foundation & Layout → Cue Point System
+- **Current Step:** Ready for Step 6 - Add Cue Point Navigation
+- **Completed Steps:** 5/16
+- **Current Phase:** Cue Point System
 
 ---
 
@@ -121,8 +121,8 @@
 
 ## PHASE 2: CUE POINT SYSTEM
 
-### Step 5: Add Basic Cue Point Storage ⏳
-**Status:** Ready to Start
+### Step 5: Add Basic Cue Point Storage ✅
+**Status:** Completed
 **What to build:**
 - Data structure to store cue points per clip
 - Add "Record Cue Point" button in right panel
@@ -130,11 +130,11 @@
 - Simple list display of cue points for current clip
 
 **Testing checklist:**
-- [ ] Load video, play partway, click "Record Cue Point"
-- [ ] Cue point appears in list with timestamp
-- [ ] Add multiple cue points to same video
-- [ ] Switch clips and verify cue points are per-clip
-- [ ] Cue points persist when switching between clips
+- [x] Load video, play partway, click "Record Cue Point"
+- [x] Cue point appears in list with timestamp
+- [x] Add multiple cue points to same video
+- [x] Switch clips and verify cue points are per-clip
+- [x] Cue points persist when switching between clips
 
 **Commit message:** `Add basic cue point recording and storage`
 
