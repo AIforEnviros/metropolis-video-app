@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const cueMarkers = document.getElementById('cueMarkers');
     const currentTimeDisplay = document.getElementById('currentTime');
     const totalDurationDisplay = document.getElementById('totalDuration');
+    const tabBar = document.getElementById('tabBar');
 
     // Track global play intent (user's desired state)
     let globalPlayIntent = false; // true = user wants playing, false = user wants paused
@@ -30,11 +31,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track the currently selected clip
     let selectedClipSlot = null;
 
-    // Track videos loaded into each slot (clipNumber -> video data)
-    const clipVideos = {};
+    // Track which tab is currently active
+    let currentTab = 0;
 
-    // Track cue points for each clip (clipNumber -> array of cue point objects)
-    const clipCuePoints = {};
+    // Track videos loaded into each slot for each tab (tabIndex -> { clipNumber -> video data })
+    const tabClipVideos = {};
+
+    // Track cue points for each clip for each tab (tabIndex -> { clipNumber -> array of cue point objects })
+    const tabClipCuePoints = {};
+
+    // Initialize tab data structures
+    for (let i = 0; i < 5; i++) {
+        tabClipVideos[i] = {};
+        tabClipCuePoints[i] = {};
+    }
+
+    // Legacy references for current tab's data (for compatibility)
+    let clipVideos = tabClipVideos[currentTab];
+    let clipCuePoints = tabClipCuePoints[currentTab];
 
     // Generate 6x6 grid of clip slots
     function createClipMatrix() {
@@ -475,8 +489,70 @@ document.addEventListener('DOMContentLoaded', function() {
         document.addEventListener('mouseup', onMouseUp);
     }
 
+    // Switch to a different tab
+    function switchTab(tabIndex) {
+        if (tabIndex === currentTab) {
+            return; // Already on this tab
+        }
+
+        console.log(`Switching from tab ${currentTab} to tab ${tabIndex}`);
+
+        // Update tab button appearance
+        const allTabButtons = document.querySelectorAll('.tab-btn');
+        allTabButtons.forEach((btn, index) => {
+            if (index === tabIndex) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // Save current tab state and switch to new tab
+        currentTab = tabIndex;
+
+        // Update legacy references to point to new tab's data
+        clipVideos = tabClipVideos[currentTab];
+        clipCuePoints = tabClipCuePoints[currentTab];
+
+        // Clear current selection (each tab has its own selection)
+        if (selectedClipSlot) {
+            selectedClipSlot.classList.remove('selected');
+            selectedClipSlot = null;
+        }
+
+        // Refresh the matrix to show the new tab's videos
+        refreshClipMatrix();
+
+        // Clear video player if no clip is selected in new tab
+        video.src = '';
+        video.load();
+
+        // Update UI for new tab
+        updateCuePointsList();
+        updateCueMarkersOnTimeline();
+        updatePlayButtonState();
+    }
+
+    // Refresh the clip matrix to show current tab's video states
+    function refreshClipMatrix() {
+        const allSlots = document.querySelectorAll('.clip-slot');
+        allSlots.forEach(slot => {
+            const clipNumber = slot.dataset.clipNumber;
+            const hasVideo = clipVideos[clipNumber];
+            updateSlotAppearance(slot, hasVideo);
+        });
+    }
+
     // Initialize the matrix
     createClipMatrix();
+
+    // Initialize tab event listeners
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    tabButtons.forEach((button, index) => {
+        button.addEventListener('click', function() {
+            switchTab(index);
+        });
+    });
 
     // Initialize UI state
     updatePlayButtonState();
