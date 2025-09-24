@@ -8,8 +8,8 @@
    - Files: `index.html` + `script.js`
    - Current development target following the step-by-step plan
    - Serve with: `npx serve . --listen 3000` then open http://localhost:3000
-   - Status: Step 4 completed (Global Transport Controls)
-   - Next: Step 5 (Add Basic Cue Point Storage)
+   - Status: Step 7 completed (Visual Cue Point Timeline)
+   - Next: Step 8 (Add Tab System)
 
 2. **React/TypeScript Version (ADVANCED PROTOTYPE)**
    - Files: `src/` directory with React components
@@ -219,6 +219,33 @@ A live video performance application designed for remixing the 1927 film Metropo
 \- \*\*Real testing\*\*: Use actual video files and user interactions, not simulated behavior
 
 
+
+\### Git Workflow Strategy
+
+\*\*IMPROVED WORKFLOW (Starting Step 8):\*\*
+
+\- \*\*Push regularly\*\*: Always push after completing each step to avoid data loss
+\- \*\*Smaller commits\*\*: Break each step into 2-4 focused commits instead of one large commit
+\- \*\*Commit pattern for each step\*\*:
+  1. Add HTML structure changes
+  2. Add CSS styling changes
+  3. Add JavaScript functionality
+  4. Update development plan documentation
+
+\*\*Example commit sequence for a step:\*\*
+```bash
+git add index.html && git commit -m "Add tab bar HTML structure"
+git add index.html && git commit -m "Style tab buttons with active states"
+git add script.js && git commit -m "Implement tab switching functionality"
+git add Development_plan.md && git commit -m "Mark Step X completed"
+git push origin master
+```
+
+\*\*Benefits:\*\*
+\- Better progress tracking and debugging
+\- Easier to revert specific changes
+\- Regular remote backup of work
+\- More granular code review capability
 
 \### Session Management
 
