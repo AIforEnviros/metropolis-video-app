@@ -1,9 +1,9 @@
 # Metropolis Video App - Development Plan
 
 ## Progress Tracker
-- **Current Step:** Ready for Step 11 - Add Speed/Tempo Control
-- **Completed Steps:** 10/16
-- **Current Phase:** Advanced Features
+- **Current Step:** Ready for Step 14 - Add Keyboard Shortcuts
+- **Completed Steps:** 12/16 (skipping "Shit It Up" control until last)
+- **Current Phase:** Session Management
 
 ---
 
@@ -282,8 +282,34 @@
 
 ## PHASE 4: ADVANCED FEATURES
 
-### Step 11: Add Speed/Tempo Control ⏸️
-**Status:** Not Started
+### Step 11: Add Speed/Tempo Control ✅
+**Status:** Completed
+**What was built:**
+- Added speed control UI elements in right panel with speed slider (0.1x to 10x range)
+- Implemented per-clip speed tracking across all tabs with persistent storage
+- Created speed preset buttons (0.5x, 1x, 1.5x, 2x) for quick access
+- Integrated speed control with all video loading and playback functions
+- Real-time speed adjustment with visual feedback and live playback speed changes
+- Speed settings automatically preserved when switching between clips and tabs
+
+**Testing completed:**
+- [x] Speed slider adjusts video playback rate in real-time
+- [x] Speed preset buttons provide quick access to common speeds
+- [x] Each clip maintains its own speed setting independently
+- [x] Speed settings persist when switching between clips within same tab
+- [x] Speed settings persist when switching between different tabs
+- [x] Speed applies correctly when videos are loaded into clip slots
+- [x] Speed control integrates with transport controls and cue point navigation
+- [x] Visual feedback shows current speed setting accurately
+
+**Commit message:** `Add speed control UI elements and session save/load controls`
+
+**Features working:**
+- Speed control UI with slider and preset buttons
+- Per-clip speed storage and persistence across tabs
+- Real-time video playback rate adjustment
+- Integration with existing video loading and playback systems
+- Visual feedback and speed display updates
 
 ### Step 12: Add "Shit It Up" Control ⏸️
 **Status:** Not Started
@@ -292,8 +318,34 @@
 
 ## PHASE 5: SESSION MANAGEMENT
 
-### Step 13: Add Session Save/Load ⏸️
-**Status:** Not Started
+### Step 13: Add Session Save/Load ✅
+**Status:** Completed
+**What was built:**
+- Complete session management system with save/load functionality
+- Session data structure storing videos, cue points, speeds, and tab organization
+- Auto-reconnection system that matches video files by name when browsing folders
+- Session save/load UI controls in header with status indicator
+- Comprehensive error handling and user feedback system
+- JSON-based session files with timestamped naming
+
+**Testing completed:**
+- [x] Session save creates downloadable JSON files with all project data
+- [x] Session load restores complete project state (videos, cue points, speeds, tabs)
+- [x] Auto-reconnection works when browsing to video folders after session load
+- [x] Video playback functions correctly after reconnection
+- [x] All settings preserved (cue points, individual clip speeds, tab organization)
+- [x] Session modification tracking with visual status updates
+- [x] Error handling for corrupt or invalid session files
+- [x] Multiple save/load cycles work reliably
+
+**Commit message:** `Implement comprehensive speed control and session management system`
+
+**Features working:**
+- Complete session save/load with JSON file format
+- Auto-reconnection of videos by filename matching
+- Session state tracking and visual feedback
+- Preservation of all project data across sessions
+- Robust error handling and data validation
 
 ### Step 14: Add Keyboard Shortcuts ⏸️
 **Status:** Not Started
