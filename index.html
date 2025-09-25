@@ -98,6 +98,18 @@
             color: white;
         }
 
+        .clip-slot.drag-over {
+            background-color: #2a5a2a;
+            border-color: #4a9a4a;
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(74, 154, 74, 0.4);
+        }
+
+        .clip-slot.drag-over.selected {
+            background-color: #1a4a6a;
+            border-color: #3a7a9a;
+        }
+
         .right-panel {
             background-color: #2a2a2a;
             border-radius: 8px;
@@ -424,6 +436,15 @@
 
         .file-item.video-file {
             color: #90ee90;
+        }
+
+        .file-item.video-file.draggable {
+            cursor: grab;
+        }
+
+        .file-item.video-file.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
         }
 
         .file-item.other-file {
