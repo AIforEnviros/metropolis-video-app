@@ -21,6 +21,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentTimeDisplay = document.getElementById('currentTime');
     const totalDurationDisplay = document.getElementById('totalDuration');
     const tabBar = document.getElementById('tabBar');
+    const browseFolderBtn = document.getElementById('browseFolderBtn');
+    const upFolderBtn = document.getElementById('upFolderBtn');
+    const currentPathDisplay = document.getElementById('currentPath');
+    const fileList = document.getElementById('fileList');
 
     // Track global play intent (user's desired state)
     let globalPlayIntent = false; // true = user wants playing, false = user wants paused
@@ -49,6 +53,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Legacy references for current tab's data (for compatibility)
     let clipVideos = tabClipVideos[currentTab];
     let clipCuePoints = tabClipCuePoints[currentTab];
+
+    // File browser state
+    let currentFolderPath = '';
+    let currentFolderFiles = [];
+    const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp'];
 
     // Generate 6x6 grid of clip slots
     function createClipMatrix() {
@@ -542,6 +551,167 @@ document.addEventListener('DOMContentLoaded', function() {
             updateSlotAppearance(slot, hasVideo);
         });
     }
+
+    // File Browser Functions
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function getFileExtension(filename) {
+        return filename.toLowerCase().substring(filename.lastIndexOf('.'));
+    }
+
+    function isVideoFile(filename) {
+        const ext = getFileExtension(filename);
+        return videoExtensions.includes(ext);
+    }
+
+    function displayFiles(files) {
+        fileList.innerHTML = '';
+
+        if (!files || files.length === 0) {
+            const noFilesItem = document.createElement('div');
+            noFilesItem.className = 'file-item other-file';
+            noFilesItem.innerHTML = `
+                <span class="file-name">No files found</span>
+                <span class="file-size"></span>
+            `;
+            fileList.appendChild(noFilesItem);
+            return;
+        }
+
+        files.forEach(file => {
+            const fileItem = document.createElement('div');
+            const isVideo = isVideoFile(file.name);
+            const fileSize = file.size ? formatFileSize(file.size) : '';
+
+            fileItem.className = `file-item ${isVideo ? 'video-file' : 'other-file'}`;
+            fileItem.innerHTML = `
+                <span class="file-name" title="${file.name}">${file.name}</span>
+                <span class="file-size">${fileSize}</span>
+            `;
+
+            // Add click handler for video files to load them
+            if (isVideo) {
+                fileItem.addEventListener('click', function() {
+                    loadVideoFromFile(file);
+                });
+                fileItem.style.cursor = 'pointer';
+                fileItem.title = `Click to load ${file.name} into selected clip slot`;
+            }
+
+            fileList.appendChild(fileItem);
+        });
+    }
+
+    function loadVideoFromFile(file) {
+        if (!selectedClipSlot) {
+            alert('Please select a clip slot first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const url = URL.createObjectURL(file);
+
+        // Store video information
+        clipVideos[clipNumber] = {
+            name: file.name,
+            url: url,
+            file: file
+        };
+
+        // Update slot appearance
+        updateSlotAppearance(selectedClipSlot, clipVideos[clipNumber]);
+
+        // Load video in player
+        video.src = url;
+        video.load();
+
+        console.log(`Loaded video ${file.name} into clip slot ${clipNumber}`);
+
+        // Initialize empty cue points array for this clip if it doesn't exist
+        if (!clipCuePoints[clipNumber]) {
+            clipCuePoints[clipNumber] = [];
+        }
+
+        updateCuePointsList();
+        updateCueMarkersOnTimeline();
+    }
+
+    // Browse folder using File System Access API (Chrome) with fallback
+    async function browseFolder() {
+        try {
+            // Try modern File System Access API first (Chrome 86+)
+            if ('showDirectoryPicker' in window) {
+                const dirHandle = await window.showDirectoryPicker();
+                const files = [];
+
+                for await (const entry of dirHandle.values()) {
+                    if (entry.kind === 'file') {
+                        const file = await entry.getFile();
+                        files.push(file);
+                    }
+                }
+
+                currentFolderPath = dirHandle.name;
+                currentPathDisplay.textContent = currentFolderPath;
+                displayFiles(files);
+                upFolderBtn.disabled = false;
+
+            } else {
+                // Fallback: Use directory input (WebKit)
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.webkitdirectory = true;
+                input.multiple = true;
+
+                input.onchange = function(e) {
+                    const files = Array.from(e.target.files);
+                    if (files.length > 0) {
+                        // Get folder path from first file
+                        const firstFile = files[0];
+                        const pathParts = firstFile.webkitRelativePath.split('/');
+                        currentFolderPath = pathParts[0];
+                        currentPathDisplay.textContent = currentFolderPath;
+
+                        // Filter to only show files in root directory
+                        const rootFiles = files.filter(file => {
+                            const parts = file.webkitRelativePath.split('/');
+                            return parts.length === 2; // folder/file.ext
+                        });
+
+                        displayFiles(rootFiles);
+                        upFolderBtn.disabled = false;
+                    }
+                };
+
+                input.click();
+            }
+        } catch (error) {
+            console.error('Error accessing folder:', error);
+            alert('Unable to access folder. Please try again.');
+        }
+    }
+
+    // Event listeners for file browser
+    browseFolderBtn.addEventListener('click', browseFolder);
+
+    upFolderBtn.addEventListener('click', function() {
+        // For now, just clear the file list and reset to initial state
+        fileList.innerHTML = `
+            <div class="file-item other-file">
+                <span class="file-name">Click "Browse Folder" to start...</span>
+                <span class="file-size"></span>
+            </div>
+        `;
+        currentPathDisplay.textContent = 'Select folder to browse...';
+        currentFolderPath = '';
+        upFolderBtn.disabled = true;
+    });
 
     // Initialize the matrix
     createClipMatrix();
