@@ -1,8 +1,8 @@
 # Metropolis Video App - Development Plan
 
 ## Progress Tracker
-- **Current Step:** Ready for Step 9 - Add File Browser Panel
-- **Completed Steps:** 8/16
+- **Current Step:** Ready for Step 10 - Add Drag and Drop from File Browser
+- **Completed Steps:** 9/16
 - **Current Phase:** Tabs & Organization
 
 ---
@@ -223,8 +223,34 @@
 
 ---
 
-### Step 9: Add File Browser Panel ⏸️
-**Status:** Not Started
+### Step 9: Add File Browser Panel ✅
+**Status:** Completed
+**What was built:**
+- Added file browser panel on left side of interface
+- Three-column layout: file browser, clips matrix, video preview
+- Browse Folder button with File System Access API support
+- File list display showing video files with sizes
+- Click to load video files into selected clip slots
+- Visual distinction between video files and other files
+- Up button to reset file browser state
+
+**Testing completed:**
+- [x] File browser panel displays correctly in left column
+- [x] Browse Folder button opens folder selection dialog
+- [x] Files display with correct names and sizes
+- [x] Video files highlighted in green, other files in white
+- [x] Clicking video files loads them into selected clip slot
+- [x] File browser integrates with existing tab system
+- [x] Up button resets browser to initial state
+
+**Commit message:** `Add file browser panel with folder navigation`
+
+**Features working:**
+- File browser panel layout and styling
+- Folder selection using File System Access API + fallback
+- File list with video detection and size display
+- Video loading from file browser into clip slots
+- Integration with existing clip selection system
 
 ### Step 10: Add Drag and Drop from File Browser ⏸️
 **Status:** Not Started
