@@ -59,6 +59,51 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentFolderFiles = [];
     const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp'];
 
+    // Drag and drop functions
+    function setupClipSlotDropZone(clipSlot) {
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            clipSlot.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Highlight drop area when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            clipSlot.addEventListener(eventName, function(e) {
+                if (window.draggedFile) {
+                    clipSlot.classList.add('drag-over');
+                }
+            });
+        });
+
+        // Remove highlight when item is dragged away
+        clipSlot.addEventListener('dragleave', function(e) {
+            // Only remove if we're actually leaving the element (not just moving to a child)
+            if (!clipSlot.contains(e.relatedTarget)) {
+                clipSlot.classList.remove('drag-over');
+            }
+        });
+
+        // Handle dropped files
+        clipSlot.addEventListener('drop', function(e) {
+            clipSlot.classList.remove('drag-over');
+
+            if (window.draggedFile) {
+                const clipNumber = clipSlot.dataset.clipNumber;
+
+                // Select this slot and load the video
+                selectClipSlot(clipSlot);
+                loadVideoFromFile(window.draggedFile);
+
+                console.log(`Dropped ${window.draggedFile.name} into clip slot ${clipNumber}`);
+            }
+        });
+    }
+
     // Generate 6x6 grid of clip slots
     function createClipMatrix() {
         clipsMatrix.innerHTML = '';
@@ -72,6 +117,9 @@ document.addEventListener('DOMContentLoaded', function() {
             clipSlot.addEventListener('click', function() {
                 selectClipSlot(clipSlot);
             });
+
+            // Add drag and drop handlers
+            setupClipSlotDropZone(clipSlot);
 
             clipsMatrix.appendChild(clipSlot);
         }
@@ -595,13 +643,40 @@ document.addEventListener('DOMContentLoaded', function() {
                 <span class="file-size">${fileSize}</span>
             `;
 
-            // Add click handler for video files to load them
+            // Add click handler and drag functionality for video files
             if (isVideo) {
+                // Make video files draggable
+                fileItem.draggable = true;
+                fileItem.classList.add('draggable');
+
+                // Click to load handler
                 fileItem.addEventListener('click', function() {
                     loadVideoFromFile(file);
                 });
+
+                // Drag start handler
+                fileItem.addEventListener('dragstart', function(e) {
+                    fileItem.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'copy';
+                    e.dataTransfer.setData('application/json', JSON.stringify({
+                        fileName: file.name,
+                        fileSize: file.size,
+                        fileType: 'video'
+                    }));
+                    // Store file reference for drop handler
+                    window.draggedFile = file;
+                    console.log('Started dragging:', file.name);
+                });
+
+                // Drag end handler
+                fileItem.addEventListener('dragend', function(e) {
+                    fileItem.classList.remove('dragging');
+                    window.draggedFile = null;
+                    console.log('Finished dragging:', file.name);
+                });
+
                 fileItem.style.cursor = 'pointer';
-                fileItem.title = `Click to load ${file.name} into selected clip slot`;
+                fileItem.title = `Click to load ${file.name} into selected clip slot, or drag to any clip slot`;
             }
 
             fileList.appendChild(fileItem);
