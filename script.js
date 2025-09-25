@@ -25,6 +25,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const upFolderBtn = document.getElementById('upFolderBtn');
     const currentPathDisplay = document.getElementById('currentPath');
     const fileList = document.getElementById('fileList');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    const speedPresetBtns = document.querySelectorAll('.speed-preset-btn');
+    const saveSessionBtn = document.getElementById('saveSessionBtn');
+    const loadSessionBtn = document.getElementById('loadSessionBtn');
+    const sessionStatus = document.getElementById('sessionStatus');
 
     // Track global play intent (user's desired state)
     let globalPlayIntent = false; // true = user wants playing, false = user wants paused
@@ -44,20 +50,308 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track cue points for each clip for each tab (tabIndex -> { clipNumber -> array of cue point objects })
     const tabClipCuePoints = {};
 
+    // Track speed settings for each clip for each tab (tabIndex -> { clipNumber -> speed value })
+    const tabClipSpeeds = {};
+
     // Initialize tab data structures
     for (let i = 0; i < 5; i++) {
         tabClipVideos[i] = {};
         tabClipCuePoints[i] = {};
+        tabClipSpeeds[i] = {};
     }
 
     // Legacy references for current tab's data (for compatibility)
     let clipVideos = tabClipVideos[currentTab];
     let clipCuePoints = tabClipCuePoints[currentTab];
+    let clipSpeeds = tabClipSpeeds[currentTab];
 
     // File browser state
     let currentFolderPath = '';
     let currentFolderFiles = [];
     const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp'];
+
+    // Session management state
+    let currentSessionName = null;
+    let sessionModified = false;
+
+    // Session management functions
+    function createSessionData() {
+        // Create a clean copy of video data without blob URLs
+        const cleanVideos = {};
+        Object.keys(tabClipVideos).forEach(tabIndex => {
+            cleanVideos[tabIndex] = {};
+            Object.keys(tabClipVideos[tabIndex]).forEach(clipNumber => {
+                const video = tabClipVideos[tabIndex][clipNumber];
+                cleanVideos[tabIndex][clipNumber] = {
+                    name: video.name,
+                    type: video.type,
+                    // Don't save the URL since blob URLs expire
+                    // We'll reconstruct from file browser
+                };
+            });
+        });
+
+        return {
+            version: '1.0',
+            timestamp: new Date().toISOString(),
+            sessionName: currentSessionName,
+            currentTab: currentTab,
+            selectedClipSlot: selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null,
+            currentFolderPath: currentFolderPath,
+            globalPlayIntent: globalPlayIntent,
+            tabs: {
+                videos: cleanVideos,
+                cuePoints: tabClipCuePoints,
+                speeds: tabClipSpeeds
+            }
+        };
+    }
+
+    function saveSession() {
+        try {
+            const sessionData = createSessionData();
+
+            console.log('=== SAVING SESSION ===');
+            console.log('Current tab data:', tabClipVideos);
+            console.log('Session data being saved:', sessionData);
+
+            // Create a default session name if none exists
+            if (!currentSessionName) {
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                currentSessionName = `metropolis-session-${timestamp}`;
+            }
+
+            // Create downloadable file
+            const dataStr = JSON.stringify(sessionData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `${currentSessionName}.json`;
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            sessionModified = false;
+            updateSessionStatus(`Saved: ${currentSessionName}`);
+            console.log('Session saved successfully');
+
+        } catch (error) {
+            console.error('Error saving session:', error);
+            alert('Error saving session: ' + error.message);
+        }
+    }
+
+    function loadSessionFromFile(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const sessionData = JSON.parse(e.target.result);
+                loadSessionData(sessionData);
+            } catch (error) {
+                console.error('Error parsing session file:', error);
+                alert('Error loading session: Invalid file format');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function loadSessionData(sessionData) {
+        try {
+            // Validate session data
+            if (!sessionData.version || !sessionData.tabs) {
+                throw new Error('Invalid session file format');
+            }
+
+            console.log('=== LOADING SESSION ===');
+            console.log('Session data from file:', sessionData);
+            console.log('Before loading - current tab data:', tabClipVideos);
+
+            // Clear current state
+            clearAllTabs();
+            console.log('After clearing - tab data:', tabClipVideos);
+
+            // Restore tab data
+            if (sessionData.tabs.videos) {
+                console.log('Restoring videos:', sessionData.tabs.videos);
+                Object.assign(tabClipVideos, sessionData.tabs.videos);
+            }
+            if (sessionData.tabs.cuePoints) {
+                console.log('Restoring cue points:', sessionData.tabs.cuePoints);
+                Object.assign(tabClipCuePoints, sessionData.tabs.cuePoints);
+            }
+            if (sessionData.tabs.speeds) {
+                console.log('Restoring speeds:', sessionData.tabs.speeds);
+                Object.assign(tabClipSpeeds, sessionData.tabs.speeds);
+            }
+
+            console.log('After restoring - tab data:', tabClipVideos);
+
+            // Restore current tab
+            if (sessionData.currentTab !== undefined) {
+                console.log('Switching to tab:', sessionData.currentTab);
+                switchTab(sessionData.currentTab);
+            }
+
+            // Update current tab references
+            clipVideos = tabClipVideos[currentTab];
+            clipCuePoints = tabClipCuePoints[currentTab];
+            clipSpeeds = tabClipSpeeds[currentTab];
+            console.log('Current tab video data:', clipVideos);
+
+            // Restore folder path
+            if (sessionData.currentFolderPath) {
+                currentFolderPath = sessionData.currentFolderPath;
+                currentPathDisplay.textContent = currentFolderPath;
+            }
+
+            // Restore global play intent
+            if (sessionData.globalPlayIntent !== undefined) {
+                globalPlayIntent = sessionData.globalPlayIntent;
+                updatePlayButtonState();
+            }
+
+            // Restore session name
+            currentSessionName = sessionData.sessionName;
+            sessionModified = false;
+            updateSessionStatus(`Loaded: ${currentSessionName || 'Unnamed session'}`);
+
+            // Refresh UI to show restored slots
+            refreshClipMatrix();
+
+            // Inform user about video file reconnection
+            if (Object.keys(clipVideos).length > 0) {
+                alert('Session loaded successfully! Video slots are restored but videos need to be reconnected. Please browse to the folder containing your video files to automatically reconnect them.');
+            }
+
+            console.log('Session loaded successfully');
+            console.log('Final state - current tab videos:', clipVideos);
+
+        } catch (error) {
+            console.error('Error loading session:', error);
+            alert('Error loading session: ' + error.message);
+        }
+    }
+
+    function clearAllTabs() {
+        // Clear all tab data
+        for (let i = 0; i < 5; i++) {
+            tabClipVideos[i] = {};
+            tabClipCuePoints[i] = {};
+            tabClipSpeeds[i] = {};
+        }
+
+        // Update current references
+        clipVideos = tabClipVideos[currentTab];
+        clipCuePoints = tabClipCuePoints[currentTab];
+        clipSpeeds = tabClipSpeeds[currentTab];
+
+        // Clear UI
+        refreshClipMatrix();
+        updateCuePointsList();
+        updateCueMarkersOnTimeline();
+        updateSpeedControls();
+
+        // Clear video player
+        video.src = '';
+        video.load();
+
+        // Clear selection
+        if (selectedClipSlot) {
+            selectedClipSlot.classList.remove('selected');
+            selectedClipSlot = null;
+        }
+    }
+
+    function updateSessionStatus(status) {
+        sessionStatus.textContent = status;
+        sessionStatus.style.color = sessionModified ? '#ffaa00' : '#90ee90';
+    }
+
+    function markSessionModified() {
+        if (!sessionModified) {
+            sessionModified = true;
+            updateSessionStatus(`Modified: ${currentSessionName || 'Unnamed session'}`);
+        }
+    }
+
+    // Auto-connect loaded session videos when files are found
+    function autoConnectSessionVideo(file) {
+        console.log(`=== AUTO-CONNECTING FILE: ${file.name} ===`);
+        console.log('File object:', file);
+
+        let connectionsMade = 0;
+
+        // Check all tabs for video slots that match this filename but don't have working URLs
+        for (let tabIndex = 0; tabIndex < 5; tabIndex++) {
+            const tabVideos = tabClipVideos[tabIndex];
+            console.log(`Checking tab ${tabIndex} videos:`, tabVideos);
+
+            Object.keys(tabVideos).forEach(clipNumber => {
+                const videoData = tabVideos[clipNumber];
+                console.log(`Checking clip ${clipNumber}:`, videoData);
+
+                // If this slot has a video with matching name but no valid URL or file
+                if (videoData && videoData.name === file.name && (!videoData.url || !videoData.file)) {
+                    console.log(`MATCH FOUND! Auto-connecting ${file.name} to tab ${tabIndex}, clip ${clipNumber}`);
+
+                    // Create new blob URL for this file
+                    const url = URL.createObjectURL(file);
+                    console.log(`Created blob URL: ${url}`);
+
+                    // Update the video data with new file reference
+                    videoData.url = url;
+                    videoData.file = file;
+                    videoData.type = 'file'; // Update type since it's now properly loaded
+
+                    connectionsMade++;
+                    console.log(`Updated video data:`, videoData);
+
+                    // If this is the current tab, update the UI
+                    if (tabIndex === currentTab) {
+                        console.log(`This is current tab (${currentTab}), updating UI`);
+                        const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
+                        console.log(`Found slot element:`, slot);
+
+                        if (slot) {
+                            updateSlotAppearance(slot, true);
+                            console.log(`Updated slot appearance for clip ${clipNumber}`);
+
+                            // If this slot is currently selected, load it in the video player immediately
+                            if (selectedClipSlot && selectedClipSlot.dataset.clipNumber === clipNumber) {
+                                console.log(`This slot is currently selected! Loading video into player: ${file.name}`);
+                                video.src = url;
+                                video.load();
+
+                                // Apply speed and other settings when video loads
+                                video.addEventListener('loadeddata', function() {
+                                    const clipSpeed = tabClipSpeeds[tabIndex][clipNumber] || 1.0;
+                                    setVideoSpeed(clipSpeed);
+                                    console.log(`Applied speed ${clipSpeed}x to reconnected video`);
+                                }, { once: true });
+
+                                video.addEventListener('error', function(e) {
+                                    console.error(`Error loading reconnected video ${file.name}:`, e);
+                                }, { once: true });
+                            }
+                        } else {
+                            console.warn(`Could not find slot element for clip ${clipNumber}`);
+                        }
+                    } else {
+                        console.log(`Tab ${tabIndex} is not current tab (${currentTab}), skipping UI update`);
+                    }
+                } else {
+                    if (videoData) {
+                        console.log(`Clip ${clipNumber} has video "${videoData.name}" but doesn't match "${file.name}" or already has URL/file`);
+                    }
+                }
+            });
+        }
+
+        console.log(`=== COMPLETED AUTO-CONNECT FOR ${file.name} - Made ${connectionsMade} connections ===`);
+        return connectionsMade;
+    }
 
     // Drag and drop functions
     function setupClipSlotDropZone(clipSlot) {
@@ -98,6 +392,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Select this slot and load the video
                 selectClipSlot(clipSlot);
                 loadVideoFromFile(window.draggedFile);
+                // Also try to auto-connect to any session slots waiting for this file
+                autoConnectSessionVideo(window.draggedFile);
 
                 console.log(`Dropped ${window.draggedFile.name} into clip slot ${clipNumber}`);
             }
@@ -128,8 +424,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Handle clip selection
     function selectClipSlot(clipSlot) {
+        console.log('=== SELECTING CLIP SLOT ===');
+        console.log('Slot element:', clipSlot);
+        console.log('Current tab:', currentTab);
+
         // Remove selected class from previously selected slot
         if (selectedClipSlot) {
+            console.log('Removing selection from previous slot:', selectedClipSlot.dataset.clipNumber);
             selectedClipSlot.classList.remove('selected');
         }
 
@@ -139,17 +440,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const clipNumber = clipSlot.dataset.clipNumber;
         console.log(`Selected clip slot ${clipNumber}`);
+        console.log('Current clipVideos object:', clipVideos);
+        console.log(`Video data for slot ${clipNumber}:`, clipVideos[clipNumber]);
 
         // If this slot has a video, load it in the preview
         if (clipVideos[clipNumber]) {
             const wasPlaying = globalPlayIntent;
-            video.src = clipVideos[clipNumber].url;
-            video.load();
-            console.log('Loaded video for selected slot:', clipVideos[clipNumber].name);
+            const videoData = clipVideos[clipNumber];
+
+            // Check if we have a valid URL
+            if (videoData.url && videoData.file) {
+                video.src = videoData.url;
+                video.load();
+                console.log('Loaded video for selected slot:', videoData.name);
+            } else {
+                // Video data exists but no valid URL - this is from a loaded session
+                console.warn(`Video slot ${clipNumber} has data but no valid URL:`, videoData);
+                console.log('Video needs to be reconnected from file browser');
+
+                // Clear the video player
+                video.src = '';
+                video.load();
+
+                // Show user-friendly message
+                if (videoData.name) {
+                    alert(`Video "${videoData.name}" needs to be reconnected. Please browse to the folder containing your video files.`);
+                }
+            }
 
             // If we were playing before, continue playing the new clip
             if (wasPlaying) {
                 video.addEventListener('loadeddata', function() {
+                    // Apply the correct speed for this clip
+                    const clipSpeed = clipSpeeds[clipNumber] || 1.0;
+                    setVideoSpeed(clipSpeed);
+
                     video.play().then(() => {
                         console.log('Auto-playing new clip due to global play state');
                         // globalPlayIntent unchanged - was already true
@@ -159,6 +484,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 }, { once: true });
             } else {
+                // Apply speed even when not auto-playing
+                video.addEventListener('loadeddata', function() {
+                    const clipSpeed = clipSpeeds[clipNumber] || 1.0;
+                    setVideoSpeed(clipSpeed);
+                }, { once: true });
+
                 // Make sure button state is correct when not playing
                 // globalPlayIntent unchanged - keep user's intent
                 updatePlayButtonState();
@@ -172,6 +503,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update cue points list for the newly selected clip
         updateCuePointsList();
         updateCueMarkersOnTimeline();
+        updateSpeedControls();
     }
 
     // Update visual appearance of slot based on whether it has video
@@ -276,9 +608,75 @@ document.addEventListener('DOMContentLoaded', function() {
 
         console.log(`Recorded cue point at ${formatTime(currentTime)} for clip ${clipNumber}`);
 
+        // Mark session as modified
+        markSessionModified();
+
         // Update the display
         updateCuePointsList();
         updateCueMarkersOnTimeline();
+    }
+
+    // Speed control functions
+    function setVideoSpeed(speed) {
+        if (video.src) {
+            video.playbackRate = speed;
+            console.log(`Set video speed to ${speed}x`);
+        }
+    }
+
+    function updateSpeedControls() {
+        if (!selectedClipSlot) {
+            // No clip selected - reset to default
+            speedSlider.value = 1.0;
+            speedValue.textContent = '1.0x';
+            updateSpeedPresetButtons(1.0);
+            setVideoSpeed(1.0);
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const currentSpeed = clipSpeeds[clipNumber] || 1.0;
+
+        speedSlider.value = currentSpeed;
+        speedValue.textContent = `${currentSpeed}x`;
+        updateSpeedPresetButtons(currentSpeed);
+        setVideoSpeed(currentSpeed);
+    }
+
+    function updateSpeedPresetButtons(currentSpeed) {
+        speedPresetBtns.forEach(btn => {
+            const btnSpeed = parseFloat(btn.dataset.speed);
+            if (Math.abs(btnSpeed - currentSpeed) < 0.01) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    }
+
+    function changeSpeed(newSpeed) {
+        if (!selectedClipSlot) {
+            console.log('No clip selected for speed change');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        // Store speed for this clip
+        clipSpeeds[clipNumber] = newSpeed;
+
+        // Mark session as modified
+        markSessionModified();
+
+        // Update UI
+        speedSlider.value = newSpeed;
+        speedValue.textContent = `${newSpeed}x`;
+        updateSpeedPresetButtons(newSpeed);
+
+        // Apply to video if loaded
+        setVideoSpeed(newSpeed);
+
+        console.log(`Changed speed for clip ${clipNumber} to ${newSpeed}x`);
     }
 
     // Update the visual display of cue points for the currently selected clip
@@ -570,6 +968,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update legacy references to point to new tab's data
         clipVideos = tabClipVideos[currentTab];
         clipCuePoints = tabClipCuePoints[currentTab];
+        clipSpeeds = tabClipSpeeds[currentTab];
 
         // Clear current selection (each tab has its own selection)
         if (selectedClipSlot) {
@@ -587,17 +986,33 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update UI for new tab
         updateCuePointsList();
         updateCueMarkersOnTimeline();
+        updateSpeedControls();
         updatePlayButtonState();
     }
 
     // Refresh the clip matrix to show current tab's video states
     function refreshClipMatrix() {
+        console.log('=== REFRESHING CLIP MATRIX ===');
+        console.log('Current tab:', currentTab);
+        console.log('Current clipVideos:', clipVideos);
+
         const allSlots = document.querySelectorAll('.clip-slot');
+        console.log(`Found ${allSlots.length} clip slots`);
+
         allSlots.forEach(slot => {
             const clipNumber = slot.dataset.clipNumber;
             const hasVideo = clipVideos[clipNumber];
-            updateSlotAppearance(slot, hasVideo);
+            console.log(`Slot ${clipNumber}: hasVideo =`, hasVideo);
+
+            if (hasVideo) {
+                console.log(`Updating slot ${clipNumber} with video: ${hasVideo.name}`);
+                updateSlotAppearance(slot, hasVideo);
+            } else {
+                console.log(`Slot ${clipNumber} has no video, showing empty`);
+                updateSlotAppearance(slot, false);
+            }
         });
+        console.log('=== CLIP MATRIX REFRESH COMPLETE ===');
     }
 
     // File Browser Functions
@@ -652,6 +1067,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Click to load handler
                 fileItem.addEventListener('click', function() {
                     loadVideoFromFile(file);
+                    // Also try to auto-connect to any session slots waiting for this file
+                    autoConnectSessionVideo(file);
                 });
 
                 // Drag start handler
@@ -681,6 +1098,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
             fileList.appendChild(fileItem);
         });
+
+        console.log('=== PROCESSING FILES FOR AUTO-CONNECTION ===');
+        console.log(`Found ${files.length} files in folder`);
+
+        // After displaying all files, try to auto-connect session videos
+        let totalConnections = 0;
+        files.forEach(file => {
+            if (isVideoFile(file.name)) {
+                console.log(`Processing video file: ${file.name}`);
+                const connections = autoConnectSessionVideo(file);
+                totalConnections += connections;
+            } else {
+                console.log(`Skipping non-video file: ${file.name}`);
+            }
+        });
+
+        console.log(`=== TOTAL AUTO-CONNECTIONS MADE: ${totalConnections} ===`);
+
+        // Refresh the current tab's UI to show any newly connected videos
+        console.log('Refreshing clip matrix...');
+        refreshClipMatrix();
+        console.log('Clip matrix refreshed');
     }
 
     function loadVideoFromFile(file) {
@@ -699,12 +1138,21 @@ document.addEventListener('DOMContentLoaded', function() {
             file: file
         };
 
+        // Mark session as modified
+        markSessionModified();
+
         // Update slot appearance
         updateSlotAppearance(selectedClipSlot, clipVideos[clipNumber]);
 
         // Load video in player
         video.src = url;
         video.load();
+
+        // Apply speed when video loads
+        video.addEventListener('loadeddata', function() {
+            const clipSpeed = clipSpeeds[clipNumber] || 1.0;
+            setVideoSpeed(clipSpeed);
+        }, { once: true });
 
         console.log(`Loaded video ${file.name} into clip slot ${clipNumber}`);
 
@@ -802,6 +1250,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize UI state
     updatePlayButtonState();
     updateCuePointsList();
+    updateSpeedControls();
+    updateSessionStatus('No session loaded');
 
     // Load test video functionality
     loadTestVideoBtn.addEventListener('click', function() {
@@ -821,6 +1271,9 @@ document.addEventListener('DOMContentLoaded', function() {
             type: 'test'
         };
 
+        // Mark session as modified
+        markSessionModified();
+
         // Update the video player to show this video
         const wasPlaying = isPlaying;
         video.src = videoUrl;
@@ -830,6 +1283,10 @@ document.addEventListener('DOMContentLoaded', function() {
         updateSlotAppearance(selectedClipSlot, true);
 
         video.addEventListener('loadeddata', function() {
+            // Apply the correct speed for this clip
+            const clipSpeed = clipSpeeds[clipNumber] || 1.0;
+            setVideoSpeed(clipSpeed);
+
             console.log('Test video loaded successfully into slot', clipNumber);
             // Continue playing if we were playing before
             if (wasPlaying) {
@@ -868,6 +1325,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 file: file
             };
 
+            // Mark session as modified
+            markSessionModified();
+
             // Update the video player to show this video
             const wasPlaying = globalPlayIntent;
             video.src = url;
@@ -877,6 +1337,10 @@ document.addEventListener('DOMContentLoaded', function() {
             updateSlotAppearance(selectedClipSlot, true);
 
             video.addEventListener('loadeddata', function() {
+                // Apply the correct speed for this clip
+                const clipSpeed = clipSpeeds[clipNumber] || 1.0;
+                setVideoSpeed(clipSpeed);
+
                 console.log('File loaded successfully into slot', clipNumber);
                 // Continue playing if we were playing before
                 if (wasPlaying) {
@@ -980,6 +1444,39 @@ document.addEventListener('DOMContentLoaded', function() {
     // Timeline event listeners
     timelineTrack.addEventListener('click', handleTimelineClick);
     timelineHandle.addEventListener('mousedown', handleTimelineDrag);
+
+    // Speed control event listeners
+    speedSlider.addEventListener('input', function() {
+        const speed = parseFloat(speedSlider.value);
+        changeSpeed(speed);
+    });
+
+    speedPresetBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const speed = parseFloat(btn.dataset.speed);
+            changeSpeed(speed);
+        });
+    });
+
+    // Session management event listeners
+    saveSessionBtn.addEventListener('click', function() {
+        console.log('Save session button clicked');
+        saveSession();
+    });
+
+    loadSessionBtn.addEventListener('click', function() {
+        console.log('Load session button clicked');
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                loadSessionFromFile(file);
+            }
+        };
+        input.click();
+    });
 
     // Video event listeners for debugging and state management
     video.addEventListener('play', function() {
