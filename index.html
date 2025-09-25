@@ -15,10 +15,10 @@
 
         .main-container {
             display: grid;
-            grid-template-columns: 1fr 400px;
+            grid-template-columns: 250px 1fr 400px;
             grid-template-rows: auto 1fr;
             gap: 20px;
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
             height: calc(100vh - 40px);
         }
@@ -368,6 +368,109 @@
             box-shadow: 0 1px 2px rgba(0,0,0,0.3);
         }
 
+        .file-browser {
+            background-color: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow: hidden;
+        }
+
+        .file-browser h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: white;
+        }
+
+        .current-path {
+            background-color: #1a1a1a;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #888;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            background-color: #1a1a1a;
+            border-radius: 4px;
+            padding: 8px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            font-size: 13px;
+        }
+
+        .file-item:hover {
+            background-color: #333;
+        }
+
+        .file-item.directory {
+            color: #87ceeb;
+        }
+
+        .file-item.video-file {
+            color: #90ee90;
+        }
+
+        .file-item.other-file {
+            color: #ddd;
+        }
+
+        .file-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-right: 10px;
+        }
+
+        .file-size {
+            font-size: 11px;
+            color: #888;
+            min-width: 60px;
+            text-align: right;
+        }
+
+        .file-browser-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .browse-btn {
+            background-color: #333;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .browse-btn:hover {
+            background-color: #555;
+        }
+
+        .browse-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
         .tabs-container {
             grid-column: 1 / -1;
             margin-top: 20px;
@@ -414,6 +517,23 @@
     <div class="main-container">
         <div class="header">
             <h1>Metropolis Video Player</h1>
+        </div>
+
+        <div class="file-browser">
+            <h3>File Browser</h3>
+            <div class="current-path" id="currentPath">
+                Select folder to browse...
+            </div>
+            <div class="file-browser-controls">
+                <button id="browseFolderBtn" class="browse-btn">Browse Folder</button>
+                <button id="upFolderBtn" class="browse-btn" disabled>Up</button>
+            </div>
+            <div class="file-list" id="fileList">
+                <div class="file-item other-file">
+                    <span class="file-name">Click "Browse Folder" to start...</span>
+                    <span class="file-size"></span>
+                </div>
+            </div>
         </div>
 
         <div class="content-area">
