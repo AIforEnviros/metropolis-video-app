@@ -532,12 +532,145 @@
         .tab-btn.active:hover {
             background-color: #0077dd;
         }
+
+        .speed-control {
+            text-align: center;
+        }
+
+        .speed-display {
+            margin-bottom: 15px;
+        }
+
+        .speed-display label {
+            font-size: 14px;
+            color: white;
+        }
+
+        .speed-value {
+            font-weight: bold;
+            color: #90ee90;
+        }
+
+        .speed-slider-container {
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .speed-slider {
+            width: 100%;
+            height: 8px;
+            background: linear-gradient(to right, #ff4444 0%, #ffaa00 25%, #90ee90 50%, #ffaa00 75%, #ff4444 100%);
+            border-radius: 4px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .speed-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #0088ff;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .speed-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #0088ff;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .speed-markers {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #888;
+            margin-top: 5px;
+            padding: 0 10px;
+        }
+
+        .speed-presets {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .speed-preset-btn {
+            background-color: #333;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 40px;
+        }
+
+        .speed-preset-btn:hover {
+            background-color: #555;
+            transform: scale(1.05);
+        }
+
+        .speed-preset-btn.active {
+            background-color: #0066cc;
+            box-shadow: 0 2px 6px rgba(0, 102, 204, 0.3);
+        }
+
+        .session-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .session-btn {
+            background-color: #d65d0e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .session-btn:hover {
+            background-color: #e6741f;
+            transform: scale(1.02);
+        }
+
+        .session-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .session-status {
+            font-size: 12px;
+            color: #888;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
     <div class="main-container">
         <div class="header">
             <h1>Metropolis Video Player</h1>
+            <div class="session-controls">
+                <button id="saveSessionBtn" class="session-btn">Save Session</button>
+                <button id="loadSessionBtn" class="session-btn">Load Session</button>
+                <span class="session-status" id="sessionStatus">No session loaded</span>
+            </div>
         </div>
 
         <div class="file-browser">
@@ -606,6 +739,28 @@
                 <button id="restartClipBtn" class="cue-nav-btn" title="Restart Clip">⏮⏮</button>
                 <button id="prevCuePointBtn" class="cue-nav-btn" title="Previous Cue Point">⏮</button>
                 <button id="nextCuePointBtn" class="cue-nav-btn" title="Next Cue Point">⏭</button>
+            </div>
+
+            <h3>Speed Control</h3>
+            <div class="speed-control">
+                <div class="speed-display">
+                    <label for="speedSlider">Playback Speed: <span id="speedValue">1.0x</span></label>
+                </div>
+                <div class="speed-slider-container">
+                    <input type="range" id="speedSlider" class="speed-slider"
+                           min="0.1" max="10" step="0.1" value="1.0">
+                    <div class="speed-markers">
+                        <span>0.1x</span>
+                        <span>1x</span>
+                        <span>10x</span>
+                    </div>
+                </div>
+                <div class="speed-presets">
+                    <button class="speed-preset-btn" data-speed="0.5">0.5x</button>
+                    <button class="speed-preset-btn" data-speed="1.0">1x</button>
+                    <button class="speed-preset-btn" data-speed="1.5">1.5x</button>
+                    <button class="speed-preset-btn" data-speed="2.0">2x</button>
+                </div>
             </div>
 
             <h3>Cue Points</h3>
