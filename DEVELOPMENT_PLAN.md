@@ -1,9 +1,9 @@
 # Metropolis Video App - Development Plan
 
 ## Progress Tracker
-- **Current Step:** Ready for Step 10 - Add Drag and Drop from File Browser
-- **Completed Steps:** 9/16
-- **Current Phase:** Tabs & Organization
+- **Current Step:** Ready for Step 11 - Add Speed/Tempo Control
+- **Completed Steps:** 10/16
+- **Current Phase:** Advanced Features
 
 ---
 
@@ -252,8 +252,31 @@
 - Video loading from file browser into clip slots
 - Integration with existing clip selection system
 
-### Step 10: Add Drag and Drop from File Browser ⏸️
-**Status:** Not Started
+### Step 10: Add Drag and Drop from File Browser ✅
+**Status:** Completed
+**What was built:**
+- Made video files in file browser draggable with visual feedback
+- Added drag start/end event handlers to video file items
+- Implemented drop zone functionality for all clip slots
+- Added visual highlighting when dragging over clip slots
+- Drop action automatically selects target slot and loads video
+- Integrated seamlessly with existing click-to-load functionality
+
+**Testing completed:**
+- [x] Video files show draggable cursor and become semi-transparent when dragged
+- [x] Clip slots highlight with green glow when dragging video over them
+- [x] Dropping video file onto clip slot selects and loads it correctly
+- [x] Drag and drop works across all tabs independently
+- [x] Visual feedback clears properly after drag operations
+- [x] Both click and drag methods work for loading videos
+
+**Commit message:** `Add drag and drop functionality from file browser to clip slots`
+
+**Features working:**
+- Draggable video file items with visual feedback
+- Drop zone highlighting and handling for clip slots
+- Automatic slot selection and video loading on drop
+- Integration with existing tab system and video loading logic
 
 ---
 
