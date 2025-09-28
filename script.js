@@ -6,8 +6,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const forwardBtn = document.getElementById('forwardBtn');
     const nextClipBtn = document.getElementById('nextClipBtn');
 
-    const loadTestVideoBtn = document.getElementById('loadTestVideo');
-    const fileInput = document.getElementById('fileInput');
     const clipsMatrix = document.getElementById('clipsMatrix');
     const recordCuePointBtn = document.getElementById('recordCuePointBtn');
     const cuePointsList = document.getElementById('cuePointsList');
@@ -31,6 +29,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveSessionBtn = document.getElementById('saveSessionBtn');
     const loadSessionBtn = document.getElementById('loadSessionBtn');
     const sessionStatus = document.getElementById('sessionStatus');
+    const shortcutsBtn = document.getElementById('shortcutsBtn');
+    const shortcutsModal = document.getElementById('shortcutsModal');
+    const closeShortcutsModal = document.getElementById('closeShortcutsModal');
+    const shortcutsGrid = document.getElementById('shortcutsGrid');
+    const resetShortcutsBtn = document.getElementById('resetShortcutsBtn');
+    const saveShortcutsBtn = document.getElementById('saveShortcutsBtn');
 
     // Track global play intent (user's desired state)
     let globalPlayIntent = false; // true = user wants playing, false = user wants paused
@@ -74,6 +78,30 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentSessionName = null;
     let sessionModified = false;
 
+    // Keyboard shortcuts configuration
+    let keyboardShortcuts = {
+        'playPause': 'Space',
+        'previousClip': 'ArrowLeft',
+        'nextClip': 'ArrowRight',
+        'previousCuePoint': 'q',
+        'nextCuePoint': 'w',
+        'restartClip': 'r',
+        'recordCuePoint': 'c',
+        'reversePlay': 'Shift+r',
+        'tab1': '1',
+        'tab2': '2',
+        'tab3': '3',
+        'tab4': '4',
+        'tab5': '5',
+        'speedPreset0.5': 'Shift+1',
+        'speedPreset1': 'Shift+2',
+        'speedPreset1.5': 'Shift+3',
+        'speedPreset2': 'Shift+4'
+    };
+
+    // Track if shortcuts modal is open
+    let shortcutsModalOpen = false;
+
     // Session management functions
     function createSessionData() {
         // Create a clean copy of video data without blob URLs
@@ -99,6 +127,7 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedClipSlot: selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null,
             currentFolderPath: currentFolderPath,
             globalPlayIntent: globalPlayIntent,
+            keyboardShortcuts: keyboardShortcuts,
             tabs: {
                 videos: cleanVideos,
                 cuePoints: tabClipCuePoints,
@@ -210,6 +239,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (sessionData.globalPlayIntent !== undefined) {
                 globalPlayIntent = sessionData.globalPlayIntent;
                 updatePlayButtonState();
+            }
+
+            // Restore keyboard shortcuts
+            if (sessionData.keyboardShortcuts) {
+                keyboardShortcuts = { ...keyboardShortcuts, ...sessionData.keyboardShortcuts };
             }
 
             // Restore session name
@@ -1220,6 +1254,256 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Keyboard shortcuts functions
+    function parseKeyboardShortcut(shortcut) {
+        const parts = shortcut.split('+');
+        const key = parts[parts.length - 1];
+        const modifiers = parts.slice(0, -1);
+
+        return {
+            key: key,
+            shift: modifiers.includes('Shift'),
+            ctrl: modifiers.includes('Ctrl'),
+            alt: modifiers.includes('Alt'),
+            meta: modifiers.includes('Meta')
+        };
+    }
+
+    function matchesShortcut(event, shortcut) {
+        if (shortcutsModalOpen) return false; // Don't trigger shortcuts when modal is open
+
+        const parsed = parseKeyboardShortcut(shortcut);
+
+        // Handle special keys
+        let eventKey = event.key;
+        if (eventKey === ' ') eventKey = 'Space';
+
+        return (
+            eventKey === parsed.key &&
+            event.shiftKey === parsed.shift &&
+            event.ctrlKey === parsed.ctrl &&
+            event.altKey === parsed.alt &&
+            event.metaKey === parsed.meta
+        );
+    }
+
+    function handleKeyboardShortcuts(event) {
+        // Don't trigger shortcuts if typing in an input field
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        // Check each shortcut
+        for (const [action, shortcut] of Object.entries(keyboardShortcuts)) {
+            if (matchesShortcut(event, shortcut)) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                switch (action) {
+                    case 'playPause':
+                        pausePlayBtn.click();
+                        break;
+                    case 'previousClip':
+                        prevClipBtn.click();
+                        break;
+                    case 'nextClip':
+                        nextClipBtn.click();
+                        break;
+                    case 'previousCuePoint':
+                        prevCuePointBtn.click();
+                        break;
+                    case 'nextCuePoint':
+                        nextCuePointBtn.click();
+                        break;
+                    case 'restartClip':
+                        restartClipBtn.click();
+                        break;
+                    case 'recordCuePoint':
+                        recordCuePointBtn.click();
+                        break;
+                    case 'reversePlay':
+                        reverseBtn.click();
+                        break;
+                    case 'tab1':
+                        switchTab(0);
+                        break;
+                    case 'tab2':
+                        switchTab(1);
+                        break;
+                    case 'tab3':
+                        switchTab(2);
+                        break;
+                    case 'tab4':
+                        switchTab(3);
+                        break;
+                    case 'tab5':
+                        switchTab(4);
+                        break;
+                    case 'speedPreset0.5':
+                        changeSpeed(0.5);
+                        break;
+                    case 'speedPreset1':
+                        changeSpeed(1.0);
+                        break;
+                    case 'speedPreset1.5':
+                        changeSpeed(1.5);
+                        break;
+                    case 'speedPreset2':
+                        changeSpeed(2.0);
+                        break;
+                }
+                return;
+            }
+        }
+    }
+
+    // Add keyboard event listener
+    document.addEventListener('keydown', handleKeyboardShortcuts);
+
+    // Keyboard shortcuts modal functions
+    let tempKeyboardShortcuts = {}; // Temporary storage for editing
+    let currentEditingAction = null;
+
+    const shortcutLabels = {
+        'playPause': 'Play/Pause',
+        'previousClip': 'Previous Clip',
+        'nextClip': 'Next Clip',
+        'previousCuePoint': 'Previous Cue Point',
+        'nextCuePoint': 'Next Cue Point',
+        'restartClip': 'Restart Clip',
+        'recordCuePoint': 'Record Cue Point',
+        'reversePlay': 'Reverse Play',
+        'tab1': 'Switch to Tab 1',
+        'tab2': 'Switch to Tab 2',
+        'tab3': 'Switch to Tab 3',
+        'tab4': 'Switch to Tab 4',
+        'tab5': 'Switch to Tab 5',
+        'speedPreset0.5': 'Speed: 0.5x',
+        'speedPreset1': 'Speed: 1x',
+        'speedPreset1.5': 'Speed: 1.5x',
+        'speedPreset2': 'Speed: 2x'
+    };
+
+    function openShortcutsModal() {
+        // Copy current shortcuts to temp storage
+        tempKeyboardShortcuts = { ...keyboardShortcuts };
+        shortcutsModalOpen = true;
+        populateShortcutsGrid();
+        shortcutsModal.style.display = 'block';
+    }
+
+    function closeShortcutsModalFunc() {
+        shortcutsModalOpen = false;
+        currentEditingAction = null;
+        shortcutsModal.style.display = 'none';
+        // Clear any editing states
+        document.querySelectorAll('.shortcut-input.editing').forEach(input => {
+            input.classList.remove('editing');
+        });
+    }
+
+    function populateShortcutsGrid() {
+        shortcutsGrid.innerHTML = '';
+
+        for (const [action, label] of Object.entries(shortcutLabels)) {
+            const row = document.createElement('div');
+            row.className = 'shortcut-row';
+
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'shortcut-label';
+            labelDiv.textContent = label;
+
+            const inputDiv = document.createElement('div');
+            inputDiv.className = 'shortcut-input';
+            inputDiv.textContent = tempKeyboardShortcuts[action];
+            inputDiv.dataset.action = action;
+
+            inputDiv.addEventListener('click', function() {
+                startEditingShortcut(action, inputDiv);
+            });
+
+            row.appendChild(labelDiv);
+            row.appendChild(inputDiv);
+            shortcutsGrid.appendChild(row);
+        }
+    }
+
+    function startEditingShortcut(action, inputElement) {
+        // Clear any other editing states
+        document.querySelectorAll('.shortcut-input.editing').forEach(input => {
+            input.classList.remove('editing');
+        });
+
+        currentEditingAction = action;
+        inputElement.classList.add('editing');
+        inputElement.textContent = 'Press key...';
+    }
+
+    function handleShortcutEdit(event) {
+        if (!currentEditingAction || !shortcutsModalOpen) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        // Build shortcut string
+        let shortcut = '';
+        if (event.shiftKey) shortcut += 'Shift+';
+        if (event.ctrlKey) shortcut += 'Ctrl+';
+        if (event.altKey) shortcut += 'Alt+';
+        if (event.metaKey) shortcut += 'Meta+';
+
+        // Add the main key
+        let key = event.key;
+        if (key === ' ') key = 'Space';
+        shortcut += key;
+
+        // Update temp shortcuts
+        tempKeyboardShortcuts[currentEditingAction] = shortcut;
+
+        // Update UI
+        const inputElement = document.querySelector(`[data-action="${currentEditingAction}"]`);
+        inputElement.textContent = shortcut;
+        inputElement.classList.remove('editing');
+
+        currentEditingAction = null;
+    }
+
+    function resetShortcutsToDefaults() {
+        tempKeyboardShortcuts = {
+            'playPause': 'Space',
+            'previousClip': 'ArrowLeft',
+            'nextClip': 'ArrowRight',
+            'previousCuePoint': 'q',
+            'nextCuePoint': 'w',
+            'restartClip': 'r',
+            'recordCuePoint': 'c',
+            'reversePlay': 'Shift+r',
+            'tab1': '1',
+            'tab2': '2',
+            'tab3': '3',
+            'tab4': '4',
+            'tab5': '5',
+            'speedPreset0.5': 'Shift+1',
+            'speedPreset1': 'Shift+2',
+            'speedPreset1.5': 'Shift+3',
+            'speedPreset2': 'Shift+4'
+        };
+        populateShortcutsGrid();
+    }
+
+    function saveShortcutsChanges() {
+        keyboardShortcuts = { ...tempKeyboardShortcuts };
+        markSessionModified();
+        closeShortcutsModalFunc();
+    }
+
+    // Add event listener for editing shortcuts
+    document.addEventListener('keydown', function(event) {
+        if (currentEditingAction && shortcutsModalOpen) {
+            handleShortcutEdit(event);
+        }
+    });
+
     // Event listeners for file browser
     browseFolderBtn.addEventListener('click', browseFolder);
 
@@ -1253,106 +1537,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updateSpeedControls();
     updateSessionStatus('No session loaded');
 
-    // Load test video functionality
-    loadTestVideoBtn.addEventListener('click', function() {
-        if (!selectedClipSlot) {
-            alert('Please select a clip slot first');
-            return;
-        }
-
-        console.log('Loading test video into slot', selectedClipSlot.dataset.clipNumber);
-        const clipNumber = selectedClipSlot.dataset.clipNumber;
-        const videoUrl = 'test-videos/test-video.mp4';
-
-        // Store video data for this slot
-        clipVideos[clipNumber] = {
-            url: videoUrl,
-            name: 'Test Video',
-            type: 'test'
-        };
-
-        // Mark session as modified
-        markSessionModified();
-
-        // Update the video player to show this video
-        const wasPlaying = isPlaying;
-        video.src = videoUrl;
-        video.load();
-
-        // Update the visual appearance of the slot
-        updateSlotAppearance(selectedClipSlot, true);
-
-        video.addEventListener('loadeddata', function() {
-            // Apply the correct speed for this clip
-            const clipSpeed = clipSpeeds[clipNumber] || 1.0;
-            setVideoSpeed(clipSpeed);
-
-            console.log('Test video loaded successfully into slot', clipNumber);
-            // Continue playing if we were playing before
-            if (wasPlaying) {
-                video.play().then(() => {
-                    console.log('Auto-continuing playback after loading test video');
-                }).catch(e => {
-                    console.error('Error continuing playback:', e);
-                });
-            }
-        }, { once: true });
-
-        video.addEventListener('error', function(e) {
-            console.error('Error loading test video:', e);
-            alert('Error loading test video. Please check the file exists.');
-        });
-    });
-
-    // File input functionality
-    fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            if (!selectedClipSlot) {
-                alert('Please select a clip slot first');
-                return;
-            }
-
-            console.log('Loading file into slot', selectedClipSlot.dataset.clipNumber, ':', file.name);
-            const clipNumber = selectedClipSlot.dataset.clipNumber;
-            const url = URL.createObjectURL(file);
-
-            // Store video data for this slot
-            clipVideos[clipNumber] = {
-                url: url,
-                name: file.name,
-                type: 'file',
-                file: file
-            };
-
-            // Mark session as modified
-            markSessionModified();
-
-            // Update the video player to show this video
-            const wasPlaying = globalPlayIntent;
-            video.src = url;
-            video.load();
-
-            // Update the visual appearance of the slot
-            updateSlotAppearance(selectedClipSlot, true);
-
-            video.addEventListener('loadeddata', function() {
-                // Apply the correct speed for this clip
-                const clipSpeed = clipSpeeds[clipNumber] || 1.0;
-                setVideoSpeed(clipSpeed);
-
-                console.log('File loaded successfully into slot', clipNumber);
-                // Continue playing if we were playing before
-                if (wasPlaying) {
-                    video.play().then(() => {
-                        console.log('Auto-continuing playback after loading file');
-                    }).catch(e => {
-                        console.error('Error continuing playback:', e);
-                    });
-                }
-            }, { once: true });
-        }
-    });
+    // Transport control event listeners
 
     // Previous Clip button
     prevClipBtn.addEventListener('click', function() {
@@ -1363,7 +1548,39 @@ document.addEventListener('DOMContentLoaded', function() {
     // Reverse Play button (placeholder for now)
     reverseBtn.addEventListener('click', function() {
         console.log('Reverse play button clicked');
-        alert('Reverse play functionality coming soon!');
+
+        if (!selectedClipSlot) {
+            console.log('No clip selected for reverse playback');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const videoData = clipVideos[clipNumber];
+
+        if (!videoData) {
+            console.log('No video loaded in selected slot for reverse playback');
+            return;
+        }
+
+        // Set negative playback rate for reverse
+        if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+            video.playbackRate = -1.0;
+
+            // If video is paused, start playing in reverse
+            if (video.paused) {
+                globalPlayIntent = true;
+                video.play().then(() => {
+                    console.log('Started reverse playback');
+                    updatePlayButtonState();
+                }).catch(e => {
+                    console.error('Error starting reverse playback:', e);
+                });
+            } else {
+                console.log('Switched to reverse playback');
+            }
+        } else {
+            console.log('Video not ready for reverse playback');
+        }
     });
 
     // Pause/Play toggle button
@@ -1399,12 +1616,17 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // Set normal playback rate (forward direction)
+        const clipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
+        const clipSpeed = clipNumber ? (clipSpeeds[clipNumber] || 1.0) : 1.0;
+        video.playbackRate = clipSpeed;
+
         // Set global intent to play when Forward Play is pressed
         globalPlayIntent = true;
         updatePlayButtonState();
 
         video.play().then(() => {
-            console.log('Video started playing forward');
+            console.log('Video started playing forward at speed:', clipSpeed);
         }).catch(e => {
             console.error('Error playing video:', e);
             alert('Error playing video: ' + e.message);
@@ -1477,6 +1699,22 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         input.click();
     });
+
+    // Keyboard shortcuts modal event listeners
+    shortcutsBtn.addEventListener('click', openShortcutsModal);
+
+    closeShortcutsModal.addEventListener('click', closeShortcutsModalFunc);
+
+    // Close modal when clicking outside
+    shortcutsModal.addEventListener('click', function(event) {
+        if (event.target === shortcutsModal) {
+            closeShortcutsModalFunc();
+        }
+    });
+
+    resetShortcutsBtn.addEventListener('click', resetShortcutsToDefaults);
+
+    saveShortcutsBtn.addEventListener('click', saveShortcutsChanges);
 
     // Video event listeners for debugging and state management
     video.addEventListener('play', function() {
