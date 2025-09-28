@@ -555,11 +555,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Navigate between clips with video content
     function navigateToClip(direction) {
+        console.log('=== NAVIGATE TO CLIP ===');
+        console.log('Direction:', direction);
+        console.log('Current tab:', currentTab);
+        console.log('clipVideos object:', clipVideos);
+
         const allSlots = Array.from(document.querySelectorAll('.clip-slot'));
+        console.log('Total slots found:', allSlots.length);
+
         const loadedSlots = allSlots.filter(slot => {
             const clipNumber = slot.dataset.clipNumber;
-            return clipVideos[clipNumber];
+            const hasVideo = clipVideos[clipNumber];
+            console.log(`Slot ${clipNumber} has video:`, !!hasVideo);
+            return hasVideo;
         });
+
+        console.log('Loaded slots count:', loadedSlots.length);
+        console.log('Loaded slot numbers:', loadedSlots.map(s => s.dataset.clipNumber));
 
         if (loadedSlots.length === 0) {
             alert('No clips with videos loaded');
@@ -569,16 +581,24 @@ document.addEventListener('DOMContentLoaded', function() {
         let currentIndex = -1;
         if (selectedClipSlot) {
             currentIndex = loadedSlots.findIndex(slot => slot === selectedClipSlot);
+            console.log('Current selected slot:', selectedClipSlot.dataset.clipNumber);
+            console.log('Current index in loaded slots:', currentIndex);
         }
 
         let nextIndex;
         if (direction === 'next') {
             nextIndex = (currentIndex + 1) % loadedSlots.length;
-        } else {
+        } else if (direction === 'previous') {
             nextIndex = (currentIndex - 1 + loadedSlots.length) % loadedSlots.length;
+        } else {
+            console.error('Invalid navigation direction:', direction);
+            return;
         }
 
+        console.log('Next index:', nextIndex);
         const targetSlot = loadedSlots[nextIndex];
+        console.log('Target slot:', targetSlot.dataset.clipNumber);
+
         selectClipSlot(targetSlot);
         console.log(`Navigated ${direction} to clip ${targetSlot.dataset.clipNumber}`);
     }
@@ -1541,7 +1561,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Previous Clip button
     prevClipBtn.addEventListener('click', function() {
-        console.log('Previous clip button clicked');
+        console.log('=== PREVIOUS CLIP BUTTON CLICKED ===');
         navigateToClip('previous');
     });
 
@@ -1611,14 +1631,27 @@ document.addEventListener('DOMContentLoaded', function() {
     // Forward Play button
     forwardBtn.addEventListener('click', function() {
         console.log('Forward play button clicked');
-        if (!video.src) {
-            alert('Please select a clip with video first');
+
+        if (!selectedClipSlot) {
+            alert('Please select a clip slot first');
             return;
         }
 
-        // Set normal playback rate (forward direction)
-        const clipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
-        const clipSpeed = clipNumber ? (clipSpeeds[clipNumber] || 1.0) : 1.0;
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const videoData = clipVideos[clipNumber];
+
+        if (!videoData) {
+            alert('Please load a video into the selected clip slot first');
+            return;
+        }
+
+        if (!video.src) {
+            alert('No video loaded in player - please select a clip with video');
+            return;
+        }
+
+        // Set normal forward playback rate (restore from reverse if needed)
+        const clipSpeed = clipSpeeds[clipNumber] || 1.0;
         video.playbackRate = clipSpeed;
 
         // Set global intent to play when Forward Play is pressed
@@ -1635,7 +1668,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Next Clip button
     nextClipBtn.addEventListener('click', function() {
-        console.log('Next clip button clicked');
+        console.log('=== NEXT CLIP BUTTON CLICKED ===');
         navigateToClip('next');
     });
 
