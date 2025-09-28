@@ -34,12 +34,6 @@
             gap: 20px;
         }
 
-        .load-section {
-            text-align: center;
-            padding: 20px;
-            background-color: #2a2a2a;
-            border-radius: 8px;
-        }
 
         .clips-matrix {
             display: grid;
@@ -660,6 +654,160 @@
             color: #888;
             font-style: italic;
         }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        .modal-content {
+            background-color: #2a2a2a;
+            margin: 5% auto;
+            padding: 0;
+            border: 1px solid #555;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow: auto;
+        }
+
+        .modal-header {
+            background-color: #333;
+            padding: 20px;
+            border-bottom: 1px solid #555;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: white;
+        }
+
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: white;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .shortcuts-instructions {
+            background-color: #404040;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid #0066cc;
+        }
+
+        .shortcuts-instructions p {
+            margin: 5px 0;
+            color: #ddd;
+        }
+
+        .shortcuts-grid {
+            display: grid;
+            grid-template-columns: 1fr 200px;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .shortcut-row {
+            display: contents;
+        }
+
+        .shortcut-label {
+            background-color: #404040;
+            padding: 12px;
+            border-radius: 6px;
+            color: white;
+            font-weight: 500;
+        }
+
+        .shortcut-input {
+            background-color: #555;
+            border: 2px solid #666;
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        .shortcut-input:hover {
+            border-color: #0088ff;
+            background-color: #606060;
+        }
+
+        .shortcut-input.editing {
+            border-color: #ff6600;
+            background-color: #664422;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .shortcuts-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+            padding-top: 15px;
+            border-top: 1px solid #555;
+        }
+
+        .modal-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .modal-btn.primary {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        .modal-btn.primary:hover {
+            background-color: #0088ff;
+        }
+
+        .modal-btn.secondary {
+            background-color: #666;
+            color: white;
+        }
+
+        .modal-btn.secondary:hover {
+            background-color: #777;
+        }
     </style>
 </head>
 <body>
@@ -669,6 +817,7 @@
             <div class="session-controls">
                 <button id="saveSessionBtn" class="session-btn">Save Session</button>
                 <button id="loadSessionBtn" class="session-btn">Load Session</button>
+                <button id="shortcutsBtn" class="session-btn">Keyboard Shortcuts</button>
                 <span class="session-status" id="sessionStatus">No session loaded</span>
             </div>
         </div>
@@ -691,12 +840,6 @@
         </div>
 
         <div class="content-area">
-            <div class="load-section">
-                <button id="loadTestVideo">Load Test Video</button>
-                <br>
-                <input type="file" id="fileInput" accept="video/*">
-            </div>
-
             <div class="clips-matrix" id="clipsMatrix">
                 <!-- 6x6 grid will be generated by JavaScript -->
             </div>
@@ -776,6 +919,29 @@
                 <button class="tab-btn" data-tab="2">Tab 3</button>
                 <button class="tab-btn" data-tab="3">Tab 4</button>
                 <button class="tab-btn" data-tab="4">Tab 5</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcutsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Keyboard Shortcuts</h2>
+                <span class="close" id="closeShortcutsModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="shortcuts-instructions">
+                    <p>Click on any shortcut to customize it. Press the key combination you want to assign.</p>
+                    <p><strong>Modifiers:</strong> Use Shift+, Ctrl+, Alt+, or Meta+ before the main key.</p>
+                </div>
+                <div class="shortcuts-grid" id="shortcutsGrid">
+                    <!-- Shortcuts will be dynamically generated here -->
+                </div>
+                <div class="shortcuts-actions">
+                    <button id="resetShortcutsBtn" class="modal-btn secondary">Reset to Defaults</button>
+                    <button id="saveShortcutsBtn" class="modal-btn primary">Save Changes</button>
+                </div>
             </div>
         </div>
     </div>
