@@ -1,8 +1,8 @@
 # Metropolis Video App - Development Plan
 
 ## Progress Tracker
-- **Current Step:** Ready for Step 15 - Add Dual Screen Output
-- **Completed Steps:** 13/16 (skipping "Shit It Up" control until last)
+- **Current Step:** Ready for Step 16 - Performance Optimization
+- **Completed Steps:** 14/16 (skipping "Shit It Up" control until last)
 - **Current Phase:** Output & Polish
 
 ---
@@ -381,8 +381,35 @@
 
 ## PHASE 6: OUTPUT & POLISH
 
-### Step 15: Add Dual Screen Output ⏸️
-**Status:** Not Started
+### Step 15: Add Dual Screen Output ✅
+**Status:** Completed
+**What was built:**
+- Added "Open Output Window" button in header controls
+- Created popup window system for external display output
+- Implemented clean video-only output (no controls, just video on black background)
+- Real-time synchronization between main window and output window
+- Syncs video source, play/pause state, seeking, and playback rate changes
+- Automatic detection when output window is closed by user
+- Button state toggles between "Open" and "Close Output Window"
+
+**Testing completed:**
+- [x] Output window opens successfully as popup
+- [x] Video displays cleanly in output window (no controls)
+- [x] Play/pause actions in main window sync to output
+- [x] Seeking and cue point navigation sync correctly
+- [x] Speed changes apply to output window
+- [x] Clip switching updates output window video
+- [x] Output window can be moved to external display
+- [x] Closing output window updates button state
+- [x] All transport controls sync properly
+
+**Commit message:** `Add dual screen output feature for live performance`
+
+**Features working:**
+- Popup-based output window for external displays
+- Real-time video synchronization across windows
+- Clean projection output for live performance
+- Automatic state management and cleanup
 
 ### Step 16: Performance Optimization ⏸️
 **Status:** Not Started
