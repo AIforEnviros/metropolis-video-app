@@ -35,6 +35,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const shortcutsGrid = document.getElementById('shortcutsGrid');
     const resetShortcutsBtn = document.getElementById('resetShortcutsBtn');
     const saveShortcutsBtn = document.getElementById('saveShortcutsBtn');
+    const outputWindowBtn = document.getElementById('outputWindowBtn');
+
+    // Output window reference
+    let outputWindow = null;
+    let outputVideo = null;
 
     // Track global play intent (user's desired state)
     let globalPlayIntent = false; // true = user wants playing, false = user wants paused
@@ -1790,4 +1795,144 @@ document.addEventListener('DOMContentLoaded', function() {
         updateCueMarkersOnTimeline();
         console.log('Video duration changed:', videoDuration);
     });
+
+    // Output Window Functions
+    function createOutputWindow() {
+        if (outputWindow && !outputWindow.closed) {
+            outputWindow.focus();
+            return;
+        }
+
+        // Create popup window
+        outputWindow = window.open('', 'OutputWindow', 'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no');
+
+        if (!outputWindow) {
+            alert('Failed to open output window. Please allow popups for this site.');
+            return;
+        }
+
+        // Write HTML for output window
+        outputWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Mimolume Output</title>
+                <style>
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        background-color: #000;
+                        overflow: hidden;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                    }
+                    video {
+                        max-width: 100%;
+                        max-height: 100vh;
+                        width: auto;
+                        height: auto;
+                    }
+                </style>
+            </head>
+            <body>
+                <video id="outputVideo"></video>
+            </body>
+            </html>
+        `);
+        outputWindow.document.close();
+
+        // Get reference to output video element
+        outputVideo = outputWindow.document.getElementById('outputVideo');
+
+        // Sync current video to output
+        syncToOutputWindow();
+
+        // Update button text
+        outputWindowBtn.textContent = 'Close Output Window';
+
+        console.log('Output window created');
+    }
+
+    function closeOutputWindow() {
+        if (outputWindow && !outputWindow.closed) {
+            outputWindow.close();
+        }
+        outputWindow = null;
+        outputVideo = null;
+        outputWindowBtn.textContent = 'Open Output Window';
+        console.log('Output window closed');
+    }
+
+    function syncToOutputWindow() {
+        if (!outputVideo || !video.src) {
+            return;
+        }
+
+        // Sync video source
+        if (outputVideo.src !== video.src) {
+            outputVideo.src = video.src;
+            outputVideo.load();
+        }
+
+        // Sync playback state
+        outputVideo.currentTime = video.currentTime;
+        outputVideo.playbackRate = video.playbackRate;
+
+        if (!video.paused) {
+            outputVideo.play().catch(e => console.error('Error playing output video:', e));
+        } else {
+            outputVideo.pause();
+        }
+    }
+
+    // Add event listeners to sync output window with main video
+    video.addEventListener('loadeddata', function() {
+        if (outputVideo) {
+            syncToOutputWindow();
+        }
+    });
+
+    video.addEventListener('play', function() {
+        if (outputVideo && outputVideo.paused) {
+            outputVideo.play().catch(e => console.error('Error playing output video:', e));
+        }
+    });
+
+    video.addEventListener('pause', function() {
+        if (outputVideo && !outputVideo.paused) {
+            outputVideo.pause();
+        }
+    });
+
+    video.addEventListener('seeked', function() {
+        if (outputVideo) {
+            outputVideo.currentTime = video.currentTime;
+        }
+    });
+
+    video.addEventListener('ratechange', function() {
+        if (outputVideo) {
+            outputVideo.playbackRate = video.playbackRate;
+        }
+    });
+
+    // Output window button click handler
+    outputWindowBtn.addEventListener('click', function() {
+        if (!outputWindow || outputWindow.closed) {
+            createOutputWindow();
+        } else {
+            closeOutputWindow();
+        }
+    });
+
+    // Check if output window was closed by user
+    setInterval(function() {
+        if (outputWindow && outputWindow.closed) {
+            outputWindow = null;
+            outputVideo = null;
+            outputWindowBtn.textContent = 'Open Output Window';
+        }
+    }, 1000);
 });
