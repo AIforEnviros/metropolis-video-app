@@ -1,5 +1,38 @@
 # Metropolis Video App - Development Plan
 
+## 🎯 Project Vision & Roadmap
+
+### Phase 1: Web-Based Prototype (CURRENT)
+**Goal:** Build and validate all features as a web application for rapid iteration and testing.
+
+**Status:** 14/16 steps complete (87.5%)
+- Testing core functionality with real-world use cases
+- Validating UI/UX workflow for live performance
+- Documenting requirements for native migration
+
+### Phase 2: Native Application Migration (FUTURE)
+**Goal:** Rebuild as Electron app for production-grade live performance reliability.
+
+**When:** After web prototype is complete and validated through rehearsals/shows
+
+**Why Electron:**
+- 90% code reuse from web prototype
+- Native MIDI integration (node-midi)
+- Hardware video acceleration
+- Direct file system access
+- Professional performance optimization
+- True audio track removal
+- Cross-platform (Windows/Mac)
+
+**Benefits of This Approach:**
+1. ✅ Validate design and workflow before committing to native development
+2. ✅ Rapid iteration and feature testing
+3. ✅ Discover actual performance needs vs. theoretical
+4. ✅ Clear migration path with proven concept
+5. ✅ Minimize development time and risk
+
+---
+
 ## Progress Tracker
 - **Current Step:** Ready for Step 16 - Performance Optimization
 - **Completed Steps:** 14/16 (skipping "Shit It Up" control until last)
@@ -411,8 +444,50 @@
 - Clean projection output for live performance
 - Automatic state management and cleanup
 
-### Step 16: Performance Optimization ⏸️
+### Step 16: Performance Optimization (Web-Based) ⏸️
 **Status:** Not Started
+
+**What to build:**
+- Implement audio muting/disabling for video-only performance
+- Optimize video loading and switching speed
+- Add memory management for multiple loaded videos
+- Reduce latency for clip triggering and cue point navigation
+- Optimize dual-screen output synchronization
+- Profile and improve overall responsiveness
+
+**Web-Based Optimization Focus:**
+- Mute all audio globally (no audio needed for this use case)
+- Implement preloading strategies for faster clip switching
+- Optimize video element reuse
+- Minimize DOM updates during playback
+- Efficient event listener management
+- Browser-specific performance tuning
+
+**Testing checklist:**
+- [ ] Audio is fully disabled/muted across all videos
+- [ ] Clip switching speed measured and optimized
+- [ ] Memory usage monitored with 36 loaded videos
+- [ ] Cue point navigation is responsive (<100ms)
+- [ ] Output window sync has minimal latency
+- [ ] No dropped frames during playback
+- [ ] Multiple tabs don't degrade performance
+- [ ] Large video files (1080p) load efficiently
+
+**Performance Notes:**
+- This step optimizes for web browser constraints
+- Native Electron migration (Phase 2) will provide additional optimizations:
+  - True audio track removal via native codecs
+  - Hardware video acceleration
+  - Direct GPU access
+  - Lower-level memory management
+  - Native MIDI with lower latency
+
+**Commit message:** `Optimize web-based video performance and disable audio`
+
+**Must continue working:**
+- All existing functionality
+- Dual screen output
+- Session save/load
 
 ---
 
