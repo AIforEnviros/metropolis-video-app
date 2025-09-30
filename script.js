@@ -41,6 +41,13 @@ document.addEventListener('DOMContentLoaded', function() {
     let outputWindow = null;
     let outputVideo = null;
 
+    // Performance optimizations - disable audio globally
+    video.muted = true;
+    video.volume = 0;
+
+    // Preload hint for faster loading
+    video.preload = 'auto';
+
     // Track global play intent (user's desired state)
     let globalPlayIntent = false; // true = user wants playing, false = user wants paused
 
@@ -274,6 +281,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function clearAllTabs() {
+        // Memory management: Revoke all blob URLs before clearing
+        for (let i = 0; i < 5; i++) {
+            const tabVideos = tabClipVideos[i];
+            Object.keys(tabVideos).forEach(clipNumber => {
+                if (tabVideos[clipNumber] && tabVideos[clipNumber].url) {
+                    URL.revokeObjectURL(tabVideos[clipNumber].url);
+                }
+            });
+        }
+        console.log('Revoked all blob URLs during tab clearing');
+
         // Clear all tab data
         for (let i = 0; i < 5; i++) {
             tabClipVideos[i] = {};
@@ -490,6 +508,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // Check if we have a valid URL
             if (videoData.url && videoData.file) {
                 video.src = videoData.url;
+
+                // Performance: Ensure audio is disabled
+                video.muted = true;
+                video.volume = 0;
+
                 video.load();
                 console.log('Loaded video for selected slot:', videoData.name);
             } else {
@@ -890,7 +913,8 @@ document.addEventListener('DOMContentLoaded', function() {
             video.currentTime = targetCuePoint.time;
             console.log(`Navigated to next cue point: ${formatTime(targetCuePoint.time)}`);
         } else {
-            alert('No more cue points ahead');
+            // Silently do nothing when no more cue points ahead
+            console.log('No more cue points ahead');
         }
     }
 
@@ -1188,6 +1212,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        // Memory management: Revoke old blob URL if it exists
+        if (clipVideos[clipNumber] && clipVideos[clipNumber].url) {
+            URL.revokeObjectURL(clipVideos[clipNumber].url);
+            console.log(`Revoked old blob URL for clip ${clipNumber}`);
+        }
+
         const url = URL.createObjectURL(file);
 
         // Store video information
@@ -1205,12 +1236,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Load video in player
         video.src = url;
+
+        // Performance: Ensure audio is disabled
+        video.muted = true;
+        video.volume = 0;
+
         video.load();
 
         // Apply speed when video loads
         video.addEventListener('loadeddata', function() {
             const clipSpeed = clipSpeeds[clipNumber] || 1.0;
             setVideoSpeed(clipSpeed);
+
+            // Ensure audio stays disabled after load
+            video.muted = true;
+            video.volume = 0;
         }, { once: true });
 
         console.log(`Loaded video ${file.name} into clip slot ${clipNumber}`);
@@ -1837,7 +1877,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </style>
             </head>
             <body>
-                <video id="outputVideo"></video>
+                <video id="outputVideo" muted></video>
             </body>
             </html>
         `);
@@ -1845,6 +1885,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Get reference to output video element
         outputVideo = outputWindow.document.getElementById('outputVideo');
+
+        // Ensure output video is also muted for performance
+        outputVideo.muted = true;
+        outputVideo.volume = 0;
+        outputVideo.preload = 'auto';
 
         // Sync current video to output
         syncToOutputWindow();
@@ -1935,4 +1980,36 @@ document.addEventListener('DOMContentLoaded', function() {
             outputWindowBtn.textContent = 'Open Output Window';
         }
     }, 1000);
+
+    // Memory management: Clean up blob URLs when window closes
+    window.addEventListener('beforeunload', function() {
+        console.log('Cleaning up resources before window closes...');
+
+        // Revoke all blob URLs
+        for (let i = 0; i < 5; i++) {
+            const tabVideos = tabClipVideos[i];
+            Object.keys(tabVideos).forEach(clipNumber => {
+                if (tabVideos[clipNumber] && tabVideos[clipNumber].url) {
+                    URL.revokeObjectURL(tabVideos[clipNumber].url);
+                }
+            });
+        }
+
+        // Close output window if open
+        if (outputWindow && !outputWindow.closed) {
+            outputWindow.close();
+        }
+
+        console.log('Resource cleanup complete');
+    });
+
+    // Performance monitoring (optional - can be removed in production)
+    if (performance && performance.memory) {
+        setInterval(function() {
+            const memoryInfo = performance.memory;
+            const usedMB = (memoryInfo.usedJSHeapSize / 1048576).toFixed(2);
+            const totalMB = (memoryInfo.jsHeapSizeLimit / 1048576).toFixed(2);
+            console.log(`Memory usage: ${usedMB} MB / ${totalMB} MB`);
+        }, 30000); // Log every 30 seconds
+    }
 });
