@@ -31,9 +31,8 @@ Node.js is a free program that lets you run the app on your computer.
 1. Open **Terminal** (Applications → Utilities → Terminal)
 2. Copy and paste this, then press Enter:
    ```
-   git clone https://github.com/yourusername/metropolis-video-app.git
+   git clone https://github.com/funkmastertom/metropolis-video-app.git
    ```
-   *(Note: Replace "yourusername" with the actual GitHub username)*
 3. Then type this and press Enter:
    ```
    cd metropolis-video-app
@@ -85,3 +84,10 @@ When new features are added:
 - Make sure you have internet connection for the initial setup
 - If you see "command not found", Node.js didn't install correctly - try Option B from Step 1
 - If port 3000 is busy, try using port 8000 instead: `npx serve . --listen 8000` then visit `localhost:8000`
+- **If git clone asks for a password:** The repository might be private or you may have authentication issues. Try this alternative:
+  1. Go to https://github.com/funkmastertom/metropolis-video-app
+  2. Click the green "Code" button
+  3. Click "Download ZIP"
+  4. Unzip the file and move the folder to your preferred location
+  5. In Terminal, navigate to that folder: `cd path/to/metropolis-video-app`
+  6. Continue with Step 3
