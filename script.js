@@ -362,6 +362,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     videoData.file = file;
                     videoData.type = 'file'; // Update type since it's now properly loaded
 
+                    // Generate thumbnail for reconnected video
+                    generateThumbnail(file, function(thumbnailUrl) {
+                        if (thumbnailUrl && videoData) {
+                            videoData.thumbnail = thumbnailUrl;
+                            // Update UI if this is the current tab
+                            if (tabIndex === currentTab) {
+                                const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
+                                if (slot) {
+                                    updateSlotAppearance(slot, true);
+                                }
+                            }
+                        }
+                    });
+
                     connectionsMade++;
                     console.log(`Updated video data:`, videoData);
 
@@ -592,13 +606,67 @@ document.addEventListener('DOMContentLoaded', function() {
         updateSpeedControls();
     }
 
+    // Generate thumbnail from video file
+    function generateThumbnail(file, callback) {
+        const video = document.createElement('video');
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        video.preload = 'metadata';
+        video.muted = true;
+
+        video.onloadedmetadata = function() {
+            // Seek to 1 second or 10% of duration, whichever is smaller
+            const seekTime = Math.min(1, video.duration * 0.1);
+            video.currentTime = seekTime;
+        };
+
+        video.onseeked = function() {
+            // Set canvas size to video dimensions
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // Draw the current frame
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert to data URL
+            const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.7);
+
+            // Clean up
+            URL.revokeObjectURL(video.src);
+
+            callback(thumbnailUrl);
+        };
+
+        video.onerror = function() {
+            console.error('Error generating thumbnail');
+            URL.revokeObjectURL(video.src);
+            callback(null);
+        };
+
+        video.src = URL.createObjectURL(file);
+    }
+
     // Update visual appearance of slot based on whether it has video
     function updateSlotAppearance(slot, hasVideo) {
         if (hasVideo) {
             slot.classList.add('has-video');
             const clipNumber = slot.dataset.clipNumber;
             const videoData = clipVideos[clipNumber];
-            slot.innerHTML = `<div>Clip ${clipNumber}</div><div style="font-size: 10px; margin-top: 2px;">${videoData.name}</div>`;
+
+            // Build slot content with thumbnail support
+            let thumbnailHtml = '';
+            if (videoData.thumbnail) {
+                thumbnailHtml = `<img src="${videoData.thumbnail}" class="clip-thumbnail" alt="Thumbnail">`;
+            }
+
+            slot.innerHTML = `
+                ${thumbnailHtml}
+                <div class="clip-slot-content">
+                    <div class="clip-slot-label">Clip ${clipNumber}</div>
+                    <div class="clip-slot-filename">${videoData.name}</div>
+                </div>
+            `;
         } else {
             slot.classList.remove('has-video');
             slot.textContent = `Clip ${slot.dataset.clipNumber}`;
@@ -1249,14 +1317,25 @@ document.addEventListener('DOMContentLoaded', function() {
         clipVideos[clipNumber] = {
             name: file.name,
             url: url,
-            file: file
+            file: file,
+            thumbnail: null // Will be set after generation
         };
 
         // Mark session as modified
         markSessionModified();
 
-        // Update slot appearance
+        // Update slot appearance (without thumbnail initially)
         updateSlotAppearance(selectedClipSlot, clipVideos[clipNumber]);
+
+        // Generate thumbnail asynchronously
+        generateThumbnail(file, function(thumbnailUrl) {
+            if (thumbnailUrl && clipVideos[clipNumber]) {
+                clipVideos[clipNumber].thumbnail = thumbnailUrl;
+                // Update slot appearance with thumbnail
+                updateSlotAppearance(selectedClipSlot, clipVideos[clipNumber]);
+                console.log(`Generated thumbnail for clip ${clipNumber}`);
+            }
+        });
 
         // Load video in player
         video.src = url;
