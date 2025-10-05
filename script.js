@@ -69,17 +69,22 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track speed settings for each clip for each tab (tabIndex -> { clipNumber -> speed value })
     const tabClipSpeeds = {};
 
+    // Track custom clip names for each tab (tabIndex -> { clipNumber -> custom name })
+    const tabClipNames = {};
+
     // Initialize tab data structures
     for (let i = 0; i < 5; i++) {
         tabClipVideos[i] = {};
         tabClipCuePoints[i] = {};
         tabClipSpeeds[i] = {};
+        tabClipNames[i] = {};
     }
 
     // Legacy references for current tab's data (for compatibility)
     let clipVideos = tabClipVideos[currentTab];
     let clipCuePoints = tabClipCuePoints[currentTab];
     let clipSpeeds = tabClipSpeeds[currentTab];
+    let clipNames = tabClipNames[currentTab];
 
     // File browser state
     let currentFolderPath = '';
@@ -143,7 +148,8 @@ document.addEventListener('DOMContentLoaded', function() {
             tabs: {
                 videos: cleanVideos,
                 cuePoints: tabClipCuePoints,
-                speeds: tabClipSpeeds
+                speeds: tabClipSpeeds,
+                clipNames: tabClipNames
             }
         };
     }
@@ -234,6 +240,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Restoring speeds:', sessionData.tabs.speeds);
                 Object.assign(tabClipSpeeds, sessionData.tabs.speeds);
             }
+            if (sessionData.tabs.clipNames) {
+                console.log('Restoring clip names:', sessionData.tabs.clipNames);
+                Object.assign(tabClipNames, sessionData.tabs.clipNames);
+            }
 
             console.log('After restoring - tab data:', tabClipVideos);
 
@@ -247,6 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clipVideos = tabClipVideos[currentTab];
             clipCuePoints = tabClipCuePoints[currentTab];
             clipSpeeds = tabClipSpeeds[currentTab];
+            clipNames = tabClipNames[currentTab];
             console.log('Current tab video data:', clipVideos);
 
             // Restore folder path
@@ -303,12 +314,14 @@ document.addEventListener('DOMContentLoaded', function() {
             tabClipVideos[i] = {};
             tabClipCuePoints[i] = {};
             tabClipSpeeds[i] = {};
+            tabClipNames[i] = {};
         }
 
         // Update current references
         clipVideos = tabClipVideos[currentTab];
         clipCuePoints = tabClipCuePoints[currentTab];
         clipSpeeds = tabClipSpeeds[currentTab];
+        clipNames = tabClipNames[currentTab];
 
         // Clear UI
         refreshClipMatrix();
@@ -675,9 +688,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Update visual appearance of slot based on whether it has video
     function updateSlotAppearance(slot, hasVideo) {
+        const clipNumber = slot.dataset.clipNumber;
+        const customName = clipNames[clipNumber] || `Clip ${clipNumber}`;
+
         if (hasVideo) {
             slot.classList.add('has-video');
-            const clipNumber = slot.dataset.clipNumber;
             const videoData = clipVideos[clipNumber];
 
             // Build slot content with thumbnail support
@@ -695,7 +710,7 @@ document.addEventListener('DOMContentLoaded', function() {
             slot.innerHTML = `
                 ${thumbnailHtml}
                 <div class="clip-slot-content">
-                    <div class="clip-slot-label">Clip ${clipNumber}</div>
+                    <div class="clip-slot-label" data-clip-number="${clipNumber}">${customName}</div>
                     <div class="clip-slot-filename">${videoData.name}</div>
                 </div>
             `;
@@ -704,10 +719,73 @@ document.addEventListener('DOMContentLoaded', function() {
             slot.innerHTML = `
                 <div class="clip-thumbnail-container"></div>
                 <div class="clip-slot-content">
-                    <div class="clip-slot-label">Clip ${slot.dataset.clipNumber}</div>
+                    <div class="clip-slot-label" data-clip-number="${clipNumber}">${customName}</div>
                 </div>
             `;
         }
+
+        // Add double-click handler for renaming
+        const label = slot.querySelector('.clip-slot-label');
+        if (label) {
+            label.addEventListener('dblclick', function(e) {
+                e.stopPropagation();
+                startEditingClipName(clipNumber, label);
+            });
+        }
+    }
+
+    // Start editing a clip name
+    function startEditingClipName(clipNumber, labelElement) {
+        const currentName = clipNames[clipNumber] || `Clip ${clipNumber}`;
+
+        labelElement.contentEditable = true;
+        labelElement.classList.add('editing');
+        labelElement.textContent = currentName;
+        labelElement.focus();
+
+        // Select all text
+        const range = document.createRange();
+        range.selectNodeContents(labelElement);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        // Save on blur or Enter key
+        function finishEditing() {
+            labelElement.contentEditable = false;
+            labelElement.classList.remove('editing');
+
+            const newName = labelElement.textContent.trim();
+            if (newName && newName !== `Clip ${clipNumber}`) {
+                clipNames[clipNumber] = newName;
+                markSessionModified();
+                console.log(`Renamed clip ${clipNumber} to "${newName}"`);
+            } else {
+                // Reset to default if empty
+                delete clipNames[clipNumber];
+                labelElement.textContent = `Clip ${clipNumber}`;
+            }
+
+            labelElement.removeEventListener('blur', finishEditing);
+            labelElement.removeEventListener('keydown', handleKeydown);
+        }
+
+        function handleKeydown(e) {
+            // Stop ALL keyboard events from bubbling to prevent global shortcuts
+            e.stopPropagation();
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                labelElement.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                labelElement.textContent = currentName;
+                labelElement.blur();
+            }
+        }
+
+        labelElement.addEventListener('blur', finishEditing);
+        labelElement.addEventListener('keydown', handleKeydown);
     }
 
     // Navigate between clips with video content
@@ -1181,6 +1259,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipVideos = tabClipVideos[currentTab];
         clipCuePoints = tabClipCuePoints[currentTab];
         clipSpeeds = tabClipSpeeds[currentTab];
+        clipNames = tabClipNames[currentTab];
 
         // Clear current selection (each tab has its own selection)
         if (selectedClipSlot) {
@@ -1493,8 +1572,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleKeyboardShortcuts(event) {
-        // Don't trigger shortcuts if typing in an input field
-        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        // Don't trigger shortcuts if typing in an input field or editing content
+        if (event.target.tagName === 'INPUT' ||
+            event.target.tagName === 'TEXTAREA' ||
+            event.target.isContentEditable === true ||
+            event.target.getAttribute('contenteditable') === 'true') {
             return;
         }
 
