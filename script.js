@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const resetShortcutsBtn = document.getElementById('resetShortcutsBtn');
     const saveShortcutsBtn = document.getElementById('saveShortcutsBtn');
     const outputWindowBtn = document.getElementById('outputWindowBtn');
+    const addTabBtn = document.getElementById('addTabBtn');
 
     // Output window reference
     let outputWindow = null;
@@ -60,6 +61,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track which tab is currently active
     let currentTab = 0;
 
+    // Track all tabs (array of tab indices)
+    let allTabs = [0, 1, 2, 3, 4];
+    let nextTabIndex = 5; // Next available tab index
+
     // Track videos loaded into each slot for each tab (tabIndex -> { clipNumber -> video data })
     const tabClipVideos = {};
 
@@ -72,7 +77,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track custom clip names for each tab (tabIndex -> { clipNumber -> custom name })
     const tabClipNames = {};
 
-    // Initialize tab data structures
+    // Track custom tab names (tabIndex -> custom tab name)
+    const tabCustomNames = {};
+
+    // Initialize tab data structures for default 5 tabs
     for (let i = 0; i < 5; i++) {
         tabClipVideos[i] = {};
         tabClipCuePoints[i] = {};
@@ -137,7 +145,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.1',
+            version: '1.2',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -145,6 +153,9 @@ document.addEventListener('DOMContentLoaded', function() {
             currentFolderPath: currentFolderPath,
             globalPlayIntent: globalPlayIntent,
             keyboardShortcuts: keyboardShortcuts,
+            allTabs: allTabs,
+            nextTabIndex: nextTabIndex,
+            tabCustomNames: tabCustomNames,
             tabs: {
                 videos: cleanVideos,
                 cuePoints: tabClipCuePoints,
@@ -275,6 +286,18 @@ document.addEventListener('DOMContentLoaded', function() {
             // Restore keyboard shortcuts
             if (sessionData.keyboardShortcuts) {
                 keyboardShortcuts = { ...keyboardShortcuts, ...sessionData.keyboardShortcuts };
+            }
+
+            // Restore tab configuration if available (v1.2+)
+            if (sessionData.allTabs && sessionData.nextTabIndex) {
+                allTabs = [...sessionData.allTabs];
+                nextTabIndex = sessionData.nextTabIndex;
+                if (sessionData.tabCustomNames) {
+                    Object.assign(tabCustomNames, sessionData.tabCustomNames);
+                }
+
+                // Rebuild tab UI
+                rebuildTabBar();
             }
 
             // Restore session name
@@ -1244,8 +1267,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Update tab button appearance
         const allTabButtons = document.querySelectorAll('.tab-btn');
-        allTabButtons.forEach((btn, index) => {
-            if (index === tabIndex) {
+        allTabButtons.forEach((btn) => {
+            const btnTabIndex = parseInt(btn.dataset.tab);
+            if (btnTabIndex === tabIndex) {
                 btn.classList.add('active');
             } else {
                 btn.classList.remove('active');
@@ -1279,6 +1303,136 @@ document.addEventListener('DOMContentLoaded', function() {
         updateCueMarkersOnTimeline();
         updateSpeedControls();
         updatePlayButtonState();
+    }
+
+    // Add a new tab
+    function addNewTab() {
+        const newTabIndex = nextTabIndex++;
+        allTabs.push(newTabIndex);
+
+        // Initialize data structures for new tab
+        tabClipVideos[newTabIndex] = {};
+        tabClipCuePoints[newTabIndex] = {};
+        tabClipSpeeds[newTabIndex] = {};
+        tabClipNames[newTabIndex] = {};
+
+        // Create tab button
+        const tabBtn = document.createElement('button');
+        tabBtn.className = 'tab-btn';
+        tabBtn.dataset.tab = newTabIndex;
+        tabBtn.innerHTML = `Tab ${allTabs.length}<button class="remove-tab-btn" title="Remove tab">×</button>`;
+
+        // Add click handler for tab switching
+        tabBtn.addEventListener('click', function(e) {
+            // Don't switch tab if clicking remove button
+            if (!e.target.classList.contains('remove-tab-btn')) {
+                switchTab(newTabIndex);
+            }
+        });
+
+        // Add click handler for remove button
+        const removeBtn = tabBtn.querySelector('.remove-tab-btn');
+        removeBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            removeTab(newTabIndex);
+        });
+
+        // Insert before the add button
+        const addTabBtn = document.getElementById('addTabBtn');
+        tabBar.insertBefore(tabBtn, addTabBtn);
+
+        // Mark session as modified
+        markSessionModified();
+
+        console.log(`Added new tab ${newTabIndex}`);
+    }
+
+    // Rebuild the entire tab bar from allTabs array
+    function rebuildTabBar() {
+        // Remove all tab buttons except the add button
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        tabButtons.forEach(btn => btn.remove());
+
+        // Recreate tab buttons
+        const addTabButton = document.getElementById('addTabBtn');
+        allTabs.forEach((tabIndex, arrayIndex) => {
+            const tabBtn = document.createElement('button');
+            tabBtn.className = 'tab-btn';
+            if (tabIndex === currentTab) {
+                tabBtn.classList.add('active');
+            }
+            tabBtn.dataset.tab = tabIndex;
+
+            // Use custom name if available, otherwise use position
+            const tabName = tabCustomNames[tabIndex] || `Tab ${arrayIndex + 1}`;
+            tabBtn.innerHTML = `${tabName}<button class="remove-tab-btn" title="Remove tab">×</button>`;
+
+            // Add click handler for tab switching
+            tabBtn.addEventListener('click', function(e) {
+                if (!e.target.classList.contains('remove-tab-btn')) {
+                    switchTab(tabIndex);
+                }
+            });
+
+            // Add click handler for remove button
+            const removeBtn = tabBtn.querySelector('.remove-tab-btn');
+            removeBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                removeTab(tabIndex);
+            });
+
+            // Insert before the add button
+            tabBar.insertBefore(tabBtn, addTabButton);
+        });
+    }
+
+    // Remove a tab
+    function removeTab(tabIndex) {
+        // Don't allow removing the last tab
+        if (allTabs.length <= 1) {
+            alert('Cannot remove the last tab');
+            return;
+        }
+
+        // Confirm deletion
+        const tabName = tabCustomNames[tabIndex] || `Tab ${allTabs.indexOf(tabIndex) + 1}`;
+        if (!confirm(`Remove "${tabName}"? All clips and data in this tab will be lost.`)) {
+            return;
+        }
+
+        // Remove from allTabs array
+        const tabArrayIndex = allTabs.indexOf(tabIndex);
+        allTabs.splice(tabArrayIndex, 1);
+
+        // Clean up data
+        if (tabClipVideos[tabIndex]) {
+            Object.keys(tabClipVideos[tabIndex]).forEach(clipNumber => {
+                if (tabClipVideos[tabIndex][clipNumber]?.url) {
+                    URL.revokeObjectURL(tabClipVideos[tabIndex][clipNumber].url);
+                }
+            });
+        }
+        delete tabClipVideos[tabIndex];
+        delete tabClipCuePoints[tabIndex];
+        delete tabClipSpeeds[tabIndex];
+        delete tabClipNames[tabIndex];
+        delete tabCustomNames[tabIndex];
+
+        // Remove tab button from UI
+        const tabBtn = document.querySelector(`[data-tab="${tabIndex}"]`);
+        if (tabBtn) {
+            tabBtn.remove();
+        }
+
+        // If we're on the removed tab, switch to the first available tab
+        if (currentTab === tabIndex) {
+            switchTab(allTabs[0]);
+        }
+
+        // Mark session as modified
+        markSessionModified();
+
+        console.log(`Removed tab ${tabIndex}`);
     }
 
     // Refresh the clip matrix to show current tab's video states
@@ -1812,11 +1966,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize tab event listeners
     const tabButtons = document.querySelectorAll('.tab-btn');
-    tabButtons.forEach((button, index) => {
-        button.addEventListener('click', function() {
-            switchTab(index);
+    tabButtons.forEach((button) => {
+        button.addEventListener('click', function(e) {
+            // Don't switch tab if clicking remove button
+            if (!e.target.classList.contains('remove-tab-btn')) {
+                const tabIndex = parseInt(button.dataset.tab);
+                switchTab(tabIndex);
+            }
         });
+
+        // Add remove button click handler if it exists
+        const removeBtn = button.querySelector('.remove-tab-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const tabIndex = parseInt(button.dataset.tab);
+                removeTab(tabIndex);
+            });
+        }
     });
+
+    // Add tab button click handler
+    addTabBtn.addEventListener('click', addNewTab);
 
     // Initialize UI state
     updatePlayButtonState();

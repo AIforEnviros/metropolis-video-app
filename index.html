@@ -608,6 +608,43 @@
             background-color: #0077dd;
         }
 
+        .add-tab-btn {
+            background-color: #2a6a2a;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            min-width: 40px;
+        }
+
+        .add-tab-btn:hover {
+            background-color: #3a7a3a;
+        }
+
+        .remove-tab-btn {
+            margin-left: 6px;
+            padding: 2px 6px;
+            font-size: 10px;
+            background-color: #aa3333;
+            border: none;
+            border-radius: 3px;
+            color: white;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .tab-btn:hover .remove-tab-btn {
+            opacity: 1;
+        }
+
+        .remove-tab-btn:hover {
+            background-color: #cc4444;
+        }
+
         .speed-control {
             text-align: center;
         }
@@ -911,6 +948,7 @@
                 <button class="tab-btn" data-tab="2">Tab 3</button>
                 <button class="tab-btn" data-tab="3">Tab 4</button>
                 <button class="tab-btn" data-tab="4">Tab 5</button>
+                <button class="add-tab-btn" id="addTabBtn" title="Add new tab">+</button>
             </div>
         </div>
 
