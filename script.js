@@ -142,6 +142,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track which clip the context menu is open for
     let contextMenuClipNumber = null;
 
+    // Track which clip is currently playing (for visual indicator)
+    let currentlyPlayingClipNumber = null;
+
     // Session management functions
     function createSessionData() {
         // Create a clean copy of video data with thumbnails
@@ -160,7 +163,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.2',
+            version: '1.3',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -175,7 +178,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 videos: cleanVideos,
                 cuePoints: tabClipCuePoints,
                 speeds: tabClipSpeeds,
-                clipNames: tabClipNames
+                clipNames: tabClipNames,
+                clipModes: tabClipModes,
+                clipCueStop: tabClipCueStop
             }
         };
     }
@@ -269,6 +274,14 @@ document.addEventListener('DOMContentLoaded', function() {
             if (sessionData.tabs.clipNames) {
                 console.log('Restoring clip names:', sessionData.tabs.clipNames);
                 Object.assign(tabClipNames, sessionData.tabs.clipNames);
+            }
+            if (sessionData.tabs.clipModes) {
+                console.log('Restoring clip modes:', sessionData.tabs.clipModes);
+                Object.assign(tabClipModes, sessionData.tabs.clipModes);
+            }
+            if (sessionData.tabs.clipCueStop) {
+                console.log('Restoring cue stop settings:', sessionData.tabs.clipCueStop);
+                Object.assign(tabClipCueStop, sessionData.tabs.clipCueStop);
             }
 
             console.log('After restoring - tab data:', tabClipVideos);
@@ -696,8 +709,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 video.muted = true;
                 video.volume = 0;
 
+                // Set loop mode based on clip mode
+                const clipMode = clipModes[clipNumber] || 'forward-stop';
+                video.loop = (clipMode === 'loop');
+
                 video.load();
-                console.log('Loaded video for selected slot:', videoData.name);
+                console.log('Loaded video for selected slot:', videoData.name, 'Mode:', clipMode);
             } else {
                 // Video data exists but no valid URL - this is from a loaded session
                 console.warn(`Video slot ${clipNumber} has data but no valid URL:`, videoData);
@@ -713,32 +730,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // If we were playing before, continue playing the new clip
-            if (wasPlaying) {
-                video.addEventListener('loadeddata', function() {
-                    // Apply the correct speed for this clip
-                    const clipSpeed = clipSpeeds[clipNumber] || 1.0;
-                    setVideoSpeed(clipSpeed);
+            // Auto-start playback if global play intent is true
+            video.addEventListener('loadeddata', function() {
+                // Apply the correct speed for this clip
+                const clipSpeed = clipSpeeds[clipNumber] || 1.0;
+                setVideoSpeed(clipSpeed);
 
+                // Auto-start if global play intent is active
+                if (globalPlayIntent) {
                     video.play().then(() => {
-                        console.log('Auto-playing new clip due to global play state');
-                        // globalPlayIntent unchanged - was already true
+                        console.log('Auto-started new clip due to global play intent');
                     }).catch(e => {
                         console.error('Error auto-playing new clip:', e);
-                        // globalPlayIntent unchanged - keep user's intent
                     });
-                }, { once: true });
-            } else {
-                // Apply speed even when not auto-playing
-                video.addEventListener('loadeddata', function() {
-                    const clipSpeed = clipSpeeds[clipNumber] || 1.0;
-                    setVideoSpeed(clipSpeed);
-                }, { once: true });
+                }
+            }, { once: true });
 
-                // Make sure button state is correct when not playing
-                // globalPlayIntent unchanged - keep user's intent
-                updatePlayButtonState();
-            }
+            updatePlayButtonState();
         } else {
             // No video in this slot
             // globalPlayIntent unchanged - keep user's intent
@@ -2380,28 +2388,126 @@ document.addEventListener('DOMContentLoaded', function() {
 
     saveShortcutsBtn.addEventListener('click', saveShortcutsChanges);
 
+    // Helper function to update visual playing indicator
+    function updatePlayingIndicator() {
+        // Remove 'playing' class from all clips
+        document.querySelectorAll('.clip-slot').forEach(slot => {
+            slot.classList.remove('playing');
+        });
+
+        // Add 'playing' class to currently playing clip
+        if (currentlyPlayingClipNumber && selectedClipSlot) {
+            const playingSlot = document.querySelector(`[data-clip-number="${currentlyPlayingClipNumber}"]`);
+            if (playingSlot && !video.paused) {
+                playingSlot.classList.add('playing');
+            }
+        }
+    }
+
+    // Helper function to handle playback end based on clip mode
+    function handlePlaybackEnd() {
+        if (!selectedClipSlot) return;
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const mode = clipModes[clipNumber] || 'forward-stop';
+
+        console.log(`Video ended for clip ${clipNumber} in mode: ${mode}`);
+
+        switch (mode) {
+            case 'loop':
+                // Loop mode - restart from beginning
+                video.currentTime = 0;
+                video.play();
+                console.log('Loop mode: Restarting video');
+                break;
+
+            case 'forward-next':
+                // Forward-next mode - advance to next clip with video
+                console.log('Forward-next mode: Advancing to next clip');
+                navigateToClip('next');
+                break;
+
+            case 'bounce':
+                // Bounce mode - reverse playback direction
+                console.log('Bounce mode: Reversing direction');
+                const currentSpeed = clipSpeeds[clipNumber] || 1.0;
+                video.playbackRate = -Math.abs(currentSpeed);
+                video.currentTime = video.duration - 0.1; // Start near end
+                video.play();
+                break;
+
+            case 'forward':
+            case 'forward-stop':
+            default:
+                // Forward-stop mode (default) - just stop
+                console.log('Forward-stop mode: Video stopped at end');
+                globalPlayIntent = false;
+                updatePlayButtonState();
+                updatePlayingIndicator();
+                break;
+        }
+    }
+
     // Video event listeners for debugging and state management
     video.addEventListener('play', function() {
         console.log('Video play event fired');
         currentVideoPlaying = true;
+        if (selectedClipSlot) {
+            currentlyPlayingClipNumber = selectedClipSlot.dataset.clipNumber;
+            updatePlayingIndicator();
+        }
         // Note: Don't change globalPlayIntent here - only user actions should
     });
 
     video.addEventListener('pause', function() {
         console.log('Video pause event fired');
         currentVideoPlaying = false;
+        updatePlayingIndicator();
         // Note: Don't change globalPlayIntent here - only user actions should
     });
 
     video.addEventListener('ended', function() {
-        console.log('Video ended - global play intent remains unchanged');
+        console.log('Video ended - handling based on playback mode');
         currentVideoPlaying = false;
-        // Key change: Don't change globalPlayIntent when video ends
-        // The user's intent to "play" should persist until they choose "pause"
+        handlePlaybackEnd();
     });
 
     video.addEventListener('timeupdate', function() {
         updateTimeline();
+
+        // Cue point stop behavior
+        if (selectedClipSlot) {
+            const clipNumber = selectedClipSlot.dataset.clipNumber;
+            const cueStopEnabled = clipCueStop[clipNumber] !== undefined ? clipCueStop[clipNumber] : true;
+            const cuePoints = clipCuePoints[clipNumber] || [];
+
+            if (cueStopEnabled && cuePoints.length > 0 && !video.paused) {
+                // Check if we've reached a cue point
+                const currentTime = video.currentTime;
+                for (let cuePoint of cuePoints) {
+                    // If within 0.1 seconds of a cue point, pause
+                    if (Math.abs(currentTime - cuePoint.time) < 0.1) {
+                        video.pause();
+                        globalPlayIntent = false;
+                        updatePlayButtonState();
+                        console.log(`Stopped at cue point: ${formatTime(cuePoint.time)}`);
+                        break;
+                    }
+                }
+            }
+
+            // Handle bounce mode reverse detection
+            const mode = clipModes[clipNumber] || 'forward-stop';
+            if (mode === 'bounce' && video.currentTime <= 0.1 && video.playbackRate < 0) {
+                // Reached beginning while playing in reverse - bounce forward
+                console.log('Bounce mode: Reached beginning, bouncing forward');
+                const currentSpeed = clipSpeeds[clipNumber] || 1.0;
+                video.playbackRate = Math.abs(currentSpeed);
+                video.currentTime = 0.1;
+                video.play();
+            }
+        }
+
         // Only log occasionally to avoid spam
         if (Math.floor(video.currentTime) % 5 === 0) {
             console.log('Video time:', video.currentTime);

@@ -1030,6 +1030,20 @@
             font-size: 13px;
             user-select: none;
         }
+
+        /* Active Playback Indicator */
+        .clip-slot.playing {
+            animation: playingPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes playingPulse {
+            0%, 100% {
+                box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(0, 255, 0, 0.8), 0 0 30px rgba(0, 255, 0, 0.4);
+            }
+        }
     </style>
 </head>
 <body>
