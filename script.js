@@ -657,7 +657,13 @@ document.addEventListener('DOMContentLoaded', function() {
             // Build slot content with thumbnail support
             let thumbnailHtml = '';
             if (videoData.thumbnail) {
-                thumbnailHtml = `<img src="${videoData.thumbnail}" class="clip-thumbnail" alt="Thumbnail">`;
+                thumbnailHtml = `
+                    <div class="clip-thumbnail-container">
+                        <img src="${videoData.thumbnail}" class="clip-thumbnail" alt="Thumbnail">
+                    </div>
+                `;
+            } else {
+                thumbnailHtml = `<div class="clip-thumbnail-container"></div>`;
             }
 
             slot.innerHTML = `
@@ -669,7 +675,12 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         } else {
             slot.classList.remove('has-video');
-            slot.textContent = `Clip ${slot.dataset.clipNumber}`;
+            slot.innerHTML = `
+                <div class="clip-thumbnail-container"></div>
+                <div class="clip-slot-content">
+                    <div class="clip-slot-label">Clip ${slot.dataset.clipNumber}</div>
+                </div>
+            `;
         }
     }
 
