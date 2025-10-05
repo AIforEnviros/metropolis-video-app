@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Session management functions
     function createSessionData() {
-        // Create a clean copy of video data without blob URLs
+        // Create a clean copy of video data with thumbnails
         const cleanVideos = {};
         Object.keys(tabClipVideos).forEach(tabIndex => {
             cleanVideos[tabIndex] = {};
@@ -125,14 +125,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 cleanVideos[tabIndex][clipNumber] = {
                     name: video.name,
                     type: video.type,
-                    // Don't save the URL since blob URLs expire
-                    // We'll reconstruct from file browser
+                    // Store thumbnail if available
+                    thumbnail: video.thumbnail || null
                 };
             });
         });
 
         return {
-            version: '1.0',
+            version: '1.1',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -216,7 +216,15 @@ document.addEventListener('DOMContentLoaded', function() {
             // Restore tab data
             if (sessionData.tabs.videos) {
                 console.log('Restoring videos:', sessionData.tabs.videos);
-                Object.assign(tabClipVideos, sessionData.tabs.videos);
+                // Deep copy to preserve thumbnail data
+                Object.keys(sessionData.tabs.videos).forEach(tabIndex => {
+                    tabClipVideos[tabIndex] = {};
+                    Object.keys(sessionData.tabs.videos[tabIndex]).forEach(clipNumber => {
+                        tabClipVideos[tabIndex][clipNumber] = {
+                            ...sessionData.tabs.videos[tabIndex][clipNumber]
+                        };
+                    });
+                });
             }
             if (sessionData.tabs.cuePoints) {
                 console.log('Restoring cue points:', sessionData.tabs.cuePoints);
@@ -266,10 +274,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // Refresh UI to show restored slots
             refreshClipMatrix();
 
-            // Inform user about video file reconnection
-            if (Object.keys(clipVideos).length > 0) {
-                alert('Session loaded successfully! Video slots are restored but videos need to be reconnected. Please browse to the folder containing your video files to automatically reconnect them.');
-            }
+            // Attempt to auto-reconnect videos using stored file handles
+            attemptAutoReconnect();
 
             console.log('Session loaded successfully');
             console.log('Final state - current tab videos:', clipVideos);
@@ -330,6 +336,26 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!sessionModified) {
             sessionModified = true;
             updateSessionStatus(`Modified: ${currentSessionName || 'Unnamed session'}`);
+        }
+    }
+
+    // Check if videos need reconnection after loading a session
+    function attemptAutoReconnect() {
+        let videoCount = 0;
+
+        // Count total videos in session
+        for (let tabIndex = 0; tabIndex < 5; tabIndex++) {
+            const tabVideos = tabClipVideos[tabIndex];
+            Object.keys(tabVideos).forEach(clipNumber => {
+                const videoData = tabVideos[clipNumber];
+                if (videoData && videoData.name) {
+                    videoCount++;
+                }
+            });
+        }
+
+        if (videoCount > 0) {
+            alert(`Session loaded!\n\n${videoCount} video slot(s) restored with thumbnails.\n\nUse "Browse Folder" to reconnect videos - files with matching names will auto-connect.`);
         }
     }
 
