@@ -591,6 +591,20 @@
             border-radius: 6px;
             transition: all 0.3s ease;
             min-width: 80px;
+            position: relative;
+        }
+
+        .tab-btn-text {
+            display: inline-block;
+            cursor: text;
+        }
+
+        .tab-btn-text.editing {
+            background-color: #fff;
+            color: #000;
+            padding: 2px 4px;
+            border-radius: 3px;
+            outline: 2px solid #0088ff;
         }
 
         .tab-btn:hover {
@@ -943,11 +957,11 @@
 
         <div class="tabs-container">
             <div class="tab-bar" id="tabBar">
-                <button class="tab-btn active" data-tab="0">Tab 1</button>
-                <button class="tab-btn" data-tab="1">Tab 2</button>
-                <button class="tab-btn" data-tab="2">Tab 3</button>
-                <button class="tab-btn" data-tab="3">Tab 4</button>
-                <button class="tab-btn" data-tab="4">Tab 5</button>
+                <button class="tab-btn active" data-tab="0"><span class="tab-btn-text">Tab 1</span><button class="remove-tab-btn" title="Remove tab">×</button></button>
+                <button class="tab-btn" data-tab="1"><span class="tab-btn-text">Tab 2</span><button class="remove-tab-btn" title="Remove tab">×</button></button>
+                <button class="tab-btn" data-tab="2"><span class="tab-btn-text">Tab 3</span><button class="remove-tab-btn" title="Remove tab">×</button></button>
+                <button class="tab-btn" data-tab="3"><span class="tab-btn-text">Tab 4</span><button class="remove-tab-btn" title="Remove tab">×</button></button>
+                <button class="tab-btn" data-tab="4"><span class="tab-btn-text">Tab 5</span><button class="remove-tab-btn" title="Remove tab">×</button></button>
                 <button class="add-tab-btn" id="addTabBtn" title="Add new tab">+</button>
             </div>
         </div>

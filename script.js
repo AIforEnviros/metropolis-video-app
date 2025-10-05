@@ -1320,22 +1320,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const tabBtn = document.createElement('button');
         tabBtn.className = 'tab-btn';
         tabBtn.dataset.tab = newTabIndex;
-        tabBtn.innerHTML = `Tab ${allTabs.length}<button class="remove-tab-btn" title="Remove tab">×</button>`;
 
-        // Add click handler for tab switching
-        tabBtn.addEventListener('click', function(e) {
-            // Don't switch tab if clicking remove button
-            if (!e.target.classList.contains('remove-tab-btn')) {
-                switchTab(newTabIndex);
-            }
-        });
+        const tabName = `Tab ${allTabs.length}`;
+        tabBtn.innerHTML = `<span class="tab-btn-text">${tabName}</span><button class="remove-tab-btn" title="Remove tab">×</button>`;
 
-        // Add click handler for remove button
-        const removeBtn = tabBtn.querySelector('.remove-tab-btn');
-        removeBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            removeTab(newTabIndex);
-        });
+        // Add event handlers
+        setupTabEventHandlers(tabBtn, newTabIndex);
 
         // Insert before the add button
         const addTabBtn = document.getElementById('addTabBtn');
@@ -1345,6 +1335,99 @@ document.addEventListener('DOMContentLoaded', function() {
         markSessionModified();
 
         console.log(`Added new tab ${newTabIndex}`);
+    }
+
+    // Setup event handlers for a tab button
+    function setupTabEventHandlers(tabBtn, tabIndex) {
+        // Click handler for tab switching
+        tabBtn.addEventListener('click', function(e) {
+            // Don't switch tab if clicking remove button or editing text
+            if (!e.target.classList.contains('remove-tab-btn') &&
+                !e.target.classList.contains('tab-btn-text')) {
+                switchTab(tabIndex);
+            }
+        });
+
+        // Double-click handler for renaming
+        const textSpan = tabBtn.querySelector('.tab-btn-text');
+        if (textSpan) {
+            textSpan.addEventListener('dblclick', function(e) {
+                e.stopPropagation();
+                startEditingTabName(tabIndex, textSpan);
+            });
+
+            // Single click on text should switch tabs
+            textSpan.addEventListener('click', function(e) {
+                e.stopPropagation();
+                switchTab(tabIndex);
+            });
+        }
+
+        // Remove button handler
+        const removeBtn = tabBtn.querySelector('.remove-tab-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                removeTab(tabIndex);
+            });
+        }
+    }
+
+    // Start editing a tab name
+    function startEditingTabName(tabIndex, textElement) {
+        const arrayIndex = allTabs.indexOf(tabIndex);
+        const currentName = tabCustomNames[tabIndex] || `Tab ${arrayIndex + 1}`;
+
+        textElement.contentEditable = true;
+        textElement.classList.add('editing');
+        textElement.textContent = currentName;
+        textElement.focus();
+
+        // Select all text
+        const range = document.createRange();
+        range.selectNodeContents(textElement);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        // Save on blur or Enter key
+        function finishEditing() {
+            textElement.contentEditable = false;
+            textElement.classList.remove('editing');
+
+            const newName = textElement.textContent.trim();
+            const defaultName = `Tab ${arrayIndex + 1}`;
+
+            if (newName && newName !== defaultName) {
+                tabCustomNames[tabIndex] = newName;
+                markSessionModified();
+                console.log(`Renamed tab ${tabIndex} to "${newName}"`);
+            } else {
+                // Reset to default if empty
+                delete tabCustomNames[tabIndex];
+                textElement.textContent = defaultName;
+            }
+
+            textElement.removeEventListener('blur', finishEditing);
+            textElement.removeEventListener('keydown', handleKeydown);
+        }
+
+        function handleKeydown(e) {
+            // Stop ALL keyboard events from bubbling to prevent global shortcuts
+            e.stopPropagation();
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                textElement.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                textElement.textContent = currentName;
+                textElement.blur();
+            }
+        }
+
+        textElement.addEventListener('blur', finishEditing);
+        textElement.addEventListener('keydown', handleKeydown);
     }
 
     // Rebuild the entire tab bar from allTabs array
@@ -1365,21 +1448,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Use custom name if available, otherwise use position
             const tabName = tabCustomNames[tabIndex] || `Tab ${arrayIndex + 1}`;
-            tabBtn.innerHTML = `${tabName}<button class="remove-tab-btn" title="Remove tab">×</button>`;
+            tabBtn.innerHTML = `<span class="tab-btn-text">${tabName}</span><button class="remove-tab-btn" title="Remove tab">×</button>`;
 
-            // Add click handler for tab switching
-            tabBtn.addEventListener('click', function(e) {
-                if (!e.target.classList.contains('remove-tab-btn')) {
-                    switchTab(tabIndex);
-                }
-            });
-
-            // Add click handler for remove button
-            const removeBtn = tabBtn.querySelector('.remove-tab-btn');
-            removeBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                removeTab(tabIndex);
-            });
+            // Add event handlers
+            setupTabEventHandlers(tabBtn, tabIndex);
 
             // Insert before the add button
             tabBar.insertBefore(tabBtn, addTabButton);
@@ -1967,23 +2039,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize tab event listeners
     const tabButtons = document.querySelectorAll('.tab-btn');
     tabButtons.forEach((button) => {
-        button.addEventListener('click', function(e) {
-            // Don't switch tab if clicking remove button
-            if (!e.target.classList.contains('remove-tab-btn')) {
-                const tabIndex = parseInt(button.dataset.tab);
-                switchTab(tabIndex);
-            }
-        });
-
-        // Add remove button click handler if it exists
-        const removeBtn = button.querySelector('.remove-tab-btn');
-        if (removeBtn) {
-            removeBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                const tabIndex = parseInt(button.dataset.tab);
-                removeTab(tabIndex);
-            });
-        }
+        const tabIndex = parseInt(button.dataset.tab);
+        setupTabEventHandlers(button, tabIndex);
     });
 
     // Add tab button click handler
