@@ -940,6 +940,96 @@
         .modal-btn.secondary:hover {
             background-color: #777;
         }
+
+        /* Context Menu Styles */
+        .context-menu {
+            position: fixed;
+            background-color: #2a2a2a;
+            border: 1px solid #555;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            padding: 4px 0;
+            z-index: 10000;
+            min-width: 250px;
+        }
+
+        .context-menu-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px;
+            cursor: pointer;
+            color: #ccc;
+            transition: background-color 0.2s;
+            gap: 10px;
+        }
+
+        .context-menu-item:hover {
+            background-color: #404040;
+            color: white;
+        }
+
+        .context-menu-icon {
+            width: 20px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .context-menu-label {
+            flex: 1;
+            font-size: 14px;
+        }
+
+        .context-menu-check {
+            width: 16px;
+            text-align: center;
+            color: #0088ff;
+            font-weight: bold;
+            opacity: 0;
+        }
+
+        .context-menu-item.active .context-menu-check {
+            opacity: 1;
+        }
+
+        /* Cue Point Stop Toggle */
+        .clip-cue-stop-toggle {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            z-index: 3;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .clip-cue-stop-toggle:hover {
+            background-color: rgba(0, 102, 204, 0.9);
+            border-color: #0088ff;
+        }
+
+        .clip-cue-stop-toggle.active {
+            background-color: rgba(255, 102, 0, 0.9);
+            border-color: #ff6600;
+        }
+
+        /* Playback Mode Indicator */
+        .clip-mode-indicator {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            z-index: 3;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-size: 13px;
+            user-select: none;
+        }
     </style>
 </head>
 <body>
@@ -1077,6 +1167,35 @@
                     <button id="saveShortcutsBtn" class="modal-btn primary">Save Changes</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Right-click context menu for clip playback modes -->
+    <div id="clipContextMenu" class="context-menu" style="display: none;">
+        <div class="context-menu-item" data-mode="forward">
+            <span class="context-menu-icon">▶</span>
+            <span class="context-menu-label">Play Forward</span>
+            <span class="context-menu-check">✓</span>
+        </div>
+        <div class="context-menu-item" data-mode="loop">
+            <span class="context-menu-icon">🔁</span>
+            <span class="context-menu-label">Loop</span>
+            <span class="context-menu-check">✓</span>
+        </div>
+        <div class="context-menu-item" data-mode="forward-stop">
+            <span class="context-menu-icon">⏸</span>
+            <span class="context-menu-label">Play Forward and Stop</span>
+            <span class="context-menu-check">✓</span>
+        </div>
+        <div class="context-menu-item" data-mode="forward-next">
+            <span class="context-menu-icon">⏭</span>
+            <span class="context-menu-label">Play Forward then Next Clip</span>
+            <span class="context-menu-check">✓</span>
+        </div>
+        <div class="context-menu-item" data-mode="bounce">
+            <span class="context-menu-icon">⇆</span>
+            <span class="context-menu-label">Bounce (Forward ↔ Reverse)</span>
+            <span class="context-menu-check">✓</span>
         </div>
     </div>
 

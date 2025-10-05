@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveShortcutsBtn = document.getElementById('saveShortcutsBtn');
     const outputWindowBtn = document.getElementById('outputWindowBtn');
     const addTabBtn = document.getElementById('addTabBtn');
+    const clipContextMenu = document.getElementById('clipContextMenu');
 
     // Output window reference
     let outputWindow = null;
@@ -80,12 +81,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track custom tab names (tabIndex -> custom tab name)
     const tabCustomNames = {};
 
+    // Track playback modes for each clip (tabIndex -> { clipNumber -> mode })
+    // Modes: 'forward', 'loop', 'forward-stop', 'forward-next', 'bounce'
+    const tabClipModes = {};
+
+    // Track whether clips stop at cue points (tabIndex -> { clipNumber -> boolean })
+    const tabClipCueStop = {};
+
     // Initialize tab data structures for default 5 tabs
     for (let i = 0; i < 5; i++) {
         tabClipVideos[i] = {};
         tabClipCuePoints[i] = {};
         tabClipSpeeds[i] = {};
         tabClipNames[i] = {};
+        tabClipModes[i] = {};
+        tabClipCueStop[i] = {};
     }
 
     // Legacy references for current tab's data (for compatibility)
@@ -93,6 +103,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let clipCuePoints = tabClipCuePoints[currentTab];
     let clipSpeeds = tabClipSpeeds[currentTab];
     let clipNames = tabClipNames[currentTab];
+    let clipModes = tabClipModes[currentTab];
+    let clipCueStop = tabClipCueStop[currentTab];
 
     // File browser state
     let currentFolderPath = '';
@@ -126,6 +138,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Track if shortcuts modal is open
     let shortcutsModalOpen = false;
+
+    // Track which clip the context menu is open for
+    let contextMenuClipNumber = null;
 
     // Session management functions
     function createSessionData() {
@@ -338,6 +353,8 @@ document.addEventListener('DOMContentLoaded', function() {
             tabClipCuePoints[i] = {};
             tabClipSpeeds[i] = {};
             tabClipNames[i] = {};
+            tabClipModes[i] = {};
+            tabClipCueStop[i] = {};
         }
 
         // Update current references
@@ -345,6 +362,8 @@ document.addEventListener('DOMContentLoaded', function() {
         clipCuePoints = tabClipCuePoints[currentTab];
         clipSpeeds = tabClipSpeeds[currentTab];
         clipNames = tabClipNames[currentTab];
+        clipModes = tabClipModes[currentTab];
+        clipCueStop = tabClipCueStop[currentTab];
 
         // Clear UI
         refreshClipMatrix();
@@ -571,12 +590,76 @@ document.addEventListener('DOMContentLoaded', function() {
                 selectClipSlot(clipSlot);
             });
 
+            // Add right-click handler for context menu
+            clipSlot.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                showClipContextMenu(e, i);
+            });
+
             // Add drag and drop handlers
             setupClipSlotDropZone(clipSlot);
 
             clipsMatrix.appendChild(clipSlot);
         }
         console.log('Created 6x6 clip matrix with 36 slots');
+    }
+
+    // Show context menu for clip playback mode selection
+    function showClipContextMenu(event, clipNumber) {
+        contextMenuClipNumber = clipNumber;
+
+        // Position the menu at mouse cursor
+        clipContextMenu.style.left = event.pageX + 'px';
+        clipContextMenu.style.top = event.pageY + 'px';
+        clipContextMenu.style.display = 'block';
+
+        // Get current mode for this clip (default is 'forward-stop')
+        const currentMode = clipModes[clipNumber] || 'forward-stop';
+
+        // Update active state for menu items
+        const menuItems = clipContextMenu.querySelectorAll('.context-menu-item');
+        menuItems.forEach(item => {
+            const mode = item.dataset.mode;
+            if (mode === currentMode) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
+            }
+        });
+    }
+
+    // Hide the context menu
+    function hideClipContextMenu() {
+        clipContextMenu.style.display = 'none';
+        contextMenuClipNumber = null;
+    }
+
+    // Set playback mode for a clip
+    function setClipMode(clipNumber, mode) {
+        clipModes[clipNumber] = mode;
+        markSessionModified();
+        console.log(`Set clip ${clipNumber} to mode: ${mode}`);
+
+        // Update visual indicator
+        const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
+        if (slot) {
+            updateSlotAppearance(slot, clipVideos[clipNumber]);
+        }
+    }
+
+    // Toggle cue point stop setting for a clip
+    function toggleClipCueStop(clipNumber) {
+        // Default is true if not set
+        const currentSetting = clipCueStop[clipNumber] !== undefined ? clipCueStop[clipNumber] : true;
+        clipCueStop[clipNumber] = !currentSetting;
+        markSessionModified();
+        console.log(`Clip ${clipNumber} cue stop: ${clipCueStop[clipNumber]}`);
+
+        // Update visual indicator
+        const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
+        if (slot) {
+            updateSlotAppearance(slot, clipVideos[clipNumber]);
+        }
     }
 
     // Handle clip selection
@@ -714,6 +797,21 @@ document.addEventListener('DOMContentLoaded', function() {
         const clipNumber = slot.dataset.clipNumber;
         const customName = clipNames[clipNumber] || `Clip ${clipNumber}`;
 
+        // Get mode and cue stop settings
+        const clipMode = clipModes[clipNumber] || 'forward-stop';
+        const cueStopEnabled = clipCueStop[clipNumber] !== undefined ? clipCueStop[clipNumber] : true;
+
+        // Mode icon mapping
+        const modeIcons = {
+            'forward': '▶',
+            'loop': '🔁',
+            'forward-stop': '⏸',
+            'forward-next': '⏭',
+            'bounce': '⇆'
+        };
+
+        const modeIcon = modeIcons[clipMode] || '⏸';
+
         if (hasVideo) {
             slot.classList.add('has-video');
             const videoData = clipVideos[clipNumber];
@@ -732,6 +830,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             slot.innerHTML = `
                 ${thumbnailHtml}
+                <div class="clip-mode-indicator" title="Playback Mode: ${clipMode}">${modeIcon}</div>
+                <div class="clip-cue-stop-toggle ${cueStopEnabled ? 'active' : ''}" data-clip-number="${clipNumber}" title="${cueStopEnabled ? 'Stop at cue points' : 'Play through cue points'}">
+                    ${cueStopEnabled ? '⏸|▶' : '▶→▶'}
+                </div>
                 <div class="clip-slot-content">
                     <div class="clip-slot-label" data-clip-number="${clipNumber}">${customName}</div>
                     <div class="clip-slot-filename">${videoData.name}</div>
@@ -753,6 +855,15 @@ document.addEventListener('DOMContentLoaded', function() {
             label.addEventListener('dblclick', function(e) {
                 e.stopPropagation();
                 startEditingClipName(clipNumber, label);
+            });
+        }
+
+        // Add cue stop toggle click handler
+        const cueStopToggle = slot.querySelector('.clip-cue-stop-toggle');
+        if (cueStopToggle) {
+            cueStopToggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                toggleClipCueStop(clipNumber);
             });
         }
     }
@@ -1284,6 +1395,8 @@ document.addEventListener('DOMContentLoaded', function() {
         clipCuePoints = tabClipCuePoints[currentTab];
         clipSpeeds = tabClipSpeeds[currentTab];
         clipNames = tabClipNames[currentTab];
+        clipModes = tabClipModes[currentTab];
+        clipCueStop = tabClipCueStop[currentTab];
 
         // Clear current selection (each tab has its own selection)
         if (selectedClipSlot) {
@@ -1315,6 +1428,8 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipCuePoints[newTabIndex] = {};
         tabClipSpeeds[newTabIndex] = {};
         tabClipNames[newTabIndex] = {};
+        tabClipModes[newTabIndex] = {};
+        tabClipCueStop[newTabIndex] = {};
 
         // Create tab button
         const tabBtn = document.createElement('button');
@@ -1488,6 +1603,8 @@ document.addEventListener('DOMContentLoaded', function() {
         delete tabClipCuePoints[tabIndex];
         delete tabClipSpeeds[tabIndex];
         delete tabClipNames[tabIndex];
+        delete tabClipModes[tabIndex];
+        delete tabClipCueStop[tabIndex];
         delete tabCustomNames[tabIndex];
 
         // Remove tab button from UI
@@ -2045,6 +2162,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Add tab button click handler
     addTabBtn.addEventListener('click', addNewTab);
+
+    // Context menu event listeners
+    const contextMenuItems = clipContextMenu.querySelectorAll('.context-menu-item');
+    contextMenuItems.forEach(item => {
+        item.addEventListener('click', function() {
+            const mode = item.dataset.mode;
+            if (contextMenuClipNumber !== null) {
+                setClipMode(contextMenuClipNumber, mode);
+            }
+            hideClipContextMenu();
+        });
+    });
+
+    // Hide context menu when clicking anywhere else
+    document.addEventListener('click', function(e) {
+        if (!clipContextMenu.contains(e.target)) {
+            hideClipContextMenu();
+        }
+    });
 
     // Initialize UI state
     updatePlayButtonState();
