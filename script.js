@@ -425,7 +425,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Highlight drop area when item is dragged over it
         ['dragenter', 'dragover'].forEach(eventName => {
             clipSlot.addEventListener(eventName, function(e) {
-                if (window.draggedFile) {
+                // Check if dragging file from browser OR external file explorer
+                if (window.draggedFile || (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files'))) {
                     clipSlot.classList.add('drag-over');
                 }
             });
@@ -443,6 +444,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipSlot.addEventListener('drop', function(e) {
             clipSlot.classList.remove('drag-over');
 
+            // Check for files from browser file list
             if (window.draggedFile) {
                 const clipNumber = clipSlot.dataset.clipNumber;
 
@@ -453,6 +455,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 autoConnectSessionVideo(window.draggedFile);
 
                 console.log(`Dropped ${window.draggedFile.name} into clip slot ${clipNumber}`);
+                return;
+            }
+
+            // Check for files from external file explorer
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                const files = Array.from(e.dataTransfer.files);
+                const videoFiles = files.filter(file => isVideoFile(file.name));
+
+                if (videoFiles.length > 0) {
+                    const file = videoFiles[0]; // Use the first video file
+                    const clipNumber = clipSlot.dataset.clipNumber;
+
+                    // Select this slot and load the video
+                    selectClipSlot(clipSlot);
+                    loadVideoFromFile(file);
+                    // Also try to auto-connect to any session slots waiting for this file
+                    autoConnectSessionVideo(file);
+
+                    console.log(`Dropped external file ${file.name} into clip slot ${clipNumber}`);
+                } else {
+                    alert('Please drop a video file (MP4, MOV, AVI, MKV, WMV, FLV, WEBM, M4V, 3GP)');
+                }
             }
         });
     }
