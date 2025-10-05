@@ -730,20 +730,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // Auto-start playback if global play intent is true
+            // Auto-start playback when clip is selected
             video.addEventListener('loadeddata', function() {
                 // Apply the correct speed for this clip
                 const clipSpeed = clipSpeeds[clipNumber] || 1.0;
                 setVideoSpeed(clipSpeed);
 
-                // Auto-start if global play intent is active
-                if (globalPlayIntent) {
-                    video.play().then(() => {
-                        console.log('Auto-started new clip due to global play intent');
-                    }).catch(e => {
-                        console.error('Error auto-playing new clip:', e);
-                    });
-                }
+                // Always auto-start when a clip is selected
+                video.play().then(() => {
+                    console.log('Auto-started clip on selection');
+                    globalPlayIntent = true;
+                    updatePlayButtonState();
+                }).catch(e => {
+                    console.error('Error auto-playing clip:', e);
+                });
             }, { once: true });
 
             updatePlayButtonState();
@@ -2404,6 +2404,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Track bounce direction and animation frame
+    let bounceDirection = 1;
+    let bounceAnimationFrame = null;
+    let lastBounceTime = null;
+
     // Helper function to handle playback end based on clip mode
     function handlePlaybackEnd() {
         if (!selectedClipSlot) return;
@@ -2415,10 +2420,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         switch (mode) {
             case 'loop':
-                // Loop mode - restart from beginning
-                video.currentTime = 0;
-                video.play();
-                console.log('Loop mode: Restarting video');
+                // Loop mode - native loop handles this
+                console.log('Loop mode: Video looping');
                 break;
 
             case 'forward-next':
@@ -2428,12 +2431,50 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
 
             case 'bounce':
-                // Bounce mode - reverse playback direction
-                console.log('Bounce mode: Reversing direction');
+                // Bounce mode - play backwards from end to start
+                console.log('Bounce mode: Reached end, playing in reverse');
+                bounceDirection = -1;
+                lastBounceTime = null; // Will be set on first frame
+
+                // Cancel any existing animation frame
+                if (bounceAnimationFrame) {
+                    cancelAnimationFrame(bounceAnimationFrame);
+                }
+
+                // Smooth reverse playback using requestAnimationFrame
                 const currentSpeed = clipSpeeds[clipNumber] || 1.0;
-                video.playbackRate = -Math.abs(currentSpeed);
-                video.currentTime = video.duration - 0.1; // Start near end
-                video.play();
+
+                function reversePlayback(timestamp) {
+                    if (bounceDirection === -1 && selectedClipSlot && selectedClipSlot.dataset.clipNumber === clipNumber) {
+                        // Initialize timestamp on first frame
+                        if (lastBounceTime === null) {
+                            lastBounceTime = timestamp;
+                        }
+
+                        // Calculate time delta (capped to prevent huge jumps)
+                        const deltaTime = Math.min((timestamp - lastBounceTime) / 1000, 0.1); // Max 100ms jump
+                        lastBounceTime = timestamp;
+
+                        // Move backwards at the specified speed
+                        const newTime = video.currentTime - (deltaTime * currentSpeed);
+                        video.currentTime = Math.max(0, newTime);
+
+                        // When we reach the beginning, bounce forward
+                        if (video.currentTime <= 0.01) {
+                            bounceDirection = 1;
+                            video.currentTime = 0;
+                            bounceAnimationFrame = null;
+                            video.play(); // This will play forward and trigger 'ended' again
+                            console.log('Bounce mode: Reached start, bouncing forward');
+                        } else {
+                            // Continue reverse playback
+                            bounceAnimationFrame = requestAnimationFrame(reversePlayback);
+                        }
+                    }
+                }
+
+                // Start the reverse playback animation immediately
+                bounceAnimationFrame = requestAnimationFrame(reversePlayback);
                 break;
 
             case 'forward':
@@ -2463,6 +2504,14 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Video pause event fired');
         currentVideoPlaying = false;
         updatePlayingIndicator();
+
+        // Cancel bounce animation if playing
+        if (bounceAnimationFrame) {
+            cancelAnimationFrame(bounceAnimationFrame);
+            bounceAnimationFrame = null;
+            bounceDirection = 1; // Reset to forward
+        }
+
         // Note: Don't change globalPlayIntent here - only user actions should
     });
 
@@ -2482,29 +2531,20 @@ document.addEventListener('DOMContentLoaded', function() {
             const cuePoints = clipCuePoints[clipNumber] || [];
 
             if (cueStopEnabled && cuePoints.length > 0 && !video.paused) {
-                // Check if we've reached a cue point
-                const currentTime = video.currentTime;
-                for (let cuePoint of cuePoints) {
-                    // If within 0.1 seconds of a cue point, pause
-                    if (Math.abs(currentTime - cuePoint.time) < 0.1) {
-                        video.pause();
-                        globalPlayIntent = false;
-                        updatePlayButtonState();
-                        console.log(`Stopped at cue point: ${formatTime(cuePoint.time)}`);
-                        break;
+                // Check if we've reached a cue point (only in forward playback, not during bounce reverse)
+                if (bounceDirection === 1) {
+                    const currentTime = video.currentTime;
+                    for (let cuePoint of cuePoints) {
+                        // If within 0.1 seconds of a cue point, pause
+                        if (Math.abs(currentTime - cuePoint.time) < 0.1) {
+                            video.pause();
+                            globalPlayIntent = false;
+                            updatePlayButtonState();
+                            console.log(`Stopped at cue point: ${formatTime(cuePoint.time)}`);
+                            break;
+                        }
                     }
                 }
-            }
-
-            // Handle bounce mode reverse detection
-            const mode = clipModes[clipNumber] || 'forward-stop';
-            if (mode === 'bounce' && video.currentTime <= 0.1 && video.playbackRate < 0) {
-                // Reached beginning while playing in reverse - bounce forward
-                console.log('Bounce mode: Reached beginning, bouncing forward');
-                const currentSpeed = clipSpeeds[clipNumber] || 1.0;
-                video.playbackRate = Math.abs(currentSpeed);
-                video.currentTime = 0.1;
-                video.play();
             }
         }
 
