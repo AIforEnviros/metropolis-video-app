@@ -205,21 +205,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentSessionName = `metropolis-session-${timestamp}`;
             }
 
-            // Create downloadable file
-            const dataStr = JSON.stringify(sessionData, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            // Save using Electron API
+            const result = await window.electronAPI.saveSession(sessionData);
 
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(dataBlob);
-            link.download = `${currentSessionName}.json`;
+            if (result.canceled) {
+                console.log('Session save cancelled by user');
+                return;
+            }
 
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            sessionModified = false;
-            updateSessionStatus(`Saved: ${currentSessionName}`);
-            console.log('Session saved successfully');
+            if (result.success) {
+                sessionModified = false;
+                updateSessionStatus(`Saved: ${currentSessionName}`);
+                console.log('Session saved successfully to:', result.filePath);
+            } else {
+                throw new Error(result.error || 'Failed to save session');
+            }
 
         } catch (error) {
             console.error('Error saving session:', error);
@@ -2246,7 +2246,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Clip matrix refreshed');
     }
 
-    function loadVideoFromFile(file) {
+    async function loadVideoFromFile(file) {
         if (!selectedClipSlot) {
             alert('Please select a clip slot first');
             return;
@@ -2254,19 +2254,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const clipNumber = selectedClipSlot.dataset.clipNumber;
 
-        // Memory management: Revoke old blob URL if it exists
-        if (clipVideos[clipNumber] && clipVideos[clipNumber].url) {
-            URL.revokeObjectURL(clipVideos[clipNumber].url);
-            console.log(`Revoked old blob URL for clip ${clipNumber}`);
-        }
+        // In Electron, use file:// protocol path instead of blob URLs
+        const filePath = file.path || file.name; // file.path from Electron directory reading
+        const url = `file:///${filePath.replace(/\\/g, '/')}`;
 
-        const url = URL.createObjectURL(file);
+        console.log(`Loading video from Electron file path: ${url}`);
 
         // Store video information
         clipVideos[clipNumber] = {
             name: file.name,
             url: url,
             file: file,
+            filePath: filePath,
             thumbnail: null // Will be set after generation
         };
 
@@ -2316,54 +2315,35 @@ document.addEventListener('DOMContentLoaded', function() {
         updateCueMarkersOnTimeline();
     }
 
-    // Browse folder using File System Access API (Chrome) with fallback
+    // Browse folder using Electron API
     async function browseFolder() {
         try {
-            // Try modern File System Access API first (Chrome 86+)
-            if ('showDirectoryPicker' in window) {
-                const dirHandle = await window.showDirectoryPicker();
-                const files = [];
+            const result = await window.electronAPI.selectFolder();
 
-                for await (const entry of dirHandle.values()) {
-                    if (entry.kind === 'file') {
-                        const file = await entry.getFile();
-                        files.push(file);
-                    }
-                }
+            if (result.canceled) {
+                console.log('Folder selection cancelled');
+                return;
+            }
 
-                currentFolderPath = dirHandle.name;
-                currentPathDisplay.textContent = currentFolderPath;
+            currentFolderPath = result.folderPath;
+            currentPathDisplay.textContent = currentFolderPath;
+
+            // Read directory contents
+            const dirResult = await window.electronAPI.readDirectory(currentFolderPath);
+
+            if (dirResult.success) {
+                // Convert files to format expected by displayFiles
+                const files = dirResult.files.map(fileInfo => ({
+                    name: fileInfo.name,
+                    path: fileInfo.path,
+                    size: fileInfo.size,
+                    isDirectory: fileInfo.isDirectory
+                }));
+
                 displayFiles(files);
                 upFolderBtn.disabled = false;
-
             } else {
-                // Fallback: Use directory input (WebKit)
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.webkitdirectory = true;
-                input.multiple = true;
-
-                input.onchange = function(e) {
-                    const files = Array.from(e.target.files);
-                    if (files.length > 0) {
-                        // Get folder path from first file
-                        const firstFile = files[0];
-                        const pathParts = firstFile.webkitRelativePath.split('/');
-                        currentFolderPath = pathParts[0];
-                        currentPathDisplay.textContent = currentFolderPath;
-
-                        // Filter to only show files in root directory
-                        const rootFiles = files.filter(file => {
-                            const parts = file.webkitRelativePath.split('/');
-                            return parts.length === 2; // folder/file.ext
-                        });
-
-                        displayFiles(rootFiles);
-                        upFolderBtn.disabled = false;
-                    }
-                };
-
-                input.click();
+                throw new Error(dirResult.error || 'Failed to read directory');
             }
         } catch (error) {
             console.error('Error accessing folder:', error);
@@ -2846,18 +2826,26 @@ document.addEventListener('DOMContentLoaded', function() {
         saveSession();
     });
 
-    loadSessionBtn.addEventListener('click', function() {
+    loadSessionBtn.addEventListener('click', async function() {
         console.log('Load session button clicked');
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json';
-        input.onchange = function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                loadSessionFromFile(file);
+        try {
+            const result = await window.electronAPI.loadSession();
+
+            if (result.canceled) {
+                console.log('Session load cancelled by user');
+                return;
             }
-        };
-        input.click();
+
+            if (result.success) {
+                loadSessionData(result.sessionData);
+                console.log('Session loaded successfully from:', result.filePath);
+            } else {
+                throw new Error(result.error || 'Failed to load session');
+            }
+        } catch (error) {
+            console.error('Error loading session:', error);
+            alert('Error loading session: ' + error.message);
+        }
     });
 
     // Keyboard shortcuts modal event listeners
@@ -3070,168 +3058,133 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Video duration changed:', videoDuration);
     });
 
-    // Output Window Functions
-    function createOutputWindow() {
-        if (outputWindow && !outputWindow.closed) {
-            outputWindow.focus();
-            return;
+    // Output Window Functions (Electron version)
+    let outputWindowOpen = false;
+
+    async function createOutputWindow() {
+        try {
+            const result = await window.electronAPI.openOutputWindow();
+
+            if (result.success) {
+                outputWindowOpen = true;
+                outputWindowBtn.textContent = 'Close Output Window';
+
+                // Sync current video to output
+                syncToOutputWindow();
+
+                console.log('Output window created');
+            } else {
+                alert('Failed to open output window.');
+            }
+        } catch (error) {
+            console.error('Error opening output window:', error);
+            alert('Error opening output window: ' + error.message);
         }
-
-        // Create popup window
-        outputWindow = window.open('', 'OutputWindow', 'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no');
-
-        if (!outputWindow) {
-            alert('Failed to open output window. Please allow popups for this site.');
-            return;
-        }
-
-        // Write HTML for output window
-        outputWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Mimolume Output</title>
-                <style>
-                    body {
-                        margin: 0;
-                        padding: 0;
-                        background-color: #000;
-                        overflow: hidden;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        height: 100vh;
-                    }
-                    video {
-                        max-width: 100%;
-                        max-height: 100vh;
-                        width: auto;
-                        height: auto;
-                    }
-                </style>
-            </head>
-            <body>
-                <video id="outputVideo" muted></video>
-            </body>
-            </html>
-        `);
-        outputWindow.document.close();
-
-        // Get reference to output video element
-        outputVideo = outputWindow.document.getElementById('outputVideo');
-
-        // Ensure output video is also muted for performance
-        outputVideo.muted = true;
-        outputVideo.volume = 0;
-        outputVideo.preload = 'auto';
-
-        // Sync current video to output
-        syncToOutputWindow();
-
-        // Update button text
-        outputWindowBtn.textContent = 'Close Output Window';
-
-        console.log('Output window created');
     }
 
-    function closeOutputWindow() {
-        if (outputWindow && !outputWindow.closed) {
-            outputWindow.close();
+    async function closeOutputWindow() {
+        try {
+            await window.electronAPI.closeOutputWindow();
+            outputWindowOpen = false;
+            outputWindowBtn.textContent = 'Open Output Window';
+            console.log('Output window closed');
+        } catch (error) {
+            console.error('Error closing output window:', error);
         }
-        outputWindow = null;
-        outputVideo = null;
-        outputWindowBtn.textContent = 'Open Output Window';
-        console.log('Output window closed');
     }
 
     function syncToOutputWindow() {
-        if (!outputVideo || !video.src) {
+        if (!outputWindowOpen || !video.src) {
             return;
         }
 
-        // Sync video source
-        if (outputVideo.src !== video.src) {
-            outputVideo.src = video.src;
-            outputVideo.load();
-        }
+        // Send load video message
+        window.electronAPI.sendToOutputWindow({
+            type: 'loadVideo',
+            src: video.src
+        });
 
-        // Sync playback state
-        outputVideo.currentTime = video.currentTime;
-        outputVideo.playbackRate = video.playbackRate;
+        // Send current state
+        window.electronAPI.sendToOutputWindow({
+            type: 'seek',
+            time: video.currentTime
+        });
+
+        window.electronAPI.sendToOutputWindow({
+            type: 'setPlaybackRate',
+            rate: video.playbackRate
+        });
 
         if (!video.paused) {
-            outputVideo.play().catch(e => console.error('Error playing output video:', e));
+            window.electronAPI.sendToOutputWindow({ type: 'play' });
         } else {
-            outputVideo.pause();
+            window.electronAPI.sendToOutputWindow({ type: 'pause' });
         }
     }
 
-    // Add event listeners to sync output window with main video
+    // Listen for output window closed event from main process
+    if (window.electronAPI && window.electronAPI.onOutputWindowClosed) {
+        window.electronAPI.onOutputWindowClosed(() => {
+            outputWindowOpen = false;
+            outputWindowBtn.textContent = 'Open Output Window';
+            console.log('Output window was closed');
+        });
+    }
+
+    // Add event listeners to sync output window with main video (Electron IPC version)
     video.addEventListener('loadeddata', function() {
-        if (outputVideo) {
+        if (outputWindowOpen) {
             syncToOutputWindow();
         }
     });
 
     video.addEventListener('play', function() {
-        if (outputVideo && outputVideo.paused) {
-            outputVideo.play().catch(e => console.error('Error playing output video:', e));
+        if (outputWindowOpen) {
+            window.electronAPI.sendToOutputWindow({ type: 'play' });
         }
     });
 
     video.addEventListener('pause', function() {
-        if (outputVideo && !outputVideo.paused) {
-            outputVideo.pause();
+        if (outputWindowOpen) {
+            window.electronAPI.sendToOutputWindow({ type: 'pause' });
         }
     });
 
     video.addEventListener('seeked', function() {
-        if (outputVideo) {
-            outputVideo.currentTime = video.currentTime;
+        if (outputWindowOpen) {
+            window.electronAPI.sendToOutputWindow({
+                type: 'seek',
+                time: video.currentTime
+            });
         }
     });
 
     video.addEventListener('ratechange', function() {
-        if (outputVideo) {
-            outputVideo.playbackRate = video.playbackRate;
+        if (outputWindowOpen) {
+            window.electronAPI.sendToOutputWindow({
+                type: 'setPlaybackRate',
+                rate: video.playbackRate
+            });
         }
     });
 
     // Output window button click handler
-    outputWindowBtn.addEventListener('click', function() {
-        if (!outputWindow || outputWindow.closed) {
-            createOutputWindow();
+    outputWindowBtn.addEventListener('click', async function() {
+        if (!outputWindowOpen) {
+            await createOutputWindow();
         } else {
-            closeOutputWindow();
+            await closeOutputWindow();
         }
     });
 
-    // Check if output window was closed by user
-    setInterval(function() {
-        if (outputWindow && outputWindow.closed) {
-            outputWindow = null;
-            outputVideo = null;
-            outputWindowBtn.textContent = 'Open Output Window';
-        }
-    }, 1000);
-
-    // Memory management: Clean up blob URLs when window closes
+    // Memory management: Clean up resources when window closes (Electron version)
     window.addEventListener('beforeunload', function() {
         console.log('Cleaning up resources before window closes...');
 
-        // Revoke all blob URLs
-        for (let i = 0; i < 5; i++) {
-            const tabVideos = tabClipVideos[i];
-            Object.keys(tabVideos).forEach(clipNumber => {
-                if (tabVideos[clipNumber] && tabVideos[clipNumber].url) {
-                    URL.revokeObjectURL(tabVideos[clipNumber].url);
-                }
-            });
-        }
-
+        // In Electron, we use file:// URLs so no blob cleanup needed
         // Close output window if open
-        if (outputWindow && !outputWindow.closed) {
-            outputWindow.close();
+        if (outputWindowOpen) {
+            window.electronAPI.closeOutputWindow();
         }
 
         console.log('Resource cleanup complete');
