@@ -533,8 +533,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Highlight drop area when item is dragged over it
         ['dragenter', 'dragover'].forEach(eventName => {
             clipSlot.addEventListener(eventName, function(e) {
-                // Check if dragging file from browser OR external file explorer
-                if (window.draggedFile || (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files'))) {
+                // Check if dragging file from browser OR external file explorer OR another clip
+                if (window.draggedFile || window.draggedClip !== undefined || (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files'))) {
                     clipSlot.classList.add('drag-over');
                 }
             });
@@ -551,6 +551,20 @@ document.addEventListener('DOMContentLoaded', function() {
         // Handle dropped files
         clipSlot.addEventListener('drop', function(e) {
             clipSlot.classList.remove('drag-over');
+
+            // Check if moving a clip from another slot
+            if (window.draggedClip !== undefined) {
+                const sourceClipNumber = window.draggedClip;
+                const targetClipNumber = parseInt(clipSlot.dataset.clipNumber);
+
+                // Don't do anything if dropping on same slot
+                if (sourceClipNumber !== targetClipNumber) {
+                    moveClip(sourceClipNumber, targetClipNumber);
+                }
+
+                window.draggedClip = undefined;
+                return;
+            }
 
             // Check for files from browser file list
             if (window.draggedFile) {
@@ -611,10 +625,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Add drag and drop handlers
             setupClipSlotDropZone(clipSlot);
+            setupClipSlotDrag(clipSlot, i);
 
             clipsMatrix.appendChild(clipSlot);
         }
         console.log('Created 6x6 clip matrix with 36 slots');
+    }
+
+    // Setup drag handlers for clip slot (for moving clips between slots)
+    function setupClipSlotDrag(clipSlot, clipNumber) {
+        clipSlot.addEventListener('dragstart', function(e) {
+            // Only allow dragging if this slot has a video
+            if (clipVideos[clipNumber]) {
+                window.draggedClip = clipNumber;
+                clipSlot.style.opacity = '0.5';
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', clipNumber); // For compatibility
+                console.log(`Started dragging clip ${clipNumber}`);
+            } else {
+                e.preventDefault();
+            }
+        });
+
+        clipSlot.addEventListener('dragend', function(e) {
+            clipSlot.style.opacity = '1';
+            window.draggedClip = undefined;
+            // Remove any lingering drag-over styles
+            document.querySelectorAll('.clip-slot.drag-over').forEach(slot => {
+                slot.classList.remove('drag-over');
+            });
+            console.log(`Finished dragging clip ${clipNumber}`);
+        });
     }
 
     // Show context menu for clip playback mode selection
@@ -658,6 +699,87 @@ document.addEventListener('DOMContentLoaded', function() {
         if (slot) {
             updateSlotAppearance(slot, clipVideos[clipNumber]);
         }
+    }
+
+    // Move/swap clip between slots
+    function moveClip(sourceClipNumber, targetClipNumber) {
+        console.log(`Moving clip from ${sourceClipNumber} to ${targetClipNumber}`);
+
+        // Save source clip data
+        const sourceVideo = clipVideos[sourceClipNumber];
+        const sourceCuePoints = clipCuePoints[sourceClipNumber] || [];
+        const sourceSpeed = clipSpeeds[sourceClipNumber] || 1.0;
+        const sourceName = clipNames[sourceClipNumber];
+        const sourceMode = clipModes[sourceClipNumber] || 'forward-stop';
+        const sourceCueStop = clipCueStop[sourceClipNumber];
+
+        // Save target clip data (for swap)
+        const targetVideo = clipVideos[targetClipNumber];
+        const targetCuePoints = clipCuePoints[targetClipNumber] || [];
+        const targetSpeed = clipSpeeds[targetClipNumber] || 1.0;
+        const targetName = clipNames[targetClipNumber];
+        const targetMode = clipModes[targetClipNumber] || 'forward-stop';
+        const targetCueStop = clipCueStop[targetClipNumber];
+
+        // Move source to target
+        if (sourceVideo) {
+            clipVideos[targetClipNumber] = sourceVideo;
+            clipCuePoints[targetClipNumber] = sourceCuePoints;
+            clipSpeeds[targetClipNumber] = sourceSpeed;
+            if (sourceName) clipNames[targetClipNumber] = sourceName;
+            clipModes[targetClipNumber] = sourceMode;
+            if (sourceCueStop !== undefined) clipCueStop[targetClipNumber] = sourceCueStop;
+        } else {
+            delete clipVideos[targetClipNumber];
+            delete clipCuePoints[targetClipNumber];
+            delete clipSpeeds[targetClipNumber];
+            delete clipNames[targetClipNumber];
+            delete clipModes[targetClipNumber];
+            delete clipCueStop[targetClipNumber];
+        }
+
+        // Move target to source (swap)
+        if (targetVideo) {
+            clipVideos[sourceClipNumber] = targetVideo;
+            clipCuePoints[sourceClipNumber] = targetCuePoints;
+            clipSpeeds[sourceClipNumber] = targetSpeed;
+            if (targetName) clipNames[sourceClipNumber] = targetName;
+            clipModes[sourceClipNumber] = targetMode;
+            if (targetCueStop !== undefined) clipCueStop[sourceClipNumber] = targetCueStop;
+        } else {
+            delete clipVideos[sourceClipNumber];
+            delete clipCuePoints[sourceClipNumber];
+            delete clipSpeeds[sourceClipNumber];
+            delete clipNames[sourceClipNumber];
+            delete clipModes[sourceClipNumber];
+            delete clipCueStop[sourceClipNumber];
+        }
+
+        // Update UI for both slots
+        const sourceSlot = document.querySelector(`[data-clip-number="${sourceClipNumber}"]`);
+        const targetSlot = document.querySelector(`[data-clip-number="${targetClipNumber}"]`);
+
+        if (sourceSlot) {
+            updateSlotAppearance(sourceSlot, clipVideos[sourceClipNumber]);
+        }
+
+        if (targetSlot) {
+            updateSlotAppearance(targetSlot, clipVideos[targetClipNumber]);
+        }
+
+        // If the currently selected slot was involved, update the video player
+        if (selectedClipSlot) {
+            const selectedClipNumber = parseInt(selectedClipSlot.dataset.clipNumber);
+            if (selectedClipNumber === sourceClipNumber || selectedClipNumber === targetClipNumber) {
+                loadClipIntoPlayer(selectedClipNumber);
+                updateCuePointsList();
+                updateCueMarkersOnTimeline();
+                updateSpeedControls();
+            }
+        }
+
+        markSessionModified();
+        console.log(`Moved/swapped clips ${sourceClipNumber} ↔ ${targetClipNumber}`);
     }
 
     // Clear all data for a clip
@@ -906,6 +1028,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (hasVideo) {
             slot.classList.add('has-video');
+            slot.setAttribute('draggable', 'true'); // Make slot draggable when it has video
             const videoData = clipVideos[clipNumber];
 
             // Build slot content with thumbnail support
@@ -933,6 +1056,7 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         } else {
             slot.classList.remove('has-video');
+            slot.setAttribute('draggable', 'false'); // Not draggable when empty
             slot.innerHTML = `
                 <div class="clip-thumbnail-container"></div>
                 <div class="clip-slot-content">
