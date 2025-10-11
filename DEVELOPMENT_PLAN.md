@@ -34,9 +34,9 @@
 ---
 
 ## Progress Tracker
-- **Current Step:** Ready for Step 12 - "Shit It Up" Control (Final Feature)
-- **Completed Steps:** 15/16 (94% complete)
-- **Current Phase:** Final Feature & Polish
+- **Current Step:** Step 17 - Clip Management (Move/Remove)
+- **Completed Steps:** 16/21 (76% complete)
+- **Current Phase:** Team Feedback Integration & Polish
 
 ---
 
@@ -345,7 +345,7 @@
 - Visual feedback and speed display updates
 
 ### Step 12: Add "Shit It Up" Control ⏸️
-**Status:** Not Started
+**Status:** Deferred (not critical for core workflow)
 
 ---
 
@@ -520,5 +520,176 @@ When working on each step:
 
 ---
 
-**Last Updated:** Step 4 completion - Ready for Step 5
-**Next Step:** Step 5 - Add Basic Cue Point Storage (beginning Cue Point System phase)
+---
+
+## PHASE 7: TEAM FEEDBACK INTEGRATION
+
+### Step 17: Clip Management - Move/Remove Clips ⏳
+**Status:** In Progress
+**Priority:** HIGH - Essential workflow feature requested by Tommy
+
+**What to build:**
+- Right-click context menu option to "Clear Clip" (remove video from slot)
+- Drag-and-drop functionality to move clips between slots
+- Visual feedback during drag operations (source fades, target highlights)
+- Preserve all clip data (cue points, speed, playback mode) when moving
+- Update clip selection after move/remove operations
+
+**Testing checklist:**
+- [ ] Right-click clip shows "Clear Clip" option
+- [ ] Clear Clip removes video and resets slot to empty state
+- [ ] Can drag clip from one slot to another
+- [ ] Cue points preserved when moving clips
+- [ ] Speed settings preserved when moving clips
+- [ ] Playback mode preserved when moving clips
+- [ ] Visual feedback clear during drag operations
+- [ ] Cannot drop on empty slots (only swap with other clips)
+- [ ] Works across all tabs independently
+
+**Commit messages:**
+1. `Add right-click clear clip functionality`
+2. `Implement drag-to-move clips between slots`
+3. `Preserve clip data during move operations`
+
+**Must continue working:**
+- All existing functionality
+- Session save/load includes moved clips correctly
+
+---
+
+### Step 18: Draggable Cue Point Fine-Tuning
+**Status:** Not Started
+**Priority:** HIGH - Critical for precise performance setup
+
+**What to build:**
+- Make cue point markers on timeline draggable with mouse
+- Show time tooltip while dragging cue point marker
+- Update cue point list in real-time as markers move
+- Visual snap feedback for precision placement
+- Prevent cue points from being dragged outside video duration
+- Double-click cue point marker to delete it
+
+**Testing checklist:**
+- [ ] Cue point markers can be grabbed and dragged along timeline
+- [ ] Tooltip shows exact time while dragging
+- [ ] Cue point list updates in real-time during drag
+- [ ] Cannot drag cue point before 0:00 or after video duration
+- [ ] Visual feedback clear when grabbing/dragging markers
+- [ ] Double-click deletes cue point with confirmation
+- [ ] Changes persist when switching clips/tabs
+- [ ] Session save/load preserves adjusted cue points
+
+**Commit messages:**
+1. `Add draggable cue point markers on timeline`
+2. `Implement real-time tooltip and list updates`
+3. `Add double-click to delete cue points`
+
+**Must continue working:**
+- Cue point navigation
+- Timeline scrubbing
+- All transport controls
+
+---
+
+### Step 19: Enhanced Output Window with Scrubber
+**Status:** Not Started
+**Priority:** MEDIUM - Quality of life for setup workflow
+
+**What to build:**
+- Add timeline scrubber to output window
+- Display cue point markers on output window timeline
+- Allow fine-tuning cue points from output window
+- Bidirectional sync between main and output windows
+- Larger scrubber size for easier precise control
+- Optional: Zoom controls for ultra-precise cue placement
+
+**Testing checklist:**
+- [ ] Output window displays timeline scrubber below video
+- [ ] Cue points visible as markers on output timeline
+- [ ] Scrubbing in output window updates main window
+- [ ] Recording cue in main window shows in output window
+- [ ] Can drag cue points in output window timeline
+- [ ] Larger scrubber easier to use for precision work
+- [ ] All sync happens in real-time without lag
+- [ ] Closing/reopening output window maintains functionality
+
+**Commit messages:**
+1. `Add timeline scrubber to output window`
+2. `Implement bidirectional cue point sync`
+3. `Add larger scrubber for precision control`
+
+**Must continue working:**
+- Output window video sync
+- All cue point functionality
+- Main window timeline
+
+---
+
+### Step 20: Responsive UI Layout
+**Status:** Not Started
+**Priority:** MEDIUM - Adaptability to different setups
+
+**What to build:**
+- CSS Grid responsive breakpoints for different screen sizes
+- Resizable/scalable monitor preview window
+- Adjustable scrubber height for fine detail work
+- Font/button scaling based on viewport size
+- Save window size/layout preferences per session
+- Minimum size constraints to prevent UI breaking
+
+**Testing checklist:**
+- [ ] UI adapts to different screen resolutions (1080p, 1440p, 4K)
+- [ ] Monitor window can be resized by user
+- [ ] Scrubber height adjustable for precision vs space
+- [ ] Text/buttons remain readable at all sizes
+- [ ] Layout preferences save with session
+- [ ] No UI breaking at minimum supported size
+- [ ] Clip matrix remains usable at all sizes
+- [ ] Works well on both laptop and external display setups
+
+**Commit messages:**
+1. `Add responsive CSS Grid breakpoints`
+2. `Implement resizable monitor and scrubber`
+3. `Add layout preference persistence`
+
+**Must continue working:**
+- All existing layouts
+- Tab system
+- File browser panel
+
+---
+
+### Step 21: Fix Bounce Mode Reverse Playback
+**Status:** Not Started
+**Priority:** MEDIUM - Technical debt / known issue
+
+**Background:**
+See BOUNCE_MODE_TODO.md - bounce mode has lag/freeze when transitioning from forward to reverse
+
+**What to try:**
+1. Pre-buffer approach: Start reverse at 95% duration to eliminate transition gap
+2. Dual video elements: Seamless switch between forward/reverse instances
+3. Canvas-based rendering: Full control over frame-by-frame playback
+4. Format optimization: Test if specific codecs seek better in reverse
+
+**Testing checklist:**
+- [ ] Forward to reverse transition is smooth (no lag/freeze)
+- [ ] Reverse to forward transition is smooth
+- [ ] Bounce mode works at different playback speeds
+- [ ] No visual artifacts during transition
+- [ ] Performance remains stable over multiple bounces
+- [ ] Works with different video formats/codecs
+
+**Commit messages:**
+1. `Fix bounce mode reverse transition lag`
+2. `Optimize reverse playback performance`
+
+**Must continue working:**
+- All other playback modes
+- Per-clip playback mode settings
+- Transport controls
+
+---
+
+**Last Updated:** Team feedback integration - Step 17 in progress
+**Next Steps:** Complete clip management, then cue point fine-tuning, then UI enhancements
