@@ -2,23 +2,28 @@
 
 ## 🚨 CRITICAL: Project Structure
 
-**TWO SEPARATE IMPLEMENTATIONS EXIST:**
+**ELECTRON APPLICATION (ACTIVE DEVELOPMENT)**
 
-1. **HTML/JavaScript Version (ACTIVE DEVELOPMENT)**
-   - Files: `index.html` + `script.js`
-   - Current development target following the step-by-step plan
-   - Serve with: `npx serve . --listen 3000` then open http://localhost:3000
-   - Status: Step 7 completed (Visual Cue Point Timeline)
-   - Next: Step 8 (Add Tab System)
+This is now an Electron-based desktop application for production live performance use.
 
-2. **React/TypeScript Version (ADVANCED PROTOTYPE)**
-   - Files: `src/` directory with React components
-   - Contains pre-built advanced features from Steps 5-12
-   - Run with: `npm start` (serves on port 3000)
-   - Status: Prototype with all components but not following development plan
-   - DO NOT USE for step-by-step development
+**Running the Application:**
+- **Development mode:** `npm start` (launches Electron app)
+- **Build distributables:** `npm run build` (creates .exe, .dmg, etc.)
+- **Install dependencies:** `npm install` (required after cloning)
 
-**IMPORTANT:** Always work on the HTML version unless specifically switching to React implementation.
+**Architecture:**
+- **Main Process:** `main.js` - Electron window management, native APIs, MIDI integration
+- **Renderer Process:** `index.html` + `script.js` - UI and video playback logic
+- **IPC Communication:** `preload.js` - Secure bridge between main and renderer processes
+
+**Status:** Phase 2 - Electron Conversion (from completed web prototype)
+- Web prototype (Phase 1) completed: 19/21 steps (90%)
+- Now converting to Electron for production performance use
+- All core features validated in web version
+
+**Legacy Code:**
+- `src/` directory contains old React/TypeScript prototype (can be ignored/removed)
+- Git history on `master` branch contains complete web prototype version
 
 ---
 
@@ -106,11 +111,36 @@ A live video performance application designed for remixing the 1927 film Metropo
 
 \### MIDI Integration
 
-\- Everything except individual cue points must be MIDI mappable
+**Native MIDI via Electron (node-midi):**
 
-\- Comprehensive keyboard shortcuts for all functions
+\- **Direct hardware access:** Native MIDI device communication without Web MIDI API limitations
 
-\- Real-time responsiveness for live performance
+\- **Lower latency:** Critical for live drumming - sub-10ms response time
+
+\- **Reliable connection:** No browser permission prompts or connection drops
+
+\- **Device enumeration:** Automatically detect and list all connected MIDI controllers
+
+**MIDI Mapping Capabilities:**
+
+\- Everything except individual cue points must be MIDI mappable:
+  - Global transport controls (play/pause/reverse)
+  - Cue point navigation (forward/back/restart)
+  - Clip selection and switching
+  - Tab switching
+  - Speed control
+  - Output window toggle
+  - "Shit It Up" control intensity
+
+\- **MIDI Learn mode:** Click any control, trigger MIDI input, auto-map
+
+\- **Save MIDI mappings:** Stored in session files for each show setup
+
+\- **Multiple device support:** Use multiple MIDI controllers simultaneously
+
+\- **Comprehensive keyboard shortcuts:** Alternative to MIDI for all functions
+
+\- **Real-time responsiveness:** Sub-frame accuracy for live performance
 
 
 
@@ -255,17 +285,33 @@ git push origin master
 
 \## Current Development Status
 
-\- Initial planning and requirements gathering phase  
+**Phase 2: Electron Conversion - IN PROGRESS**
 
-\- Need to create detailed UI mockup with numbered annotations
+\- Converting validated web prototype to Electron desktop application
 
-\- Core architecture planning for MIDI integration optimized for drummer control
+\- Branch: `electron-conversion` (merges to `master` when complete)
 
-\- Video playback engine selection and testing for 1927 film footage
+\- Core features completed in web prototype (Phase 1):
+  - ✅ 6x6 clip matrix with drag-and-drop video loading
+  - ✅ Unlimited cue points per clip with draggable timeline markers
+  - ✅ Tab system for multi-song organization
+  - ✅ Session save/load functionality
+  - ✅ Keyboard shortcuts system
+  - ✅ Dual-screen output window
+  - ✅ Per-clip speed control (0.1x-10x)
+  - ✅ File browser with drag-and-drop
+  - ✅ Clip management (move/remove)
+
+\- Electron conversion tasks:
+  - Setup Electron project structure (main.js, preload.js, package.json)
+  - Migrate existing HTML/CSS/JS to Electron renderer process
+  - Implement native MIDI integration via node-midi
+  - Optimize for production performance (hardware acceleration, native file access)
+  - Create distributable packages for Windows/Mac
 
 \- \*\*Source material\*\*: Working with 1927 Metropolis film segments
 
-\- \*\*Performance testing\*\*: Ensure smooth playback of vintage film formats and frame rates
+\- \*\*Performance testing\*\*: Ensure smooth playback of vintage film formats and frame rates with native video acceleration
 
 
 
@@ -513,15 +559,44 @@ When the dial is turned up, progressively add visual/interface chaos:
 
 \## Architecture Considerations
 
-\- Cross-platform compatibility (Windows/Mac for live performance setups)
+**Electron-Specific Architecture:**
 
+\- **Main Process (main.js):**
+  - Window management (main window + output window)
+  - Native MIDI integration via node-midi
+  - File system access without browser restrictions
+  - IPC message routing between processes
+  - Application lifecycle management
+
+\- **Renderer Process (index.html + script.js):**
+  - UI rendering and user interactions
+  - Video playback and cue point management
+  - Session state management
+  - Communication with main process via IPC
+
+\- **Preload Script (preload.js):**
+  - Secure bridge between main and renderer
+  - Exposes only necessary APIs to renderer
+  - Protects against security vulnerabilities
+
+**Performance Optimizations:**
+\- Hardware video acceleration (native GPU access)
+\- Direct file system access (no blob URLs)
+\- Native video codecs for better performance
+\- Lower latency MIDI processing
+\- Efficient memory management for multiple videos
+
+**Cross-Platform:**
+\- Windows and Mac support via electron-builder
+\- Distributable packages (.exe, .dmg, .app, etc.)
+\- Consistent behavior across platforms
+
+**Development Benefits:**
+\- 90% code reuse from web prototype
+\- Rapid iteration with hot reload (electron-reload)
+\- Native debugging tools (Chrome DevTools)
 \- Plugin architecture for future effects/features
-
 \- Modular design for easy maintenance and updates
-
-\- Efficient video decoding and rendering pipeline
-
-\- Real-time video preview rendering for output window
 
 
 
