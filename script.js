@@ -1400,11 +1400,35 @@ document.addEventListener('DOMContentLoaded', function() {
             // Jump to first cue point
             const firstCuePoint = cuePoints[0];
             video.currentTime = firstCuePoint.time;
-            console.log(`Restarted clip to first cue point: ${formatTime(firstCuePoint.time)}`);
+
+            // Set flag to allow playing through this cue point
+            justNavigatedToCue = true;
+            lastNavigatedCueTime = firstCuePoint.time;
+
+            // Pressing R always means "play from start" - set play intent
+            globalPlayIntent = true;
+            video.play().then(() => {
+                updatePlayButtonState();
+                console.log(`Restarted and playing from first cue point: ${formatTime(firstCuePoint.time)}`);
+            }).catch(e => {
+                console.error('Error playing from first cue:', e);
+            });
         } else {
             // Jump to beginning if no cue points
             video.currentTime = 0;
-            console.log('Restarted clip to beginning (no cue points)');
+
+            // Set flag to allow playing through first cue
+            justNavigatedToCue = true;
+            lastNavigatedCueTime = 0;
+
+            // Pressing R always means "play from start" - set play intent
+            globalPlayIntent = true;
+            video.play().then(() => {
+                updatePlayButtonState();
+                console.log('Restarted and playing from beginning (no cue points)');
+            }).catch(e => {
+                console.error('Error playing from beginning:', e);
+            });
         }
     }
 
@@ -1447,12 +1471,37 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (targetCuePoint) {
+            // Jump backwards to the previous cue point, then play forward
             video.currentTime = targetCuePoint.time;
-            console.log(`Navigated to previous cue point: ${formatTime(targetCuePoint.time)}`);
+
+            // Set flag to allow playing through this cue point
+            justNavigatedToCue = true;
+            lastNavigatedCueTime = targetCuePoint.time;
+
+            // Pressing Q means "go back and play from previous cue" - set play intent
+            globalPlayIntent = true;
+            video.play().then(() => {
+                updatePlayButtonState();
+                console.log(`Jumped back to and playing from: ${formatTime(targetCuePoint.time)}`);
+            }).catch(e => {
+                console.error('Error playing from previous cue:', e);
+            });
         } else {
             // If no previous cue point found, go to beginning
             video.currentTime = 0;
-            console.log('Navigated to beginning (no previous cue point)');
+
+            // Set flag to allow playing through first cue
+            justNavigatedToCue = true;
+            lastNavigatedCueTime = 0;
+
+            // Pressing Q means "go to beginning and play" - set play intent
+            globalPlayIntent = true;
+            video.play().then(() => {
+                updatePlayButtonState();
+                console.log('Jumped to beginning and playing');
+            }).catch(e => {
+                console.error('Error playing from beginning:', e);
+            });
         }
     }
 
@@ -1495,8 +1544,20 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (targetCuePoint) {
-            video.currentTime = targetCuePoint.time;
-            console.log(`Navigated to next cue point: ${formatTime(targetCuePoint.time)}`);
+            // Don't jump - just start playing from current position to next cue
+            // The video will naturally play until it reaches the target cue point and stops there
+
+            // Clear the navigation flag since we're starting fresh
+            justNavigatedToCue = false;
+
+            // Pressing W always means "play to next cue" - set play intent
+            globalPlayIntent = true;
+            video.play().then(() => {
+                updatePlayButtonState();
+                console.log(`Playing from ${formatTime(video.currentTime)} to next cue point: ${formatTime(targetCuePoint.time)}`);
+            }).catch(e => {
+                console.error('Error playing to next cue:', e);
+            });
         } else {
             // Silently do nothing when no more cue points ahead
             console.log('No more cue points ahead');
@@ -1506,6 +1567,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Timeline functionality
     let isDragging = false;
     let videoDuration = 0;
+
+    // Track when we just navigated to a cue point (to allow playing through it)
+    let justNavigatedToCue = false;
+    let lastNavigatedCueTime = 0;
 
     // Format time for timeline display (MM:SS)
     function formatTimeShort(seconds) {
@@ -1543,6 +1608,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function setupCueMarkerDrag(marker, clipNumber, cueIndex) {
         let isDraggingCue = false;
         let dragTooltip = null;
+        let wasPlayingBeforeDrag = false;
 
         marker.addEventListener('mousedown', function(e) {
             // Only left click for dragging
@@ -1553,6 +1619,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             isDraggingCue = true;
             marker.classList.add('dragging');
+
+            // Store play state and pause video for scrubbing
+            wasPlayingBeforeDrag = !video.paused;
+            if (wasPlayingBeforeDrag) {
+                video.pause();
+                if (outputVideo) outputVideo.pause();
+            }
 
             // Create tooltip
             dragTooltip = document.createElement('div');
@@ -1580,6 +1653,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update the actual cue point time in the data
                 clipCuePoints[clipNumber][cueIndex].time = newTime;
 
+                // Scrub video to show the cue point position during drag
+                if (video && video.duration > 0) {
+                    try {
+                        video.currentTime = newTime;
+                        // Also update output window if open
+                        if (outputVideo && outputVideo.duration > 0) {
+                            outputVideo.currentTime = newTime;
+                        }
+                        console.log(`Scrubbing to: ${formatTime(newTime)}`);
+                    } catch (e) {
+                        console.error('Error scrubbing video:', e);
+                    }
+                }
+
                 // Update cue points list in real-time
                 updateCuePointsList();
             }
@@ -1594,6 +1681,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (dragTooltip) {
                     dragTooltip.remove();
                     dragTooltip = null;
+                }
+
+                // Restore playing state if it was playing before drag
+                if (wasPlayingBeforeDrag) {
+                    video.play().catch(e => console.error('Error resuming playback:', e));
+                    if (outputVideo) {
+                        outputVideo.play().catch(e => console.error('Error resuming output playback:', e));
+                    }
                 }
 
                 // Sort cue points by time after dragging
@@ -2897,6 +2992,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     for (let cuePoint of cuePoints) {
                         // If within 0.1 seconds of a cue point, pause
                         if (Math.abs(currentTime - cuePoint.time) < 0.1) {
+                            // Don't stop if we just navigated to this cue point
+                            if (justNavigatedToCue && Math.abs(cuePoint.time - lastNavigatedCueTime) < 0.15) {
+                                // Clear the flag once we've moved past the navigated cue point
+                                if (Math.abs(currentTime - lastNavigatedCueTime) > 0.2) {
+                                    justNavigatedToCue = false;
+                                }
+                                continue; // Skip stopping at this cue point
+                            }
+
                             video.pause();
                             globalPlayIntent = false;
                             updatePlayButtonState();
