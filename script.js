@@ -1549,31 +1549,48 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Get current cue index (default to -1 if not set, meaning before first cue)
-        const currentIndex = clipCurrentCueIndex[clipNumber] !== undefined ? clipCurrentCueIndex[clipNumber] : -1;
+        const currentTime = video.currentTime;
 
-        // Calculate next index
-        const nextIndex = currentIndex + 1;
+        // Find next cue point after current time (time-based search)
+        let targetCuePoint = null;
+        let targetIndex = -1;
 
-        if (nextIndex >= cuePoints.length) {
-            console.log('Already at last cue point');
+        for (let i = 0; i < cuePoints.length; i++) {
+            if (cuePoints[i].time > currentTime + 0.1) { // 0.1 second tolerance
+                targetCuePoint = cuePoints[i];
+                targetIndex = i;
+                break;
+            }
+        }
+
+        if (!targetCuePoint) {
+            console.log('No more cue points ahead');
             return;
         }
 
-        const targetCuePoint = cuePoints[nextIndex];
+        // Check if we're already AT this cue point (within tolerance)
+        const distanceToCue = Math.abs(currentTime - targetCuePoint.time);
 
-        // Update current cue index to the target
-        clipCurrentCueIndex[clipNumber] = nextIndex;
+        if (distanceToCue > 0.1) {
+            // NOT at the cue - JUMP to it
+            video.currentTime = targetCuePoint.time;
+            console.log(`W key: Jumped to cue ${targetIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
+        } else {
+            // Already AT the cue - just play from here
+            console.log(`W key: Playing from current cue ${targetIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
+        }
+
+        // Update current cue index for state tracking
+        clipCurrentCueIndex[clipNumber] = targetIndex;
 
         // Set flag to allow playing through this cue point
         justNavigatedToCue = true;
         lastNavigatedCueTime = targetCuePoint.time;
 
-        // Pressing W always means "play to next cue" - set play intent
+        // Start playing - will play until next cue and stop (via cue-stop logic)
         globalPlayIntent = true;
         video.play().then(() => {
             updatePlayButtonState();
-            console.log(`W key: Sequential navigation to cue ${nextIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
         }).catch(e => {
             console.error('Error playing to next cue:', e);
         });
