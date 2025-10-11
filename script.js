@@ -1,4 +1,15 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // CRITICAL: Check if Electron API is available
+    if (!window.electronAPI) {
+        console.error('FATAL ERROR: electronAPI is not available!');
+        console.error('This means the preload script did not load correctly.');
+        console.error('Check that main.js is loading preload.js correctly.');
+        alert('Fatal Error: Electron API not available. Please check the console for details.');
+        return; // Stop execution
+    }
+    console.log('✓ Electron API is available');
+    console.log('Available methods:', Object.keys(window.electronAPI));
+
     const video = document.getElementById('videoPlayer');
     const prevClipBtn = document.getElementById('prevClipBtn');
     const reverseBtn = document.getElementById('reverseBtn');
