@@ -34,7 +34,7 @@
 ---
 
 ## Progress Tracker
-- **Current Step:** Step 19 - Enhanced Output Window with Scrubber
+- **Current Step:** Step 18.5 - Cue Point Workflow Fixes
 - **Completed Steps:** 18/21 (86% complete)
 - **Current Phase:** Team Feedback Integration & Polish
 
@@ -594,6 +594,47 @@ When working on each step:
 
 ---
 
+### Step 18.5: Cue Point Workflow Fixes
+**Status:** Not Started
+**Priority:** HIGH - Critical workflow issues blocking effective use of Step 18
+**Type:** Hotfix for Step 18 functionality
+
+**What to build:**
+
+**Fix 1: Play-Through Cue Point Navigation**
+- Modify `navigateToNextCuePoint()` to continue playing instead of jumping
+- Modify `navigateToPreviousCuePoint()` to respect play state
+- Modify `restartClip()` to respect play state
+- Check `globalPlayIntent` or video paused state before/after navigation
+- Start playback after seeking to cue point if video should be playing
+
+**Fix 2: Output Window Sync During Cue Drag**
+- Update `setupCueMarkerDrag()` function's `onMouseMove` handler
+- Add `video.currentTime = newTime` to sync main video during drag
+- Add `if (outputVideo) outputVideo.currentTime = newTime` to sync output window
+- Provides real-time visual feedback in both windows during cue adjustment
+
+**Testing checklist:**
+- [ ] Press W (next cue) - video plays to next cue point, doesn't just jump
+- [ ] Press Q (prev cue) - video plays to previous cue if was playing
+- [ ] Press R (restart) - respects play state
+- [ ] Cue-stop setting still works (stops at cue points when enabled)
+- [ ] Open output window and drag cue point - output window seeks in real-time
+- [ ] Both windows show same frame during cue point drag
+- [ ] All existing functionality continues working
+
+**Commit messages:**
+1. `Fix cue point navigation to play-through instead of jump`
+2. `Add output window real-time sync during cue point dragging`
+
+**Must continue working:**
+- All Step 18 draggable cue point features
+- All transport controls
+- Output window basic sync
+- Session save/load
+
+---
+
 ### Step 19: Enhanced Output Window with Scrubber
 **Status:** Not Started
 **Priority:** MEDIUM - Quality of life for setup workflow
@@ -694,5 +735,5 @@ See BOUNCE_MODE_TODO.md - bounce mode has lag/freeze when transitioning from for
 
 ---
 
-**Last Updated:** Team feedback integration - Step 17 in progress
-**Next Steps:** Complete clip management, then cue point fine-tuning, then UI enhancements
+**Last Updated:** Team feedback integration - Step 18.5 workflow fixes in progress
+**Next Steps:** Complete Step 18.5 hotfixes, then enhanced output window (Step 19)
