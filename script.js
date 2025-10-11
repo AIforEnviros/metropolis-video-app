@@ -2257,7 +2257,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Clip matrix refreshed');
     }
 
-    async function loadVideoFromFile(file) {
+    function loadVideoFromFile(file) {
         if (!selectedClipSlot) {
             alert('Please select a clip slot first');
             return;
