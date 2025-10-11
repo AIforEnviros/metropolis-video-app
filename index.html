@@ -991,6 +991,21 @@
             opacity: 1;
         }
 
+        .context-menu-separator {
+            height: 1px;
+            background-color: #555;
+            margin: 4px 0;
+        }
+
+        .context-menu-action {
+            color: #ff6666;
+        }
+
+        .context-menu-action:hover {
+            background-color: #4a2020;
+            color: #ff8888;
+        }
+
         /* Cue Point Stop Toggle */
         .clip-cue-stop-toggle {
             position: absolute;
@@ -1210,6 +1225,12 @@
             <span class="context-menu-icon">⇆</span>
             <span class="context-menu-label">Bounce (Forward ↔ Reverse)</span>
             <span class="context-menu-check">✓</span>
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item context-menu-action" data-action="clear">
+            <span class="context-menu-icon">🗑️</span>
+            <span class="context-menu-label">Clear Clip</span>
+            <span class="context-menu-check"></span>
         </div>
     </div>
 

@@ -660,6 +660,90 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Clear all data for a clip
+    function clearClip(clipNumber) {
+        // Remove video data
+        if (clipVideos[clipNumber]) {
+            // Revoke blob URL if it exists to free memory
+            if (clipVideos[clipNumber].url && clipVideos[clipNumber].url.startsWith('blob:')) {
+                URL.revokeObjectURL(clipVideos[clipNumber].url);
+            }
+            delete clipVideos[clipNumber];
+        }
+
+        // Remove cue points
+        delete clipCuePoints[clipNumber];
+
+        // Remove speed setting
+        delete clipSpeeds[clipNumber];
+
+        // Remove custom name
+        delete clipNames[clipNumber];
+
+        // Remove playback mode
+        delete clipModes[clipNumber];
+
+        // Remove cue stop setting
+        delete clipCueStop[clipNumber];
+
+        // Update the clip slot UI
+        const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
+        if (slot) {
+            slot.classList.remove('has-video', 'selected');
+
+            // Remove thumbnail
+            const thumbnailContainer = slot.querySelector('.clip-thumbnail-container');
+            if (thumbnailContainer) {
+                const thumbnail = thumbnailContainer.querySelector('.clip-thumbnail');
+                if (thumbnail) {
+                    thumbnail.remove();
+                }
+            }
+
+            // Reset content
+            const content = slot.querySelector('.clip-slot-content');
+            if (content) {
+                const label = content.querySelector('.clip-slot-label');
+                const filename = content.querySelector('.clip-slot-filename');
+
+                if (label) {
+                    label.textContent = `Clip ${clipNumber + 1}`;
+                    label.classList.remove('editing');
+                    label.contentEditable = false;
+                }
+
+                if (filename) {
+                    filename.textContent = '';
+                }
+            }
+
+            // Remove mode indicator
+            const modeIndicator = slot.querySelector('.clip-mode-indicator');
+            if (modeIndicator) {
+                modeIndicator.remove();
+            }
+
+            // Remove cue stop toggle
+            const cueStopToggle = slot.querySelector('.clip-cue-stop-toggle');
+            if (cueStopToggle) {
+                cueStopToggle.remove();
+            }
+        }
+
+        // If this was the selected slot and it was playing, pause the video
+        if (selectedClipSlot && parseInt(selectedClipSlot.dataset.clipNumber) === clipNumber) {
+            video.pause();
+            globalPlayIntent = false;
+            updateTransportButtonStates();
+
+            // Clear cue points display
+            updateCuePointsList();
+        }
+
+        markSessionModified();
+        console.log(`Cleared clip ${clipNumber}`);
+    }
+
     // Toggle cue point stop setting for a clip
     function toggleClipCueStop(clipNumber) {
         // Default is true if not set
@@ -2175,9 +2259,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const contextMenuItems = clipContextMenu.querySelectorAll('.context-menu-item');
     contextMenuItems.forEach(item => {
         item.addEventListener('click', function() {
-            const mode = item.dataset.mode;
             if (contextMenuClipNumber !== null) {
-                setClipMode(contextMenuClipNumber, mode);
+                const mode = item.dataset.mode;
+                const action = item.dataset.action;
+
+                if (action === 'clear') {
+                    clearClip(contextMenuClipNumber);
+                } else if (mode) {
+                    setClipMode(contextMenuClipNumber, mode);
+                }
             }
             hideClipContextMenu();
         });
