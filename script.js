@@ -662,10 +662,38 @@ document.addEventListener('DOMContentLoaded', function() {
     function showClipContextMenu(event, clipNumber) {
         contextMenuClipNumber = clipNumber;
 
-        // Position the menu at mouse cursor
-        clipContextMenu.style.left = event.pageX + 'px';
-        clipContextMenu.style.top = event.pageY + 'px';
+        // Show menu first (invisible) to get dimensions
         clipContextMenu.style.display = 'block';
+
+        // Get menu dimensions
+        const menuWidth = clipContextMenu.offsetWidth;
+        const menuHeight = clipContextMenu.offsetHeight;
+
+        // Get viewport dimensions
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        // Calculate position, ensuring menu stays within viewport
+        let left = event.pageX;
+        let top = event.pageY;
+
+        // Adjust horizontal position if menu would go off right edge
+        if (left + menuWidth > viewportWidth) {
+            left = viewportWidth - menuWidth - 10; // 10px margin from edge
+        }
+
+        // Adjust vertical position if menu would go off bottom edge
+        if (top + menuHeight > viewportHeight) {
+            top = viewportHeight - menuHeight - 10; // 10px margin from edge
+        }
+
+        // Ensure menu doesn't go off left or top edges
+        if (left < 10) left = 10;
+        if (top < 10) top = 10;
+
+        // Position the menu
+        clipContextMenu.style.left = left + 'px';
+        clipContextMenu.style.top = top + 'px';
 
         // Get current mode for this clip (default is 'forward-stop')
         const currentMode = clipModes[clipNumber] || 'forward-stop';
