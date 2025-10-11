@@ -88,6 +88,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track whether clips stop at cue points (tabIndex -> { clipNumber -> boolean })
     const tabClipCueStop = {};
 
+    // Track current cue index for sequential navigation (tabIndex -> { clipNumber -> index })
+    const tabClipCurrentCueIndex = {};
+
     // Initialize tab data structures for default 5 tabs
     for (let i = 0; i < 5; i++) {
         tabClipVideos[i] = {};
@@ -96,6 +99,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipNames[i] = {};
         tabClipModes[i] = {};
         tabClipCueStop[i] = {};
+        tabClipCurrentCueIndex[i] = {};
     }
 
     // Legacy references for current tab's data (for compatibility)
@@ -105,6 +109,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let clipNames = tabClipNames[currentTab];
     let clipModes = tabClipModes[currentTab];
     let clipCueStop = tabClipCueStop[currentTab];
+    let clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
 
     // File browser state
     let currentFolderPath = '';
@@ -180,7 +185,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 speeds: tabClipSpeeds,
                 clipNames: tabClipNames,
                 clipModes: tabClipModes,
-                clipCueStop: tabClipCueStop
+                clipCueStop: tabClipCueStop,
+                currentCueIndex: tabClipCurrentCueIndex
             }
         };
     }
@@ -283,6 +289,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Restoring cue stop settings:', sessionData.tabs.clipCueStop);
                 Object.assign(tabClipCueStop, sessionData.tabs.clipCueStop);
             }
+            if (sessionData.tabs.currentCueIndex) {
+                console.log('Restoring current cue indices:', sessionData.tabs.currentCueIndex);
+                Object.assign(tabClipCurrentCueIndex, sessionData.tabs.currentCueIndex);
+            }
 
             console.log('After restoring - tab data:', tabClipVideos);
 
@@ -368,6 +378,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tabClipNames[i] = {};
             tabClipModes[i] = {};
             tabClipCueStop[i] = {};
+            tabClipCurrentCueIndex[i] = {};
         }
 
         // Update current references
@@ -377,6 +388,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipNames = tabClipNames[currentTab];
         clipModes = tabClipModes[currentTab];
         clipCueStop = tabClipCueStop[currentTab];
+        clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
 
         // Clear UI
         refreshClipMatrix();
@@ -964,20 +976,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // Auto-start playback when clip is selected
+            // Apply speed when video is loaded
             video.addEventListener('loadeddata', function() {
                 // Apply the correct speed for this clip
                 const clipSpeed = clipSpeeds[clipNumber] || 1.0;
                 setVideoSpeed(clipSpeed);
 
-                // Always auto-start when a clip is selected
-                video.play().then(() => {
-                    console.log('Auto-started clip on selection');
-                    globalPlayIntent = true;
-                    updatePlayButtonState();
-                }).catch(e => {
-                    console.error('Error auto-playing clip:', e);
-                });
+                // Don't auto-play - respect user's globalPlayIntent
+                // If globalPlayIntent is true, play; otherwise stay paused
+                if (globalPlayIntent) {
+                    video.play().then(() => {
+                        console.log('Resumed playback on clip selection (globalPlayIntent was true)');
+                        updatePlayButtonState();
+                    }).catch(e => {
+                        console.error('Error resuming playback:', e);
+                    });
+                } else {
+                    console.log('Clip loaded but not playing (globalPlayIntent was false)');
+                }
             }, { once: true });
 
             updatePlayButtonState();
@@ -1397,9 +1413,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const cuePoints = clipCuePoints[clipNumber] || [];
 
         if (cuePoints.length > 0) {
-            // Jump to first cue point
+            // Jump to first cue point and reset index to 0
             const firstCuePoint = cuePoints[0];
             video.currentTime = firstCuePoint.time;
+            clipCurrentCueIndex[clipNumber] = 0;
 
             // Set flag to allow playing through this cue point
             justNavigatedToCue = true;
@@ -1409,13 +1426,14 @@ document.addEventListener('DOMContentLoaded', function() {
             globalPlayIntent = true;
             video.play().then(() => {
                 updatePlayButtonState();
-                console.log(`Restarted and playing from first cue point: ${formatTime(firstCuePoint.time)}`);
+                console.log(`R key: Restarted at cue 1/${cuePoints.length} at ${formatTime(firstCuePoint.time)}`);
             }).catch(e => {
                 console.error('Error playing from first cue:', e);
             });
         } else {
             // Jump to beginning if no cue points
             video.currentTime = 0;
+            clipCurrentCueIndex[clipNumber] = -1;
 
             // Set flag to allow playing through first cue
             justNavigatedToCue = true;
@@ -1425,7 +1443,7 @@ document.addEventListener('DOMContentLoaded', function() {
             globalPlayIntent = true;
             video.play().then(() => {
                 updatePlayButtonState();
-                console.log('Restarted and playing from beginning (no cue points)');
+                console.log('R key: Restarted at beginning (no cue points)');
             }).catch(e => {
                 console.error('Error playing from beginning:', e);
             });
@@ -1458,51 +1476,51 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const currentTime = video.currentTime;
+        // Get current cue index (default to 0 if not set)
+        const currentIndex = clipCurrentCueIndex[clipNumber] !== undefined ? clipCurrentCueIndex[clipNumber] : 0;
 
-        // Find the previous cue point (the last one that's before current time)
-        let targetCuePoint = null;
+        // Calculate previous index
+        const prevIndex = currentIndex - 1;
 
-        for (let i = cuePoints.length - 1; i >= 0; i--) {
-            if (cuePoints[i].time < currentTime - 0.1) { // 0.1 second tolerance
-                targetCuePoint = cuePoints[i];
-                break;
-            }
-        }
-
-        if (targetCuePoint) {
-            // Jump backwards to the previous cue point, then play forward
-            video.currentTime = targetCuePoint.time;
-
-            // Set flag to allow playing through this cue point
-            justNavigatedToCue = true;
-            lastNavigatedCueTime = targetCuePoint.time;
-
-            // Pressing Q means "go back and play from previous cue" - set play intent
-            globalPlayIntent = true;
-            video.play().then(() => {
-                updatePlayButtonState();
-                console.log(`Jumped back to and playing from: ${formatTime(targetCuePoint.time)}`);
-            }).catch(e => {
-                console.error('Error playing from previous cue:', e);
-            });
-        } else {
-            // If no previous cue point found, go to beginning
+        if (prevIndex < 0) {
+            // Go to beginning if we're before first cue
             video.currentTime = 0;
+            clipCurrentCueIndex[clipNumber] = -1;
 
             // Set flag to allow playing through first cue
             justNavigatedToCue = true;
             lastNavigatedCueTime = 0;
 
-            // Pressing Q means "go to beginning and play" - set play intent
             globalPlayIntent = true;
             video.play().then(() => {
                 updatePlayButtonState();
-                console.log('Jumped to beginning and playing');
+                console.log('Q key: Jumped to beginning before first cue');
             }).catch(e => {
                 console.error('Error playing from beginning:', e);
             });
+            return;
         }
+
+        const targetCuePoint = cuePoints[prevIndex];
+
+        // Update current cue index to the target
+        clipCurrentCueIndex[clipNumber] = prevIndex;
+
+        // Jump backwards to the previous cue point
+        video.currentTime = targetCuePoint.time;
+
+        // Set flag to allow playing through this cue point
+        justNavigatedToCue = true;
+        lastNavigatedCueTime = targetCuePoint.time;
+
+        // Pressing Q means "go back and play from previous cue" - set play intent
+        globalPlayIntent = true;
+        video.play().then(() => {
+            updatePlayButtonState();
+            console.log(`Q key: Sequential navigation to cue ${prevIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
+        }).catch(e => {
+            console.error('Error playing from previous cue:', e);
+        });
     }
 
     // Navigate to the next cue point
@@ -1531,37 +1549,34 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const currentTime = video.currentTime;
+        // Get current cue index (default to -1 if not set, meaning before first cue)
+        const currentIndex = clipCurrentCueIndex[clipNumber] !== undefined ? clipCurrentCueIndex[clipNumber] : -1;
 
-        // Find the next cue point (the first one that's after current time)
-        let targetCuePoint = null;
+        // Calculate next index
+        const nextIndex = currentIndex + 1;
 
-        for (let i = 0; i < cuePoints.length; i++) {
-            if (cuePoints[i].time > currentTime + 0.1) { // 0.1 second tolerance
-                targetCuePoint = cuePoints[i];
-                break;
-            }
+        if (nextIndex >= cuePoints.length) {
+            console.log('Already at last cue point');
+            return;
         }
 
-        if (targetCuePoint) {
-            // Don't jump - just start playing from current position to next cue
-            // The video will naturally play until it reaches the target cue point and stops there
+        const targetCuePoint = cuePoints[nextIndex];
 
-            // Clear the navigation flag since we're starting fresh
-            justNavigatedToCue = false;
+        // Update current cue index to the target
+        clipCurrentCueIndex[clipNumber] = nextIndex;
 
-            // Pressing W always means "play to next cue" - set play intent
-            globalPlayIntent = true;
-            video.play().then(() => {
-                updatePlayButtonState();
-                console.log(`Playing from ${formatTime(video.currentTime)} to next cue point: ${formatTime(targetCuePoint.time)}`);
-            }).catch(e => {
-                console.error('Error playing to next cue:', e);
-            });
-        } else {
-            // Silently do nothing when no more cue points ahead
-            console.log('No more cue points ahead');
-        }
+        // Set flag to allow playing through this cue point
+        justNavigatedToCue = true;
+        lastNavigatedCueTime = targetCuePoint.time;
+
+        // Pressing W always means "play to next cue" - set play intent
+        globalPlayIntent = true;
+        video.play().then(() => {
+            updatePlayButtonState();
+            console.log(`W key: Sequential navigation to cue ${nextIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
+        }).catch(e => {
+            console.error('Error playing to next cue:', e);
+        });
     }
 
     // Timeline functionality
@@ -1854,6 +1869,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipNames = tabClipNames[currentTab];
         clipModes = tabClipModes[currentTab];
         clipCueStop = tabClipCueStop[currentTab];
+        clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
 
         // Clear current selection (each tab has its own selection)
         if (selectedClipSlot) {
@@ -2989,7 +3005,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Check if we've reached a cue point (only in forward playback, not during bounce reverse)
                 if (bounceDirection === 1) {
                     const currentTime = video.currentTime;
-                    for (let cuePoint of cuePoints) {
+                    for (let i = 0; i < cuePoints.length; i++) {
+                        const cuePoint = cuePoints[i];
                         // If within 0.1 seconds of a cue point, pause
                         if (Math.abs(currentTime - cuePoint.time) < 0.1) {
                             // Don't stop if we just navigated to this cue point
@@ -3004,7 +3021,11 @@ document.addEventListener('DOMContentLoaded', function() {
                             video.pause();
                             globalPlayIntent = false;
                             updatePlayButtonState();
-                            console.log(`Stopped at cue point: ${formatTime(cuePoint.time)}`);
+
+                            // Update current cue index to this cue point
+                            clipCurrentCueIndex[clipNumber] = i;
+
+                            console.log(`Stopped at cue ${i + 1}/${cuePoints.length}: ${formatTime(cuePoint.time)}`);
                             break;
                         }
                     }
