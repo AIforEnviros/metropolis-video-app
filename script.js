@@ -1536,6 +1536,115 @@ document.addEventListener('DOMContentLoaded', function() {
         totalDurationDisplay.textContent = formatTimeShort(videoDuration);
     }
 
+    // Cue marker drag tooltip element
+    let cueMarkerDragTooltip = null;
+
+    // Setup cue marker drag functionality
+    function setupCueMarkerDrag(marker, clipNumber, cueIndex) {
+        let isDraggingCue = false;
+        let dragTooltip = null;
+
+        marker.addEventListener('mousedown', function(e) {
+            // Only left click for dragging
+            if (e.button !== 0) return;
+
+            e.preventDefault();
+            e.stopPropagation(); // Prevent timeline click
+
+            isDraggingCue = true;
+            marker.classList.add('dragging');
+
+            // Create tooltip
+            dragTooltip = document.createElement('div');
+            dragTooltip.className = 'cue-drag-tooltip';
+            document.body.appendChild(dragTooltip);
+
+            const rect = timelineTrack.getBoundingClientRect();
+
+            function onMouseMove(moveEvent) {
+                if (!isDraggingCue) return;
+
+                // Calculate new position
+                const moveX = moveEvent.clientX - rect.left;
+                const percentage = Math.max(0, Math.min(1, moveX / rect.width));
+                const newTime = percentage * videoDuration;
+
+                // Update marker position visually
+                marker.style.left = `${percentage * 100}%`;
+
+                // Update tooltip
+                dragTooltip.style.left = `${moveEvent.clientX + 15}px`;
+                dragTooltip.style.top = `${moveEvent.clientY - 10}px`;
+                dragTooltip.textContent = `Cue ${cueIndex + 1}: ${formatTime(newTime)}`;
+
+                // Update the actual cue point time in the data
+                clipCuePoints[clipNumber][cueIndex].time = newTime;
+
+                // Update cue points list in real-time
+                updateCuePointsList();
+            }
+
+            function onMouseUp() {
+                if (!isDraggingCue) return;
+
+                isDraggingCue = false;
+                marker.classList.remove('dragging');
+
+                // Remove tooltip
+                if (dragTooltip) {
+                    dragTooltip.remove();
+                    dragTooltip = null;
+                }
+
+                // Sort cue points by time after dragging
+                clipCuePoints[clipNumber].sort((a, b) => a.time - b.time);
+
+                // Refresh markers to show correct order
+                updateCueMarkersOnTimeline();
+
+                // Update list with sorted order
+                updateCuePointsList();
+
+                // Mark session as modified
+                markSessionModified();
+
+                // Clean up event listeners
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+
+                console.log(`Moved cue point ${cueIndex + 1} to ${formatTime(clipCuePoints[clipNumber][cueIndex].time)}`);
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+    }
+
+    // Setup cue marker double-click delete functionality
+    function setupCueMarkerDelete(marker, clipNumber, cueIndex) {
+        marker.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const cuePoint = clipCuePoints[clipNumber][cueIndex];
+            const confirmMsg = `Delete cue point ${cueIndex + 1} at ${formatTime(cuePoint.time)}?`;
+
+            if (confirm(confirmMsg)) {
+                // Remove the cue point from the array
+                clipCuePoints[clipNumber].splice(cueIndex, 1);
+
+                // Mark session as modified
+                markSessionModified();
+
+                // Refresh markers and list
+                updateCueMarkersOnTimeline();
+                updateCuePointsList();
+
+                console.log(`Deleted cue point ${cueIndex + 1}`);
+            }
+        });
+    }
+
     // Update cue point markers on timeline
     function updateCueMarkersOnTimeline() {
         if (!selectedClipSlot) {
@@ -1560,6 +1669,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const position = (cuePoint.time / videoDuration) * 100;
             marker.style.left = `${position}%`;
             marker.title = `Cue ${index + 1}: ${formatTime(cuePoint.time)}`;
+            marker.dataset.cueIndex = index;
+            marker.dataset.clipNumber = clipNumber;
+
+            // Make marker draggable
+            setupCueMarkerDrag(marker, clipNumber, index);
+
+            // Make marker deletable with double-click
+            setupCueMarkerDelete(marker, clipNumber, index);
+
             cueMarkers.appendChild(marker);
         });
     }
