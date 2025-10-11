@@ -34,8 +34,8 @@
 ---
 
 ## Progress Tracker
-- **Current Step:** Step 17 - Clip Management (Move/Remove)
-- **Completed Steps:** 16/21 (76% complete)
+- **Current Step:** Step 19 - Enhanced Output Window with Scrubber
+- **Completed Steps:** 18/21 (86% complete)
 - **Current Phase:** Team Feedback Integration & Polish
 
 ---
@@ -524,70 +524,73 @@ When working on each step:
 
 ## PHASE 7: TEAM FEEDBACK INTEGRATION
 
-### Step 17: Clip Management - Move/Remove Clips ⏳
-**Status:** In Progress
+### Step 17: Clip Management - Move/Remove Clips ✅
+**Status:** Completed
 **Priority:** HIGH - Essential workflow feature requested by Tommy
 
-**What to build:**
+**What was built:**
 - Right-click context menu option to "Clear Clip" (remove video from slot)
 - Drag-and-drop functionality to move clips between slots
 - Visual feedback during drag operations (source fades, target highlights)
 - Preserve all clip data (cue points, speed, playback mode) when moving
 - Update clip selection after move/remove operations
 
-**Testing checklist:**
-- [ ] Right-click clip shows "Clear Clip" option
-- [ ] Clear Clip removes video and resets slot to empty state
-- [ ] Can drag clip from one slot to another
-- [ ] Cue points preserved when moving clips
-- [ ] Speed settings preserved when moving clips
-- [ ] Playback mode preserved when moving clips
-- [ ] Visual feedback clear during drag operations
-- [ ] Cannot drop on empty slots (only swap with other clips)
-- [ ] Works across all tabs independently
+**Testing completed:**
+- [x] Right-click clip shows "Clear Clip" option
+- [x] Clear Clip removes video and resets slot to empty state
+- [x] Can drag clip from one slot to another
+- [x] Cue points preserved when moving clips
+- [x] Speed settings preserved when moving clips
+- [x] Playback mode preserved when moving clips
+- [x] Visual feedback clear during drag operations
+- [x] Swaps clips when dropping on occupied slot
+- [x] Works across all tabs independently
 
 **Commit messages:**
 1. `Add right-click clear clip functionality`
 2. `Implement drag-to-move clips between slots`
-3. `Preserve clip data during move operations`
+3. `Fix context menu positioning to stay within viewport`
 
-**Must continue working:**
+**Features working:**
 - All existing functionality
 - Session save/load includes moved clips correctly
 
 ---
 
-### Step 18: Draggable Cue Point Fine-Tuning
-**Status:** Not Started
+### Step 18: Draggable Cue Point Fine-Tuning ✅
+**Status:** Completed
 **Priority:** HIGH - Critical for precise performance setup
 
-**What to build:**
-- Make cue point markers on timeline draggable with mouse
+**What was built:**
+- Made cue point markers on timeline draggable with mouse
 - Show time tooltip while dragging cue point marker
 - Update cue point list in real-time as markers move
-- Visual snap feedback for precision placement
+- Visual feedback with hover/dragging states
 - Prevent cue points from being dragged outside video duration
-- Double-click cue point marker to delete it
+- Double-click cue point marker to delete it with confirmation
 
-**Testing checklist:**
-- [ ] Cue point markers can be grabbed and dragged along timeline
-- [ ] Tooltip shows exact time while dragging
-- [ ] Cue point list updates in real-time during drag
-- [ ] Cannot drag cue point before 0:00 or after video duration
-- [ ] Visual feedback clear when grabbing/dragging markers
-- [ ] Double-click deletes cue point with confirmation
-- [ ] Changes persist when switching clips/tabs
-- [ ] Session save/load preserves adjusted cue points
+**Testing completed:**
+- [x] Cue point markers can be grabbed and dragged along timeline
+- [x] Tooltip shows exact time while dragging
+- [x] Cue point list updates in real-time during drag
+- [x] Cannot drag cue point before 0:00 or after video duration
+- [x] Visual feedback clear when grabbing/dragging markers
+- [x] Double-click deletes cue point with confirmation
+- [x] Cue points auto-sort by time after dragging
+- [x] Changes persist when switching clips/tabs
+- [x] Session save/load preserves adjusted cue points
 
 **Commit messages:**
 1. `Add draggable cue point markers on timeline`
-2. `Implement real-time tooltip and list updates`
-3. `Add double-click to delete cue points`
 
-**Must continue working:**
-- Cue point navigation
-- Timeline scrubbing
-- All transport controls
+**Features working:**
+- Draggable cue point markers with smooth mouse control
+- Real-time tooltip showing time during drag
+- Real-time cue point list updates
+- Auto-sorting after drag complete
+- Double-click confirmation delete
+- All cue point navigation and timeline scrubbing
+- All transport controls working normally
 
 ---
 
