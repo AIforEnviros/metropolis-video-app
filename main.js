@@ -25,10 +25,18 @@ function createMainWindow() {
 
   mainWindow.loadFile('index.html');
 
-  // Open DevTools in development mode
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
+  // ALWAYS open DevTools for debugging
+  mainWindow.webContents.openDevTools();
+
+  // Log when page finishes loading
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('Main window finished loading');
+  });
+
+  // Log any console messages from renderer
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[Renderer] ${message}`);
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
