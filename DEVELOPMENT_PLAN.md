@@ -34,8 +34,8 @@
 ---
 
 ## Progress Tracker
-- **Current Step:** Step 18.5 - Cue Point Workflow Fixes
-- **Completed Steps:** 18/21 (86% complete)
+- **Current Step:** Step 19 - Enhanced Output Window with Scrubber
+- **Completed Steps:** 19/21 (90% complete)
 - **Current Phase:** Team Feedback Integration & Polish
 
 ---
@@ -594,43 +594,43 @@ When working on each step:
 
 ---
 
-### Step 18.5: Cue Point Workflow Fixes
-**Status:** Not Started
+### Step 18.5: Cue Point Workflow Fixes ✅
+**Status:** Completed
 **Priority:** HIGH - Critical workflow issues blocking effective use of Step 18
 **Type:** Hotfix for Step 18 functionality
 
-**What to build:**
+**What was built:**
 
 **Fix 1: Play-Through Cue Point Navigation**
-- Modify `navigateToNextCuePoint()` to continue playing instead of jumping
-- Modify `navigateToPreviousCuePoint()` to respect play state
-- Modify `restartClip()` to respect play state
-- Check `globalPlayIntent` or video paused state before/after navigation
-- Start playback after seeking to cue point if video should be playing
+- Modified `navigateToNextCuePoint()` to play from current position instead of jumping
+- Removed `video.currentTime = targetCuePoint.time` assignment to eliminate jump
+- Video now naturally plays forward until reaching next cue point
+- Existing `justNavigatedToCue` flag system allows Q/R keys to play through cues correctly
+- Cue-stop logic automatically pauses at target cue point
 
 **Fix 2: Output Window Sync During Cue Drag**
-- Update `setupCueMarkerDrag()` function's `onMouseMove` handler
-- Add `video.currentTime = newTime` to sync main video during drag
-- Add `if (outputVideo) outputVideo.currentTime = newTime` to sync output window
+- Updated `setupCueMarkerDrag()` function with pause/resume logic
+- Stores playing state before drag starts, pauses both videos
+- Scrubs both `video.currentTime` and `outputVideo.currentTime` during drag
+- Restores playing state after drag completes
 - Provides real-time visual feedback in both windows during cue adjustment
 
-**Testing checklist:**
-- [ ] Press W (next cue) - video plays to next cue point, doesn't just jump
-- [ ] Press Q (prev cue) - video plays to previous cue if was playing
-- [ ] Press R (restart) - respects play state
-- [ ] Cue-stop setting still works (stops at cue points when enabled)
-- [ ] Open output window and drag cue point - output window seeks in real-time
-- [ ] Both windows show same frame during cue point drag
-- [ ] All existing functionality continues working
+**Testing completed:**
+- [x] Press W (next cue) - video plays to next cue point, doesn't jump
+- [x] Press Q (prev cue) - video plays to previous cue if was playing
+- [x] Press R (restart) - respects play state
+- [x] Cue-stop setting still works (stops at cue points when enabled)
+- [x] Open output window and drag cue point - output window seeks in real-time
+- [x] Both windows show same frame during cue point drag
+- [x] All existing functionality continues working
 
 **Commit messages:**
-1. `Fix cue point navigation to play-through instead of jump`
-2. `Add output window real-time sync during cue point dragging`
+1. `Fix cue point workflow issues (Step 18.5)`
 
-**Must continue working:**
+**Features working:**
 - All Step 18 draggable cue point features
 - All transport controls
-- Output window basic sync
+- Output window sync during drag
 - Session save/load
 
 ---
