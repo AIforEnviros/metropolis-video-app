@@ -610,3 +610,168 @@ When the dial is turned up, progressively add visual/interface chaos:
 
 \- Configuration import/export for different performance setups
 
+---
+
+## MIDI Implementation Status
+
+**Branch:** `feature/midi-mapping` (ready for testing and refinement)
+
+**Implementation Date:** 2025-10-12
+
+### Overview
+
+Complete MIDI mapping and MIDI learn functionality has been implemented for all keyboard shortcuts. The system uses native MIDI via Electron with the `@julusian/midi` package (a modern fork of node-midi that works with Electron 28+).
+
+### What Works ✓
+
+**Phase 1: Infrastructure (Commit 9da93c4)**
+- ✅ MIDI device detection and enumeration
+- ✅ Auto-connect to first available MIDI device on startup
+- ✅ MIDI message parsing (Note On/Off, CC, Program Change)
+- ✅ IPC communication bridge (main ↔ renderer)
+- ✅ Real-time MIDI message forwarding
+
+**Phase 2: Data Structures & Routing (Commit 049b005)**
+- ✅ `midiMappings` object parallel to keyboard shortcuts
+- ✅ MIDI message listener and routing logic
+- ✅ Message matching for Note On, CC, and Program Change
+- ✅ Integration with existing action execution
+- ✅ Session persistence (save/load MIDI mappings in v1.4 format)
+
+**Phase 3: UI & Learn Workflow (Commit 07b3cd6)**
+- ✅ Updated shortcuts modal with 3-column layout (Action | Keyboard | MIDI)
+- ✅ MIDI device selector dropdown
+- ✅ "Learn MIDI" button per action with visual feedback
+- ✅ "Clear" button to remove mappings
+- ✅ Color-coded display (green when mapped)
+- ✅ MIDI learn mode working properly
+
+**Phase 4: Compatibility Fix (Commit 1f298bb)**
+- ✅ Replaced `midi` with `@julusian/midi` for Electron 28 compatibility
+- ✅ Successfully rebuilt for Electron
+- ✅ No API changes required
+
+### How to Use MIDI Mapping
+
+1. **Open Shortcuts Modal**: Click "Keyboard Shortcuts" button in header
+2. **Select MIDI Device**: Choose from dropdown (auto-detects connected devices)
+3. **Learn Mapping**: Click "Learn" button next to any action
+4. **Press MIDI Key**: Hit a key/pad on your MIDI device
+5. **Mapping Saved**: Displays format like "Ch1 Note 60" or "Ch1 CC 14"
+6. **Test It**: MIDI device now triggers that action in real-time
+7. **Clear Mapping**: Click X button to remove a mapping
+8. **Persist**: All mappings save with session files automatically
+
+### Supported MIDI Message Types
+
+- **Note On** - Drum pads, keyboard notes (ignores velocity 0)
+- **Control Change (CC)** - Knobs, faders, buttons
+- **Program Change** - Bank switching (future expansion)
+
+### All Mappable Actions (17 total)
+
+**Transport Controls:**
+- Play/Pause
+- Previous Clip
+- Next Clip
+- Reverse Play
+
+**Cue Point Navigation:**
+- Previous Cue Point
+- Next Cue Point
+- Restart Clip
+- Record Cue Point
+
+**Tab Switching:**
+- Switch to Tab 1-5
+
+**Speed Presets:**
+- Speed 0.5x
+- Speed 1x
+- Speed 1.5x
+- Speed 2x
+
+### Known Issues / TODO
+
+**Testing Required:**
+- ⚠️ User reported "MIDI is mapping properly via MIDI learn, but there are still some issues"
+- Need to test all 17 actions with actual MIDI device
+- Verify no latency/timing issues during live performance
+- Test with multiple MIDI devices simultaneously
+
+**Potential Refinements:**
+- Consider adding velocity sensitivity for note messages
+- Add visual MIDI activity indicator in main UI
+- Consider MIDI message filtering options
+- Add MIDI panic/reset button
+- Test MIDI device hotplugging (connect/disconnect while app running)
+
+**Future Enhancements:**
+- MIDI mapping for "Shit It Up" control (currently keyboard only)
+- MIDI mapping for clip selection (direct clip triggering)
+- MIDI mapping for speed slider (continuous CC control)
+- MIDI output (send visual cues back to controller with lights)
+
+### Technical Details
+
+**Package:** `@julusian/midi@3.0.2`
+- Modern fork of node-midi
+- Compatible with Electron 28+
+- Native C++ bindings for low-latency MIDI
+
+**Message Format:**
+```javascript
+{
+  type: 'noteon' | 'noteoff' | 'cc' | 'program',
+  channel: 1-16,
+  data1: 0-127,
+  data2: 0-127,
+  note: 0-127 (for note messages),
+  velocity: 0-127 (for note messages),
+  controller: 0-127 (for CC),
+  value: 0-127 (for CC)
+}
+```
+
+**Session File Format (v1.4):**
+```json
+{
+  "version": "1.4",
+  "keyboardShortcuts": { ... },
+  "midiMappings": {
+    "playPause": { "type": "noteon", "channel": 1, "note": 60 },
+    "nextCuePoint": { "type": "cc", "channel": 1, "controller": 14 },
+    ...
+  },
+  ...
+}
+```
+
+### Testing Checklist
+
+Before merging to `electron-conversion` branch:
+- [ ] Test all 17 actions with MIDI controller
+- [ ] Test MIDI device switching
+- [ ] Test session save/load with MIDI mappings
+- [ ] Test keyboard + MIDI together (no conflicts)
+- [ ] Test Note On, CC messages
+- [ ] Verify latency is acceptable for drumming
+- [ ] Test with Jarman's actual MIDI controller
+- [ ] Document any discovered issues
+- [ ] Refine based on user feedback
+
+### Merge Strategy
+
+**Current State:**
+- All code committed to `feature/midi-mapping` branch
+- 4 commits (9da93c4, 049b005, 07b3cd6, 1f298bb)
+- Pushed to GitHub
+- Ready for testing
+
+**When Ready:**
+1. Complete testing with actual MIDI device
+2. Address any discovered issues
+3. Update this documentation with test results
+4. Merge `feature/midi-mapping` → `electron-conversion`
+5. Continue with remaining Electron conversion tasks
+
