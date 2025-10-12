@@ -207,6 +207,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const sessionData = createSessionData();
 
             console.log('=== SAVING SESSION ===');
+            console.log('Current folder path being saved:', currentFolderPath);
             console.log('Current tab data:', tabClipVideos);
             console.log('Session data being saved:', sessionData);
 
@@ -240,10 +241,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function loadSessionFromFile(file) {
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = async function(e) {
             try {
                 const sessionData = JSON.parse(e.target.result);
-                loadSessionData(sessionData);
+                await loadSessionData(sessionData);
             } catch (error) {
                 console.error('Error parsing session file:', error);
                 alert('Error loading session: Invalid file format');
@@ -252,7 +253,7 @@ document.addEventListener('DOMContentLoaded', function() {
         reader.readAsText(file);
     }
 
-    function loadSessionData(sessionData) {
+    async function loadSessionData(sessionData) {
         try {
             // Validate session data
             if (!sessionData.version || !sessionData.tabs) {
@@ -320,10 +321,40 @@ document.addEventListener('DOMContentLoaded', function() {
             clipNames = tabClipNames[currentTab];
             console.log('Current tab video data:', clipVideos);
 
-            // Restore folder path
+            // Restore folder path and auto-load directory contents
             if (sessionData.currentFolderPath) {
                 currentFolderPath = sessionData.currentFolderPath;
                 currentPathDisplay.textContent = currentFolderPath;
+
+                // Automatically load directory contents
+                try {
+                    console.log('Auto-loading folder contents from:', currentFolderPath);
+                    const dirResult = await window.electronAPI.readDirectory(currentFolderPath);
+
+                    if (dirResult.success) {
+                        const files = dirResult.files.map(fileInfo => ({
+                            name: fileInfo.name,
+                            path: fileInfo.path,
+                            size: fileInfo.size,
+                            isDirectory: fileInfo.isDirectory
+                        }));
+                        displayFiles(files);
+                        upFolderBtn.disabled = false;
+                        console.log(`Auto-loaded ${files.length} files from saved folder`);
+
+                        // Auto-connect video files to session slots
+                        const videoFiles = files.filter(file => !file.isDirectory && isVideoFile(file.name));
+                        console.log(`Found ${videoFiles.length} video files, attempting auto-connection...`);
+                        videoFiles.forEach(file => {
+                            autoConnectSessionVideo(file);
+                        });
+                    } else {
+                        console.warn('Could not auto-load folder:', dirResult.error);
+                    }
+                } catch (error) {
+                    console.warn('Error auto-loading folder contents:', error);
+                    // Non-fatal - user can manually browse if folder is inaccessible
+                }
             }
 
             // Restore global play intent
@@ -470,13 +501,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (videoData && videoData.name === file.name && (!videoData.url || !videoData.file)) {
                     console.log(`MATCH FOUND! Auto-connecting ${file.name} to tab ${tabIndex}, clip ${clipNumber}`);
 
-                    // Create new blob URL for this file
-                    const url = URL.createObjectURL(file);
-                    console.log(`Created blob URL: ${url}`);
+                    // Create file URL for Electron
+                    const filePath = file.path || file.name;
+                    const url = `file:///${filePath.replace(/\\/g, '/')}`;
+                    console.log(`Created file:// URL: ${url}`);
 
                     // Update the video data with new file reference
                     videoData.url = url;
                     videoData.file = file;
+                    videoData.filePath = filePath;
                     videoData.type = 'file'; // Update type since it's now properly loaded
 
                     // Generate thumbnail for reconnected video
@@ -1046,19 +1079,33 @@ document.addEventListener('DOMContentLoaded', function() {
             // Convert to data URL
             const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.7);
 
-            // Clean up
-            URL.revokeObjectURL(video.src);
+            // Clean up (only revoke blob URLs, not file:// URLs)
+            if (video.src.startsWith('blob:')) {
+                URL.revokeObjectURL(video.src);
+            }
 
             callback(thumbnailUrl);
         };
 
         video.onerror = function() {
             console.error('Error generating thumbnail');
-            URL.revokeObjectURL(video.src);
+            // Only revoke if it's a blob URL
+            if (video.src.startsWith('blob:')) {
+                URL.revokeObjectURL(video.src);
+            }
             callback(null);
         };
 
-        video.src = URL.createObjectURL(file);
+        // Handle both Electron file paths and browser File objects
+        if (file.path) {
+            // Electron: use file:// protocol
+            video.src = `file:///${file.path.replace(/\\/g, '/')}`;
+            console.log('Generating thumbnail from Electron path:', video.src);
+        } else {
+            // Browser: use blob URL
+            video.src = URL.createObjectURL(file);
+            console.log('Generating thumbnail from blob URL');
+        }
     }
 
     // Update visual appearance of slot based on whether it has video
@@ -2271,6 +2318,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
         console.log(`Loading video from Electron file path: ${url}`);
 
+        // Auto-update folder path if we have a full path and folder isn't set yet
+        if (file.path && file.path.includes('\\')) {
+            const folderPath = file.path.substring(0, file.path.lastIndexOf('\\'));
+            if (!currentFolderPath || currentFolderPath === '' || !currentFolderPath.includes('\\')) {
+                currentFolderPath = folderPath;
+                currentPathDisplay.textContent = currentFolderPath;
+                console.log('Auto-detected folder path from video file:', currentFolderPath);
+            }
+        }
+
         // Store video information
         clipVideos[clipNumber] = {
             name: file.name,
@@ -2338,6 +2395,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             currentFolderPath = result.folderPath;
             currentPathDisplay.textContent = currentFolderPath;
+            console.log('Folder selected, currentFolderPath set to:', currentFolderPath);
 
             // Read directory contents
             const dirResult = await window.electronAPI.readDirectory(currentFolderPath);
@@ -2848,7 +2906,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (result.success) {
-                loadSessionData(result.sessionData);
+                await loadSessionData(result.sessionData);
                 console.log('Session loaded successfully from:', result.filePath);
             } else {
                 throw new Error(result.error || 'Failed to load session');
