@@ -202,7 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
-    function saveSession() {
+    async function saveSession() {
         try {
             const sessionData = createSessionData();
 
