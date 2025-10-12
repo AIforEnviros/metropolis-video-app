@@ -152,6 +152,33 @@ document.addEventListener('DOMContentLoaded', function() {
         'speedPreset2': 'Shift+4'
     };
 
+    // MIDI mappings configuration (parallel to keyboard shortcuts)
+    let midiMappings = {
+        'playPause': null,
+        'previousClip': null,
+        'nextClip': null,
+        'previousCuePoint': null,
+        'nextCuePoint': null,
+        'restartClip': null,
+        'recordCuePoint': null,
+        'reversePlay': null,
+        'tab1': null,
+        'tab2': null,
+        'tab3': null,
+        'tab4': null,
+        'tab5': null,
+        'speedPreset0.5': null,
+        'speedPreset1': null,
+        'speedPreset1.5': null,
+        'speedPreset2': null
+    };
+
+    // MIDI learn state
+    let midiLearnActive = false;
+    let midiLearnAction = null;
+    let midiDevices = [];
+    let currentMIDIDevice = null;
+
     // Track if shortcuts modal is open
     let shortcutsModalOpen = false;
 
@@ -179,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.3',
+            version: '1.4',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -187,6 +214,7 @@ document.addEventListener('DOMContentLoaded', function() {
             currentFolderPath: currentFolderPath,
             globalPlayIntent: globalPlayIntent,
             keyboardShortcuts: keyboardShortcuts,
+            midiMappings: midiMappings,
             allTabs: allTabs,
             nextTabIndex: nextTabIndex,
             tabCustomNames: tabCustomNames,
@@ -366,6 +394,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // Restore keyboard shortcuts
             if (sessionData.keyboardShortcuts) {
                 keyboardShortcuts = { ...keyboardShortcuts, ...sessionData.keyboardShortcuts };
+            }
+
+            // Restore MIDI mappings
+            if (sessionData.midiMappings) {
+                midiMappings = { ...midiMappings, ...sessionData.midiMappings };
+                console.log('Restored MIDI mappings:', midiMappings);
             }
 
             // Restore tab configuration if available (v1.2+)
@@ -2545,6 +2579,182 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Add keyboard event listener
     document.addEventListener('keydown', handleKeyboardShortcuts);
+
+    // ==============================================================
+    // MIDI MESSAGE HANDLING
+    // ==============================================================
+
+    // Initialize MIDI message listener
+    if (window.electronAPI && window.electronAPI.onMIDIMessage) {
+        window.electronAPI.onMIDIMessage((message) => {
+            handleMIDIMessage(message);
+        });
+        console.log('MIDI message listener initialized');
+    }
+
+    // Handle incoming MIDI messages
+    function handleMIDIMessage(message) {
+        // Ignore messages if we're in MIDI learn mode
+        if (midiLearnActive) {
+            captureMIDILearn(message);
+            return;
+        }
+
+        // Try to match message against mapped actions
+        for (const [action, mapping] of Object.entries(midiMappings)) {
+            if (mapping && matchesMIDIMapping(message, mapping)) {
+                console.log(`MIDI triggered action: ${action}`, message);
+                executeMappedAction(action);
+                return;
+            }
+        }
+    }
+
+    // Check if a MIDI message matches a stored mapping
+    function matchesMIDIMapping(message, mapping) {
+        // Must match type and channel
+        if (message.type !== mapping.type || message.channel !== mapping.channel) {
+            return false;
+        }
+
+        // For note messages, match note number
+        if (message.type === 'noteon' || message.type === 'noteoff') {
+            return message.note === mapping.note;
+        }
+
+        // For CC messages, match controller number
+        if (message.type === 'cc') {
+            return message.controller === mapping.controller;
+        }
+
+        // For program change, match program number
+        if (message.type === 'program') {
+            return message.program === mapping.program;
+        }
+
+        return false;
+    }
+
+    // Execute the action associated with a MIDI mapping
+    function executeMappedAction(action) {
+        // Use the same action execution logic as keyboard shortcuts
+        switch (action) {
+            case 'playPause':
+                playPauseBtn.click();
+                break;
+            case 'previousClip':
+                previousClipBtn.click();
+                break;
+            case 'nextClip':
+                nextClipBtn.click();
+                break;
+            case 'previousCuePoint':
+                previousCueBtn.click();
+                break;
+            case 'nextCuePoint':
+                nextCueBtn.click();
+                break;
+            case 'restartClip':
+                restartClipBtn.click();
+                break;
+            case 'recordCuePoint':
+                recordCuePointBtn.click();
+                break;
+            case 'reversePlay':
+                reverseBtn.click();
+                break;
+            case 'tab1':
+                switchTab(0);
+                break;
+            case 'tab2':
+                switchTab(1);
+                break;
+            case 'tab3':
+                switchTab(2);
+                break;
+            case 'tab4':
+                switchTab(3);
+                break;
+            case 'tab5':
+                switchTab(4);
+                break;
+            case 'speedPreset0.5':
+                changeSpeed(0.5);
+                break;
+            case 'speedPreset1':
+                changeSpeed(1.0);
+                break;
+            case 'speedPreset1.5':
+                changeSpeed(1.5);
+                break;
+            case 'speedPreset2':
+                changeSpeed(2.0);
+                break;
+        }
+    }
+
+    // Format MIDI mapping for display
+    function formatMIDIMapping(mapping) {
+        if (!mapping) return 'Not Mapped';
+
+        let result = `Ch${mapping.channel} `;
+
+        if (mapping.type === 'noteon') {
+            result += `Note ${mapping.note}`;
+        } else if (mapping.type === 'cc') {
+            result += `CC ${mapping.controller}`;
+        } else if (mapping.type === 'program') {
+            result += `Prog ${mapping.program}`;
+        } else {
+            result += mapping.type;
+        }
+
+        return result;
+    }
+
+    // Capture MIDI message for learning
+    function captureMIDILearn(message) {
+        // Only learn from note-on and CC messages for now
+        if (message.type !== 'noteon' && message.type !== 'cc') {
+            return;
+        }
+
+        // For note-on, require velocity > 0 (ignore note-off)
+        if (message.type === 'noteon' && message.velocity === 0) {
+            return;
+        }
+
+        console.log('MIDI Learn captured:', message);
+
+        // Store the mapping
+        const mapping = {
+            type: message.type,
+            channel: message.channel
+        };
+
+        if (message.type === 'noteon') {
+            mapping.note = message.note;
+        } else if (message.type === 'cc') {
+            mapping.controller = message.controller;
+        }
+
+        // Save to the action we're learning
+        midiMappings[midiLearnAction] = mapping;
+        console.log(`Learned MIDI mapping for ${midiLearnAction}:`, mapping);
+
+        // Exit learn mode
+        midiLearnActive = false;
+        midiLearnAction = null;
+
+        // Update the UI if the shortcuts modal is open
+        if (shortcutsModalOpen) {
+            populateShortcutsGrid();
+        }
+    }
+
+    // ==============================================================
+    // END MIDI MESSAGE HANDLING
+    // ==============================================================
 
     // Keyboard shortcuts modal functions
     let tempKeyboardShortcuts = {}; // Temporary storage for editing
