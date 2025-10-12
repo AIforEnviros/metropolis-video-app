@@ -28,6 +28,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveSession: (sessionData) => ipcRenderer.invoke('save-session', sessionData),
   loadSession: () => ipcRenderer.invoke('load-session'),
 
+  // MIDI operations
+  getMIDIDevices: () => ipcRenderer.invoke('get-midi-devices'),
+  selectMIDIDevice: (portIndex) => ipcRenderer.invoke('select-midi-device', portIndex),
+  getCurrentMIDIDevice: () => ipcRenderer.invoke('get-current-midi-device'),
+
+  // Listen for MIDI messages
+  onMIDIMessage: (callback) => {
+    ipcRenderer.on('midi-message', (event, message) => callback(message));
+  },
+
   // Platform info
   platform: process.platform,
 

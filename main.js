@@ -1,10 +1,16 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
+const midi = require('midi');
 
 // Keep track of windows
 let mainWindow = null;
 let outputWindow = null;
+
+// MIDI state
+let midiInput = null;
+let currentMIDIPort = null;
+let midiDevices = [];
 
 // Development mode detection
 const isDev = process.argv.includes('--dev');
@@ -190,9 +196,144 @@ ipcMain.handle('get-file-path', async (event, filePath) => {
   return { path: `file:///${filePath.replace(/\\/g, '/')}` };
 });
 
+// ==============================================================
+// MIDI FUNCTIONALITY
+// ==============================================================
+
+// Initialize MIDI input
+function initializeMIDI() {
+  try {
+    // Create a new MIDI input
+    midiInput = new midi.Input();
+
+    // Get number of available input ports
+    const portCount = midiInput.getPortCount();
+    console.log(`Found ${portCount} MIDI input devices`);
+
+    // Build list of MIDI devices
+    midiDevices = [];
+    for (let i = 0; i < portCount; i++) {
+      const portName = midiInput.getPortName(i);
+      midiDevices.push({ id: i, name: portName });
+      console.log(`  [${i}] ${portName}`);
+    }
+
+    // Auto-connect to first device if available
+    if (portCount > 0) {
+      connectMIDIDevice(0);
+    }
+
+    return { success: true, devices: midiDevices };
+  } catch (error) {
+    console.error('MIDI initialization error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Connect to specific MIDI device
+function connectMIDIDevice(portIndex) {
+  try {
+    // Close existing connection if any
+    if (midiInput && currentMIDIPort !== null) {
+      midiInput.closePort();
+    }
+
+    // Open the specified port
+    midiInput.openPort(portIndex);
+    currentMIDIPort = portIndex;
+
+    console.log(`Connected to MIDI device: ${midiDevices[portIndex].name}`);
+
+    // Set up message callback
+    midiInput.on('message', (deltaTime, message) => {
+      // Parse MIDI message
+      const [status, data1, data2] = message;
+      const messageType = status & 0xF0; // Get message type (high nibble)
+      const channel = (status & 0x0F) + 1; // Get channel (low nibble), 1-indexed
+
+      const midiMessage = {
+        type: getMIDIMessageType(messageType),
+        channel: channel,
+        data1: data1,
+        data2: data2,
+        raw: message
+      };
+
+      // Add specific fields based on message type
+      if (midiMessage.type === 'noteon' || midiMessage.type === 'noteoff') {
+        midiMessage.note = data1;
+        midiMessage.velocity = data2;
+      } else if (midiMessage.type === 'cc') {
+        midiMessage.controller = data1;
+        midiMessage.value = data2;
+      } else if (midiMessage.type === 'program') {
+        midiMessage.program = data1;
+      }
+
+      // Send to renderer process
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('midi-message', midiMessage);
+      }
+
+      // Log for debugging
+      console.log(`MIDI: ${midiMessage.type} Ch${channel} [${data1}, ${data2}]`);
+    });
+
+    return { success: true, port: portIndex, name: midiDevices[portIndex].name };
+  } catch (error) {
+    console.error('MIDI connection error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Helper to get MIDI message type name
+function getMIDIMessageType(statusByte) {
+  switch (statusByte) {
+    case 0x80: return 'noteoff';
+    case 0x90: return 'noteon';
+    case 0xA0: return 'aftertouch';
+    case 0xB0: return 'cc';
+    case 0xC0: return 'program';
+    case 0xD0: return 'channelpressure';
+    case 0xE0: return 'pitchbend';
+    default: return 'unknown';
+  }
+}
+
+// IPC: Get available MIDI devices
+ipcMain.handle('get-midi-devices', async () => {
+  if (midiDevices.length === 0) {
+    return initializeMIDI();
+  }
+  return { success: true, devices: midiDevices };
+});
+
+// IPC: Select MIDI device
+ipcMain.handle('select-midi-device', async (event, portIndex) => {
+  return connectMIDIDevice(portIndex);
+});
+
+// IPC: Get current MIDI device
+ipcMain.handle('get-current-midi-device', async () => {
+  return {
+    success: true,
+    port: currentMIDIPort,
+    name: currentMIDIPort !== null ? midiDevices[currentMIDIPort].name : null
+  };
+});
+
+// ==============================================================
+// END MIDI FUNCTIONALITY
+// ==============================================================
+
 // App lifecycle
 app.whenReady().then(() => {
   createMainWindow();
+
+  // Initialize MIDI after window is created
+  setTimeout(() => {
+    initializeMIDI();
+  }, 1000); // Small delay to ensure window is fully loaded
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -202,6 +343,12 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  // Clean up MIDI
+  if (midiInput && currentMIDIPort !== null) {
+    midiInput.closePort();
+    console.log('MIDI port closed');
+  }
+
   if (process.platform !== 'darwin') {
     app.quit();
   }
