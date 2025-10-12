@@ -14,12 +14,11 @@
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux"
   },
-  "dependencies": {
-    "midi": "^2.0.0"
-  },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
     "electron": "^28.1.0",
     "electron-builder": "^24.9.1",
+    "electron-rebuild": "^3.2.9",
     "electron-reload": "^2.0.0-alpha.1"
   },
   "build": {
@@ -59,5 +58,8 @@
       "icon": "assets/icon.png",
       "category": "Audio"
     }
+  },
+  "dependencies": {
+    "@julusian/midi": "^3.6.1"
   }
 }
