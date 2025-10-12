@@ -463,22 +463,39 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Check if videos need reconnection after loading a session
     function attemptAutoReconnect() {
-        let videoCount = 0;
+        let totalVideos = 0;
+        let connectedVideos = 0;
+        let disconnectedVideos = 0;
 
-        // Count total videos in session
+        // Count total videos and check connection status
         for (let tabIndex = 0; tabIndex < 5; tabIndex++) {
             const tabVideos = tabClipVideos[tabIndex];
             Object.keys(tabVideos).forEach(clipNumber => {
                 const videoData = tabVideos[clipNumber];
                 if (videoData && videoData.name) {
-                    videoCount++;
+                    totalVideos++;
+                    // Check if video is connected (has valid URL and file reference)
+                    if (videoData.url && videoData.file && videoData.filePath) {
+                        connectedVideos++;
+                    } else {
+                        disconnectedVideos++;
+                    }
                 }
             });
         }
 
-        if (videoCount > 0) {
-            alert(`Session loaded!\n\n${videoCount} video slot(s) restored with thumbnails.\n\nUse "Browse Folder" to reconnect videos - files with matching names will auto-connect.`);
+        // Only show alert if there are disconnected videos
+        if (disconnectedVideos > 0) {
+            if (connectedVideos > 0) {
+                // Some connected, some not
+                alert(`Session loaded!\n\n${connectedVideos} of ${totalVideos} video(s) auto-connected.\n\n${disconnectedVideos} video(s) need reconnection - use "Browse Folder" to reconnect.`);
+            } else {
+                // None connected
+                alert(`Session loaded!\n\n${totalVideos} video slot(s) restored with thumbnails.\n\nUse "Browse Folder" to reconnect videos - files with matching names will auto-connect.`);
+            }
         }
+        // If all videos are connected, don't show any alert (silent success)
+        console.log(`Session reconnection status: ${connectedVideos}/${totalVideos} videos connected`);
     }
 
     // Auto-connect loaded session videos when files are found
