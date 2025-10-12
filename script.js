@@ -2785,16 +2785,24 @@ document.addEventListener('DOMContentLoaded', function() {
         tempKeyboardShortcuts = { ...keyboardShortcuts };
         shortcutsModalOpen = true;
         populateShortcutsGrid();
+        loadMIDIDevices();
         shortcutsModal.style.display = 'block';
     }
 
     function closeShortcutsModalFunc() {
         shortcutsModalOpen = false;
         currentEditingAction = null;
+        // Exit MIDI learn mode if active
+        midiLearnActive = false;
+        midiLearnAction = null;
         shortcutsModal.style.display = 'none';
         // Clear any editing states
         document.querySelectorAll('.shortcut-input.editing').forEach(input => {
             input.classList.remove('editing');
+        });
+        document.querySelectorAll('.midi-learn-btn.learning').forEach(btn => {
+            btn.classList.remove('learning');
+            btn.textContent = 'Learn';
         });
     }
 
@@ -2805,10 +2813,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const row = document.createElement('div');
             row.className = 'shortcut-row';
 
+            // Label column
             const labelDiv = document.createElement('div');
             labelDiv.className = 'shortcut-label';
             labelDiv.textContent = label;
 
+            // Keyboard shortcut column
             const inputDiv = document.createElement('div');
             inputDiv.className = 'shortcut-input';
             inputDiv.textContent = tempKeyboardShortcuts[action];
@@ -2818,9 +2828,125 @@ document.addEventListener('DOMContentLoaded', function() {
                 startEditingShortcut(action, inputDiv);
             });
 
+            // MIDI mapping column
+            const midiCell = document.createElement('div');
+            midiCell.className = 'midi-mapping-cell';
+
+            const midiDisplay = document.createElement('div');
+            midiDisplay.className = 'midi-mapping-display';
+            const mapping = midiMappings[action];
+            if (mapping) {
+                midiDisplay.textContent = formatMIDIMapping(mapping);
+                midiDisplay.classList.add('has-mapping');
+            } else {
+                midiDisplay.textContent = 'Not Mapped';
+            }
+            midiDisplay.dataset.action = action;
+
+            const learnBtn = document.createElement('button');
+            learnBtn.className = 'midi-learn-btn';
+            learnBtn.textContent = 'Learn';
+            learnBtn.dataset.action = action;
+            learnBtn.addEventListener('click', function() {
+                startMIDILearn(action, learnBtn);
+            });
+
+            const clearBtn = document.createElement('button');
+            clearBtn.className = 'midi-clear-btn';
+            clearBtn.textContent = '✕';
+            clearBtn.title = 'Clear MIDI mapping';
+            clearBtn.dataset.action = action;
+            clearBtn.disabled = !mapping;
+            clearBtn.addEventListener('click', function() {
+                clearMIDIMapping(action);
+            });
+
+            midiCell.appendChild(midiDisplay);
+            midiCell.appendChild(learnBtn);
+            midiCell.appendChild(clearBtn);
+
             row.appendChild(labelDiv);
             row.appendChild(inputDiv);
+            row.appendChild(midiCell);
             shortcutsGrid.appendChild(row);
+        }
+    }
+
+    // MIDI learn workflow functions
+    function startMIDILearn(action, buttonElement) {
+        // Clear any existing learn mode
+        document.querySelectorAll('.midi-learn-btn.learning').forEach(btn => {
+            btn.classList.remove('learning');
+            btn.textContent = 'Learn';
+        });
+
+        // Enter learn mode
+        midiLearnActive = true;
+        midiLearnAction = action;
+        buttonElement.classList.add('learning');
+        buttonElement.textContent = 'Waiting...';
+        console.log(`MIDI Learn mode activated for action: ${action}`);
+    }
+
+    function clearMIDIMapping(action) {
+        midiMappings[action] = null;
+        console.log(`Cleared MIDI mapping for action: ${action}`);
+        populateShortcutsGrid();
+    }
+
+    // Load MIDI devices into selector
+    async function loadMIDIDevices() {
+        if (!window.electronAPI || !window.electronAPI.getMIDIDevices) {
+            console.log('MIDI API not available');
+            return;
+        }
+
+        try {
+            const result = await window.electronAPI.getMIDIDevices();
+            if (result.success && result.devices) {
+                midiDevices = result.devices;
+                const selector = document.getElementById('midiDeviceSelect');
+                selector.innerHTML = '';
+
+                if (midiDevices.length === 0) {
+                    selector.innerHTML = '<option value="">No MIDI devices found</option>';
+                } else {
+                    midiDevices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.textContent = device.name;
+                        selector.appendChild(option);
+                    });
+
+                    // Get current device
+                    const currentResult = await window.electronAPI.getCurrentMIDIDevice();
+                    if (currentResult.success && currentResult.port !== null) {
+                        selector.value = currentResult.port;
+                        currentMIDIDevice = currentResult.port;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error loading MIDI devices:', error);
+        }
+    }
+
+    // Handle MIDI device selection
+    async function handleMIDIDeviceChange(event) {
+        const portIndex = parseInt(event.target.value);
+        if (isNaN(portIndex)) return;
+
+        try {
+            const result = await window.electronAPI.selectMIDIDevice(portIndex);
+            if (result.success) {
+                currentMIDIDevice = portIndex;
+                console.log(`Connected to MIDI device: ${result.name}`);
+            } else {
+                console.error('Failed to select MIDI device:', result.error);
+                alert('Failed to connect to MIDI device');
+            }
+        } catch (error) {
+            console.error('Error selecting MIDI device:', error);
         }
     }
 
@@ -3159,6 +3285,12 @@ document.addEventListener('DOMContentLoaded', function() {
     resetShortcutsBtn.addEventListener('click', resetShortcutsToDefaults);
 
     saveShortcutsBtn.addEventListener('click', saveShortcutsChanges);
+
+    // MIDI device selector event listener
+    const midiDeviceSelect = document.getElementById('midiDeviceSelect');
+    if (midiDeviceSelect) {
+        midiDeviceSelect.addEventListener('change', handleMIDIDeviceChange);
+    }
 
     // Helper function to update visual playing indicator
     function updatePlayingIndicator() {

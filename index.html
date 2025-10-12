@@ -889,7 +889,7 @@
 
         .shortcuts-grid {
             display: grid;
-            grid-template-columns: 1fr 200px;
+            grid-template-columns: 1fr 180px 220px;
             gap: 10px;
             margin-bottom: 20px;
         }
@@ -934,6 +934,73 @@
             0% { opacity: 1; }
             50% { opacity: 0.7; }
             100% { opacity: 1; }
+        }
+
+        .midi-mapping-cell {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .midi-mapping-display {
+            flex: 1;
+            background-color: #555;
+            border: 2px solid #666;
+            color: white;
+            padding: 10px 8px;
+            border-radius: 6px;
+            text-align: center;
+            font-family: monospace;
+            font-size: 12px;
+            min-width: 0;
+        }
+
+        .midi-mapping-display.has-mapping {
+            background-color: #2a5a2a;
+            border-color: #4a7c4a;
+            color: #90ee90;
+        }
+
+        .midi-learn-btn {
+            background-color: #d65d0e;
+            color: white;
+            border: none;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .midi-learn-btn:hover {
+            background-color: #e6741f;
+        }
+
+        .midi-learn-btn.learning {
+            background-color: #ff6600;
+            animation: pulse 1s infinite;
+        }
+
+        .midi-clear-btn {
+            background-color: #aa3333;
+            color: white;
+            border: none;
+            padding: 10px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .midi-clear-btn:hover {
+            background-color: #cc4444;
+        }
+
+        .midi-clear-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+            opacity: 0.5;
         }
 
         .shortcuts-actions {
@@ -1211,13 +1278,20 @@
     <div id="shortcutsModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Keyboard Shortcuts</h2>
+                <h2>Keyboard & MIDI Shortcuts</h2>
                 <span class="close" id="closeShortcutsModal">&times;</span>
             </div>
             <div class="modal-body">
                 <div class="shortcuts-instructions">
-                    <p>Click on any shortcut to customize it. Press the key combination you want to assign.</p>
+                    <p><strong>Keyboard:</strong> Click on any shortcut to customize it. Press the key combination you want to assign.</p>
+                    <p><strong>MIDI:</strong> Click "Learn MIDI" and then press a key/pad on your MIDI device.</p>
                     <p><strong>Modifiers:</strong> Use Shift+, Ctrl+, Alt+, or Meta+ before the main key.</p>
+                </div>
+                <div id="midiDeviceSelector" style="margin-bottom: 15px;">
+                    <label for="midiDeviceSelect" style="color: #ccc; margin-right: 10px;">MIDI Device:</label>
+                    <select id="midiDeviceSelect" style="background-color: #404040; color: white; border: 1px solid #666; padding: 8px; border-radius: 4px; font-size: 13px;">
+                        <option value="">Loading devices...</option>
+                    </select>
                 </div>
                 <div class="shortcuts-grid" id="shortcutsGrid">
                     <!-- Shortcuts will be dynamically generated here -->
