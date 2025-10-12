@@ -96,8 +96,107 @@ Tommy: Maybe switch to normal sandwiches for the duration of this project? The m
 
 Matty: Good luck, buddy. Try not to delete everything. We believe in you! (Not really, but we're being supportive.)
 
-## Note from actual Matty: 
+## Note from actual Matty:
 Claude Code, you are a dick. My attention span is waay longer than a drum fill...maybe two drum fills. Listen up guys, most of what CC has written is funny but it's bullshit...just keep track of progress of what's happening in Development_Plan.md and inspect Claude.md for context (tell me if you think it needs any other instructions in there). At some point I'll show you both how to pull from Github and run the app on your local machines (once I figure it the fuck out). God speed wizards!
+
+---
+
+## Actually Getting This Thing Running on Your Mac
+
+Alright, so Matty figured it out. Here's how to run this thing on your Mac. Don't worry, it's easier than learning a new song.
+
+### Step 1: Install Node.js (One Time Only)
+
+This is like installing new drum software, but for code:
+
+1. Go to [https://nodejs.org](https://nodejs.org)
+2. Download the big green button that says "LTS" (it means "Long Term Support" - the stable one)
+3. Double-click the downloaded file and follow the installer (keep clicking "Continue")
+4. Done! You now have Node.js
+
+### Step 2: Open Terminal
+
+Terminal is that black screen with text that makes you look like a hacker:
+
+1. Press `Command + Space` (spotlight search)
+2. Type "Terminal"
+3. Press Enter
+4. You'll see a window with some text and a blinking cursor
+
+### Step 3: Copy-Paste These Commands
+
+Just copy each line below, paste it into Terminal, and hit Enter. Wait for each one to finish before doing the next one.
+
+```bash
+# Get the code from GitHub
+git clone https://github.com/AIforEnviros/metropolis-video-app.git
+cd metropolis-video-app
+
+# Get the latest MIDI version
+git checkout feature/midi-mapping
+
+# Install all the stuff the app needs (this takes a minute)
+npm install
+
+# Build the MIDI stuff for Mac (important!)
+npx @electron/rebuild
+
+# Start the app!
+npm start
+```
+
+**What this does:**
+- Line 1-2: Downloads the code and goes into the folder
+- Line 3: Switches to the version with MIDI working
+- Line 4: Installs dependencies (like downloading sample packs)
+- Line 5: Builds MIDI for your Mac (Intel or M1/M2)
+- Line 6: Runs the app!
+
+### Step 4: Future Runs (After First Setup)
+
+Once you've done the setup above, you only need these two lines:
+
+```bash
+cd metropolis-video-app
+npm start
+```
+
+That's it! The app should open.
+
+### Step 5: Getting Matty's Latest Changes
+
+When Matty pushes updates and you want them:
+
+```bash
+cd metropolis-video-app
+git pull
+npm start
+```
+
+(You might need to run `npm install` again if Matty added new stuff, but he'll tell you)
+
+### If Something Breaks
+
+If you see errors, try this magic fix-everything command:
+
+```bash
+cd metropolis-video-app
+rm -rf node_modules package-lock.json
+npm install
+npx @electron/rebuild
+npm start
+```
+
+This deletes everything and reinstalls it fresh. Like clearing your pedalboard and setting it up again.
+
+### Testing MIDI
+
+1. **Plug in your MIDI device BEFORE starting the app**
+2. Open the app (`npm start`)
+3. Click "Keyboard Shortcuts" button
+4. You should see your MIDI device in the dropdown
+5. Click "Learn" next to any action, then hit a pad/key
+6. Watch it map! (It'll show "Ch1 Note 60" or similar)
 
 ---
 
