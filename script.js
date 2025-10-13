@@ -2588,6 +2588,37 @@ document.addEventListener('DOMContentLoaded', function() {
     const MIDI_DEBOUNCE_MS = 15; // 15ms debounce - allows rapid drumming while preventing noise
     const midiLastTriggerTime = {}; // Track last trigger time per action
 
+    // MIDI Activity Indicator elements
+    const midiActivityIndicator = document.getElementById('midiActivityIndicator');
+    const midiActivityText = document.getElementById('midiActivityText');
+
+    // Display MIDI activity in the indicator box
+    function displayMIDIActivity(message) {
+        if (!midiActivityIndicator || !midiActivityText) return;
+
+        // Skip Note Off messages - only show Note On
+        if (message.type === 'noteoff' || (message.type === 'noteon' && message.velocity === 0)) {
+            return;
+        }
+
+        // Format the message text based on type
+        let displayText = '';
+
+        if (message.type === 'noteon') {
+            displayText = `Ch${message.channel} Note ${message.note}`;
+        } else if (message.type === 'cc') {
+            displayText = `Ch${message.channel} CC ${message.controller} (${message.value})`;
+        } else if (message.type === 'program') {
+            displayText = `Ch${message.channel} Prog ${message.program}`;
+        } else {
+            // For any other message types, show generic format
+            displayText = `Ch${message.channel} ${message.type.toUpperCase()}`;
+        }
+
+        // Update text
+        midiActivityText.textContent = displayText;
+    }
+
     // Initialize MIDI message listener
     if (window.electronAPI && window.electronAPI.onMIDIMessage) {
         window.electronAPI.onMIDIMessage((message) => {
@@ -2598,6 +2629,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Handle incoming MIDI messages
     function handleMIDIMessage(message) {
+        // Display MIDI activity (always show, even during learn mode)
+        displayMIDIActivity(message);
+
         // Ignore messages if we're in MIDI learn mode
         if (midiLearnActive) {
             captureMIDILearn(message);

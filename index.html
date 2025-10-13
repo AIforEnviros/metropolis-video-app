@@ -1157,9 +1157,46 @@
                 box-shadow: 0 0 20px rgba(0, 255, 0, 0.8), 0 0 30px rgba(0, 255, 0, 0.4);
             }
         }
+
+        /* MIDI Activity Indicator */
+        .midi-activity-indicator {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background-color: #000;
+            border: 2px solid #fff;
+            border-radius: 8px;
+            padding: 8px 14px;
+            min-width: 140px;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .midi-activity-icon {
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        .midi-activity-text {
+            font-family: monospace;
+            font-size: 12px;
+            font-weight: bold;
+            color: #fff;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
+    <!-- MIDI Activity Indicator -->
+    <div id="midiActivityIndicator" class="midi-activity-indicator">
+        <div class="midi-activity-icon">🎹</div>
+        <div id="midiActivityText" class="midi-activity-text">MIDI Ready</div>
+    </div>
+
     <div class="main-container">
         <div class="header">
             <img src="mimolume-logo.png" alt="Mimolume" class="logo">
