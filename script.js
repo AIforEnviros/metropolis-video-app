@@ -2584,6 +2584,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // MIDI MESSAGE HANDLING
     // ==============================================================
 
+    // Debounce configuration for MIDI triggers (prevents double-triggers from controller noise)
+    const MIDI_DEBOUNCE_MS = 15; // 15ms debounce - allows rapid drumming while preventing noise
+    const midiLastTriggerTime = {}; // Track last trigger time per action
+
     // Initialize MIDI message listener
     if (window.electronAPI && window.electronAPI.onMIDIMessage) {
         window.electronAPI.onMIDIMessage((message) => {
@@ -2603,6 +2607,18 @@ document.addEventListener('DOMContentLoaded', function() {
         // Try to match message against mapped actions
         for (const [action, mapping] of Object.entries(midiMappings)) {
             if (mapping && matchesMIDIMapping(message, mapping)) {
+                // Check debounce timing
+                const now = Date.now();
+                const lastTrigger = midiLastTriggerTime[action] || 0;
+                const timeSinceLastTrigger = now - lastTrigger;
+
+                if (timeSinceLastTrigger < MIDI_DEBOUNCE_MS) {
+                    console.log(`MIDI: Debounced ${action} (${timeSinceLastTrigger}ms since last trigger)`);
+                    return;
+                }
+
+                // Update last trigger time and execute action
+                midiLastTriggerTime[action] = now;
                 console.log(`MIDI triggered action: ${action}`, message);
                 executeMappedAction(action);
                 return;
@@ -2619,6 +2635,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // For note messages, match note number
         if (message.type === 'noteon' || message.type === 'noteoff') {
+            // For note-on messages, require velocity > 0 (ignore note-off disguised as velocity 0)
+            if (message.type === 'noteon' && message.velocity === 0) {
+                console.log('MIDI: Ignoring Note On with velocity 0 (key release)');
+                return false;
+            }
             return message.note === mapping.note;
         }
 
@@ -2640,19 +2661,19 @@ document.addEventListener('DOMContentLoaded', function() {
         // Use the same action execution logic as keyboard shortcuts
         switch (action) {
             case 'playPause':
-                playPauseBtn.click();
+                pausePlayBtn.click();
                 break;
             case 'previousClip':
-                previousClipBtn.click();
+                prevClipBtn.click();
                 break;
             case 'nextClip':
                 nextClipBtn.click();
                 break;
             case 'previousCuePoint':
-                previousCueBtn.click();
+                prevCuePointBtn.click();
                 break;
             case 'nextCuePoint':
-                nextCueBtn.click();
+                nextCuePointBtn.click();
                 break;
             case 'restartClip':
                 restartClipBtn.click();
