@@ -27,10 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentTimeDisplay = document.getElementById('currentTime');
     const totalDurationDisplay = document.getElementById('totalDuration');
     const tabBar = document.getElementById('tabBar');
-    const browseFolderBtn = document.getElementById('browseFolderBtn');
-    const upFolderBtn = document.getElementById('upFolderBtn');
-    const currentPathDisplay = document.getElementById('currentPath');
-    const fileList = document.getElementById('fileList');
+    // File browser elements removed - drag videos from OS file explorer instead
     const speedSlider = document.getElementById('speedSlider');
     const speedValue = document.getElementById('speedValue');
     const speedPresetBtns = document.querySelectorAll('.speed-preset-btn');
@@ -2410,42 +2407,7 @@ document.addEventListener('DOMContentLoaded', function() {
         updateCueMarkersOnTimeline();
     }
 
-    // Browse folder using Electron API
-    async function browseFolder() {
-        try {
-            const result = await window.electronAPI.selectFolder();
-
-            if (result.canceled) {
-                console.log('Folder selection cancelled');
-                return;
-            }
-
-            currentFolderPath = result.folderPath;
-            currentPathDisplay.textContent = currentFolderPath;
-            console.log('Folder selected, currentFolderPath set to:', currentFolderPath);
-
-            // Read directory contents
-            const dirResult = await window.electronAPI.readDirectory(currentFolderPath);
-
-            if (dirResult.success) {
-                // Convert files to format expected by displayFiles
-                const files = dirResult.files.map(fileInfo => ({
-                    name: fileInfo.name,
-                    path: fileInfo.path,
-                    size: fileInfo.size,
-                    isDirectory: fileInfo.isDirectory
-                }));
-
-                displayFiles(files);
-                upFolderBtn.disabled = false;
-            } else {
-                throw new Error(dirResult.error || 'Failed to read directory');
-            }
-        } catch (error) {
-            console.error('Error accessing folder:', error);
-            alert('Unable to access folder. Please try again.');
-        }
-    }
+    // File browser removed - drag videos from OS file explorer directly onto clip slots
 
     // Keyboard shortcuts functions
     function parseKeyboardShortcut(shortcut) {
@@ -3041,21 +3003,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Event listeners for file browser
-    browseFolderBtn.addEventListener('click', browseFolder);
-
-    upFolderBtn.addEventListener('click', function() {
-        // For now, just clear the file list and reset to initial state
-        fileList.innerHTML = `
-            <div class="file-item other-file">
-                <span class="file-name">Click "Browse Folder" to start...</span>
-                <span class="file-size"></span>
-            </div>
-        `;
-        currentPathDisplay.textContent = 'Select folder to browse...';
-        currentFolderPath = '';
-        upFolderBtn.disabled = true;
-    });
+    // File browser event listeners removed - drag videos from OS file explorer instead
 
     // Initialize the matrix
     createClipMatrix();
