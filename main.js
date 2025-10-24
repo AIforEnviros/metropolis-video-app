@@ -150,7 +150,7 @@ ipcMain.handle('save-session', async (event, sessionData) => {
   try {
     const result = await dialog.showSaveDialog(mainWindow, {
       title: 'Save Session',
-      defaultPath: `metropolis-session-${Date.now()}.json`,
+      defaultPath: `mimolume_${Date.now()}.json`,
       filters: [
         { name: 'Session Files', extensions: ['json'] }
       ]

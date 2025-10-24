@@ -796,7 +796,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipContextMenu.style.top = top + 'px';
 
         // Get current mode for this clip (default is 'forward-stop')
-        const currentMode = clipModes[clipNumber] || 'forward-stop';
+        const currentMode = clipModes[clipNumber] || 'loop';
 
         // Update active state for menu items
         const menuItems = clipContextMenu.querySelectorAll('.context-menu-item');
@@ -838,7 +838,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const sourceCuePoints = clipCuePoints[sourceClipNumber] || [];
         const sourceSpeed = clipSpeeds[sourceClipNumber] || 1.0;
         const sourceName = clipNames[sourceClipNumber];
-        const sourceMode = clipModes[sourceClipNumber] || 'forward-stop';
+        const sourceMode = clipModes[sourceClipNumber] || 'loop';
         const sourceCueStop = clipCueStop[sourceClipNumber];
 
         // Save target clip data (for swap)
@@ -846,7 +846,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const targetCuePoints = clipCuePoints[targetClipNumber] || [];
         const targetSpeed = clipSpeeds[targetClipNumber] || 1.0;
         const targetName = clipNames[targetClipNumber];
-        const targetMode = clipModes[targetClipNumber] || 'forward-stop';
+        const targetMode = clipModes[targetClipNumber] || 'loop';
         const targetCueStop = clipCueStop[targetClipNumber];
 
         // Move source to target
@@ -1044,7 +1044,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 video.volume = 0;
 
                 // Set loop mode based on clip mode
-                const clipMode = clipModes[clipNumber] || 'forward-stop';
+                const clipMode = clipModes[clipNumber] || 'loop';
                 video.loop = (clipMode === 'loop');
 
                 video.load();
@@ -1154,7 +1154,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const customName = clipNames[clipNumber] || `Clip ${clipNumber}`;
 
         // Get mode and cue stop settings
-        const clipMode = clipModes[clipNumber] || 'forward-stop';
+        const clipMode = clipModes[clipNumber] || 'loop';
         const cueStopEnabled = clipCueStop[clipNumber] !== undefined ? clipCueStop[clipNumber] : true;
 
         // Mode icon mapping
@@ -3239,7 +3239,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!selectedClipSlot) return;
 
         const clipNumber = selectedClipSlot.dataset.clipNumber;
-        const mode = clipModes[clipNumber] || 'forward-stop';
+        const mode = clipModes[clipNumber] || 'loop';
 
         console.log(`Video ended for clip ${clipNumber} in mode: ${mode}`);
 
