@@ -12,9 +12,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const video = document.getElementById('videoPlayer');
     const prevClipBtn = document.getElementById('prevClipBtn');
-    const reverseBtn = document.getElementById('reverseBtn');
-    const pausePlayBtn = document.getElementById('pausePlayBtn');
-    const forwardBtn = document.getElementById('forwardBtn');
     const nextClipBtn = document.getElementById('nextClipBtn');
 
     const clipsMatrix = document.getElementById('clipsMatrix');
@@ -133,14 +130,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Keyboard shortcuts configuration
     let keyboardShortcuts = {
-        'playPause': 'Space',
         'previousClip': 'ArrowLeft',
         'nextClip': 'ArrowRight',
         'previousCuePoint': 'q',
         'nextCuePoint': 'w',
         'restartClip': 'r',
         'recordCuePoint': 'c',
-        'reversePlay': 'Shift+r',
         'tab1': '1',
         'tab2': '2',
         'tab3': '3',
@@ -154,14 +149,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // MIDI mappings configuration (parallel to keyboard shortcuts)
     let midiMappings = {
-        'playPause': null,
         'previousClip': null,
         'nextClip': null,
         'previousCuePoint': null,
         'nextCuePoint': null,
         'restartClip': null,
         'recordCuePoint': null,
-        'reversePlay': null,
         'tab1': null,
         'tab2': null,
         'tab3': null,
@@ -388,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Restore global play intent
             if (sessionData.globalPlayIntent !== undefined) {
                 globalPlayIntent = sessionData.globalPlayIntent;
-                updatePlayButtonState();
+                // updatePlayButtonState() removed - no global play/pause button
             }
 
             // Restore keyboard shortcuts
@@ -1082,7 +1075,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (globalPlayIntent) {
                     video.play().then(() => {
                         console.log('Resumed playback on clip selection (globalPlayIntent was true)');
-                        updatePlayButtonState();
                     }).catch(e => {
                         console.error('Error resuming playback:', e);
                     });
@@ -1090,12 +1082,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log('Clip loaded but not playing (globalPlayIntent was false)');
                 }
             }, { once: true });
-
-            updatePlayButtonState();
         } else {
             // No video in this slot
             // globalPlayIntent unchanged - keep user's intent
-            updatePlayButtonState();
         }
 
         // Update cue points list for the newly selected clip
@@ -1341,16 +1330,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Navigated ${direction} to clip ${targetSlot.dataset.clipNumber}`);
     }
 
-    // Update pause/play button appearance based on global intent
-    function updatePlayButtonState() {
-        if (globalPlayIntent) {
-            pausePlayBtn.textContent = '⏸';
-            pausePlayBtn.classList.add('playing');
-        } else {
-            pausePlayBtn.textContent = '▶';
-            pausePlayBtn.classList.remove('playing');
-        }
-    }
+    // Note: updatePlayButtonState() removed - no global play/pause button anymore
 
     // Format time for display (convert seconds to MM:SS.ss)
     function formatTime(seconds) {
@@ -1534,7 +1514,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Pressing R always means "play from start" - set play intent
             globalPlayIntent = true;
             video.play().then(() => {
-                updatePlayButtonState();
+                // updatePlayButtonState() removed
                 console.log(`R key: Restarted at cue 1/${cuePoints.length} at ${formatTime(firstCuePoint.time)}`);
             }).catch(e => {
                 console.error('Error playing from first cue:', e);
@@ -1551,7 +1531,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Pressing R always means "play from start" - set play intent
             globalPlayIntent = true;
             video.play().then(() => {
-                updatePlayButtonState();
+                // updatePlayButtonState() removed
                 console.log('R key: Restarted at beginning (no cue points)');
             }).catch(e => {
                 console.error('Error playing from beginning:', e);
@@ -1602,7 +1582,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             globalPlayIntent = true;
             video.play().then(() => {
-                updatePlayButtonState();
+                // updatePlayButtonState() removed
                 console.log('Q key: Jumped to beginning before first cue');
             }).catch(e => {
                 console.error('Error playing from beginning:', e);
@@ -1625,7 +1605,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Pressing Q means "go back and play from previous cue" - set play intent
         globalPlayIntent = true;
         video.play().then(() => {
-            updatePlayButtonState();
+            // updatePlayButtonState() removed
             console.log(`Q key: Sequential navigation to cue ${prevIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
         }).catch(e => {
             console.error('Error playing from previous cue:', e);
@@ -1699,7 +1679,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Start playing - will play until next cue and stop (via cue-stop logic)
         globalPlayIntent = true;
         video.play().then(() => {
-            updatePlayButtonState();
+            // updatePlayButtonState() removed
         }).catch(e => {
             console.error('Error playing to next cue:', e);
         });
@@ -2014,7 +1994,7 @@ document.addEventListener('DOMContentLoaded', function() {
         updateCuePointsList();
         updateCueMarkersOnTimeline();
         updateSpeedControls();
-        updatePlayButtonState();
+        // updatePlayButtonState() removed
     }
 
     // Add a new tab
@@ -2520,9 +2500,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 event.stopPropagation();
 
                 switch (action) {
-                    case 'playPause':
-                        pausePlayBtn.click();
-                        break;
                     case 'previousClip':
                         prevClipBtn.click();
                         break;
@@ -2540,9 +2517,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         break;
                     case 'recordCuePoint':
                         recordCuePointBtn.click();
-                        break;
-                    case 'reversePlay':
-                        reverseBtn.click();
                         break;
                     case 'tab1':
                         switchTab(0);
@@ -2694,9 +2668,6 @@ document.addEventListener('DOMContentLoaded', function() {
     function executeMappedAction(action) {
         // Use the same action execution logic as keyboard shortcuts
         switch (action) {
-            case 'playPause':
-                pausePlayBtn.click();
-                break;
             case 'previousClip':
                 prevClipBtn.click();
                 break;
@@ -2714,9 +2685,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
             case 'recordCuePoint':
                 recordCuePointBtn.click();
-                break;
-            case 'reversePlay':
-                reverseBtn.click();
                 break;
             case 'tab1':
                 switchTab(0);
@@ -2816,14 +2784,12 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentEditingAction = null;
 
     const shortcutLabels = {
-        'playPause': 'Play/Pause',
         'previousClip': 'Previous Clip',
         'nextClip': 'Next Clip',
         'previousCuePoint': 'Previous Cue Point',
         'nextCuePoint': 'Next Cue Point',
         'restartClip': 'Restart Clip',
         'recordCuePoint': 'Record Cue Point',
-        'reversePlay': 'Reverse Play',
         'tab1': 'Switch to Tab 1',
         'tab2': 'Switch to Tab 2',
         'tab3': 'Switch to Tab 3',
@@ -3047,14 +3013,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function resetShortcutsToDefaults() {
         tempKeyboardShortcuts = {
-            'playPause': 'Space',
             'previousClip': 'ArrowLeft',
             'nextClip': 'ArrowRight',
             'previousCuePoint': 'q',
             'nextCuePoint': 'w',
             'restartClip': 'r',
             'recordCuePoint': 'c',
-            'reversePlay': 'Shift+r',
             'tab1': '1',
             'tab2': '2',
             'tab3': '3',
@@ -3136,7 +3100,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Initialize UI state
-    updatePlayButtonState();
+    // updatePlayButtonState() removed
     updateCuePointsList();
     updateSpeedControls();
     updateSessionStatus('No session loaded');
@@ -3149,106 +3113,8 @@ document.addEventListener('DOMContentLoaded', function() {
         navigateToClip('previous');
     });
 
-    // Reverse Play button (placeholder for now)
-    reverseBtn.addEventListener('click', function() {
-        console.log('Reverse play button clicked');
-
-        if (!selectedClipSlot) {
-            console.log('No clip selected for reverse playback');
-            return;
-        }
-
-        const clipNumber = selectedClipSlot.dataset.clipNumber;
-        const videoData = clipVideos[clipNumber];
-
-        if (!videoData) {
-            console.log('No video loaded in selected slot for reverse playback');
-            return;
-        }
-
-        // Set negative playback rate for reverse
-        if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
-            video.playbackRate = -1.0;
-
-            // If video is paused, start playing in reverse
-            if (video.paused) {
-                globalPlayIntent = true;
-                video.play().then(() => {
-                    console.log('Started reverse playback');
-                    updatePlayButtonState();
-                }).catch(e => {
-                    console.error('Error starting reverse playback:', e);
-                });
-            } else {
-                console.log('Switched to reverse playback');
-            }
-        } else {
-            console.log('Video not ready for reverse playback');
-        }
-    });
-
-    // Pause/Play toggle button
-    pausePlayBtn.addEventListener('click', function() {
-        console.log('Pause/Play button clicked');
-        if (!video.src) {
-            alert('Please select a clip with video first');
-            return;
-        }
-
-        // Toggle the global play intent based on user action
-        globalPlayIntent = !globalPlayIntent;
-        updatePlayButtonState();
-
-        if (globalPlayIntent) {
-            video.play().then(() => {
-                console.log('Video started playing');
-            }).catch(e => {
-                console.error('Error playing video:', e);
-                alert('Error playing video: ' + e.message);
-            });
-        } else {
-            video.pause();
-            console.log('Video paused by user');
-        }
-    });
-
-    // Forward Play button
-    forwardBtn.addEventListener('click', function() {
-        console.log('Forward play button clicked');
-
-        if (!selectedClipSlot) {
-            alert('Please select a clip slot first');
-            return;
-        }
-
-        const clipNumber = selectedClipSlot.dataset.clipNumber;
-        const videoData = clipVideos[clipNumber];
-
-        if (!videoData) {
-            alert('Please load a video into the selected clip slot first');
-            return;
-        }
-
-        if (!video.src) {
-            alert('No video loaded in player - please select a clip with video');
-            return;
-        }
-
-        // Set normal forward playback rate (restore from reverse if needed)
-        const clipSpeed = clipSpeeds[clipNumber] || 1.0;
-        video.playbackRate = clipSpeed;
-
-        // Set global intent to play when Forward Play is pressed
-        globalPlayIntent = true;
-        updatePlayButtonState();
-
-        video.play().then(() => {
-            console.log('Video started playing forward at speed:', clipSpeed);
-        }).catch(e => {
-            console.error('Error playing video:', e);
-            alert('Error playing video: ' + e.message);
-        });
-    });
+    // Removed: Reverse, Pause/Play, and Forward Play buttons per team feedback
+    // Only Previous and Next Clip buttons remain
 
     // Next Clip button
     nextClipBtn.addEventListener('click', function() {
@@ -3442,7 +3308,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Forward-stop mode (default) - just stop
                 console.log('Forward-stop mode: Video stopped at end');
                 globalPlayIntent = false;
-                updatePlayButtonState();
+                // updatePlayButtonState() removed
                 updatePlayingIndicator();
                 break;
         }
@@ -3508,7 +3374,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                             video.pause();
                             globalPlayIntent = false;
-                            updatePlayButtonState();
+                            // updatePlayButtonState() removed
 
                             // Update current cue index to this cue point
                             clipCurrentCueIndex[clipNumber] = i;
