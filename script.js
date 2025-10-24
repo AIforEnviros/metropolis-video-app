@@ -1070,17 +1070,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const clipSpeed = clipSpeeds[clipNumber] || 1.0;
                 setVideoSpeed(clipSpeed);
 
-                // Don't auto-play - respect user's globalPlayIntent
-                // If globalPlayIntent is true, play; otherwise stay paused
-                if (globalPlayIntent) {
-                    video.play().then(() => {
-                        console.log('Resumed playback on clip selection (globalPlayIntent was true)');
-                    }).catch(e => {
-                        console.error('Error resuming playback:', e);
-                    });
-                } else {
-                    console.log('Clip loaded but not playing (globalPlayIntent was false)');
-                }
+                // Auto-play when clip is selected (team feedback: default play state is 'play')
+                globalPlayIntent = true;
+                video.play().then(() => {
+                    console.log('Auto-playing clip on selection');
+                }).catch(e => {
+                    console.error('Error auto-playing video:', e);
+                });
             }, { once: true });
         } else {
             // No video in this slot
