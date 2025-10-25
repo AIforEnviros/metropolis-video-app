@@ -512,10 +512,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (disconnectedVideos > 0) {
             if (connectedVideos > 0) {
                 // Some connected, some not
-                alert(`Session loaded!\n\n${connectedVideos} of ${totalVideos} video(s) auto-connected.\n\n${disconnectedVideos} video(s) need reconnection - use "Browse Folder" to reconnect.`);
+                alert(`Session loaded!\n\n${connectedVideos} of ${totalVideos} video(s) auto-connected.\n\n${disconnectedVideos} video(s) need reconnection - drag and drop video files from your file explorer to reconnect.`);
             } else {
                 // None connected
-                alert(`Session loaded!\n\n${totalVideos} video slot(s) restored with thumbnails.\n\nUse "Browse Folder" to reconnect videos - files with matching names will auto-connect.`);
+                alert(`Session loaded!\n\n${totalVideos} video slot(s) restored with thumbnails.\n\nDrag and drop video files from your file explorer to reconnect - files with matching names will auto-connect.`);
             }
         }
         // If all videos are connected, don't show any alert (silent success)
@@ -1049,7 +1049,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 // Video data exists but no valid URL - this is from a loaded session
                 console.warn(`Video slot ${clipNumber} has data but no valid URL:`, videoData);
-                console.log('Video needs to be reconnected from file browser');
+                console.log('Video needs to be reconnected - drag and drop file');
 
                 // Clear the video player
                 video.src = '';
@@ -1057,7 +1057,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Show user-friendly message
                 if (videoData.name) {
-                    alert(`Video "${videoData.name}" needs to be reconnected. Please browse to the folder containing your video files.`);
+                    alert(`Video "${videoData.name}" needs to be reconnected. Drag and drop the video file onto this clip slot to reconnect.`);
                 }
             }
 
