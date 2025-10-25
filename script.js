@@ -1697,6 +1697,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let isDraggingCue = false;
         let dragTooltip = null;
         let wasPlayingBeforeDrag = false;
+        let dragStarted = false;
 
         marker.addEventListener('mousedown', function(e) {
             // Only left click for dragging
@@ -1705,24 +1706,32 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             e.stopPropagation(); // Prevent timeline click
 
-            isDraggingCue = true;
-            marker.classList.add('dragging');
-
-            // Store play state and pause video for scrubbing
-            wasPlayingBeforeDrag = !video.paused;
-            if (wasPlayingBeforeDrag) {
-                video.pause();
-                if (outputVideo) outputVideo.pause();
-            }
-
-            // Create tooltip
-            dragTooltip = document.createElement('div');
-            dragTooltip.className = 'cue-drag-tooltip';
-            document.body.appendChild(dragTooltip);
+            // Don't set isDraggingCue yet - wait for actual mouse movement
+            dragStarted = false;
+            // marker.classList.add('dragging'); // Don't add class until actual drag
 
             const rect = timelineTrack.getBoundingClientRect();
 
             function onMouseMove(moveEvent) {
+                // Start dragging only after actual mouse movement
+                if (!dragStarted) {
+                    dragStarted = true;
+                    isDraggingCue = true;
+                    marker.classList.add('dragging');
+
+                    // Store play state and pause video for scrubbing
+                    wasPlayingBeforeDrag = !video.paused;
+                    if (wasPlayingBeforeDrag) {
+                        video.pause();
+                        if (outputVideo) outputVideo.pause();
+                    }
+
+                    // Create tooltip
+                    dragTooltip = document.createElement('div');
+                    dragTooltip.className = 'cue-drag-tooltip';
+                    document.body.appendChild(dragTooltip);
+                }
+
                 if (!isDraggingCue) return;
 
                 // Calculate new position
@@ -1760,36 +1769,41 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             function onMouseUp() {
-                if (!isDraggingCue) return;
+                // Only do cleanup if a drag actually occurred
+                if (dragStarted && isDraggingCue) {
+                    isDraggingCue = false;
+                    marker.classList.remove('dragging');
 
-                isDraggingCue = false;
-                marker.classList.remove('dragging');
-
-                // Remove tooltip
-                if (dragTooltip) {
-                    dragTooltip.remove();
-                    dragTooltip = null;
-                }
-
-                // Restore playing state if it was playing before drag
-                if (wasPlayingBeforeDrag) {
-                    video.play().catch(e => console.error('Error resuming playback:', e));
-                    if (outputVideo) {
-                        outputVideo.play().catch(e => console.error('Error resuming output playback:', e));
+                    // Remove tooltip
+                    if (dragTooltip) {
+                        dragTooltip.remove();
+                        dragTooltip = null;
                     }
+
+                    // Restore playing state if it was playing before drag
+                    if (wasPlayingBeforeDrag) {
+                        video.play().catch(e => console.error('Error resuming playback:', e));
+                        if (outputVideo) {
+                            outputVideo.play().catch(e => console.error('Error resuming output playback:', e));
+                        }
+                    }
+
+                    // Sort cue points by time after dragging
+                    clipCuePoints[clipNumber].sort((a, b) => a.time - b.time);
+
+                    // Refresh markers to show correct order
+                    updateCueMarkersOnTimeline();
+
+                    // Update list with sorted order
+                    // updateCuePointsList(); // REMOVED - cue points visible on timeline
+
+                    // Mark session as modified
+                    markSessionModified();
                 }
 
-                // Sort cue points by time after dragging
-                clipCuePoints[clipNumber].sort((a, b) => a.time - b.time);
-
-                // Refresh markers to show correct order
-                updateCueMarkersOnTimeline();
-
-                // Update list with sorted order
-                // updateCuePointsList(); // REMOVED - cue points visible on timeline
-
-                // Mark session as modified
-                markSessionModified();
+                // Reset drag state
+                dragStarted = false;
+                isDraggingCue = false;
 
                 // Clean up event listeners
                 document.removeEventListener('mousemove', onMouseMove);
