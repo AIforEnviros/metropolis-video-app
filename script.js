@@ -142,6 +142,9 @@ document.addEventListener('DOMContentLoaded', function() {
         'nextCuePoint': 'w',
         'restartClip': 'r',
         'recordCuePoint': 'c',
+        'setInPoint': 'i',
+        'setOutPoint': 'o',
+        'clearInOut': 'Shift+x',
         'tab1': '1',
         'tab2': '2',
         'tab3': '3',
@@ -161,6 +164,9 @@ document.addEventListener('DOMContentLoaded', function() {
         'nextCuePoint': null,
         'restartClip': null,
         'recordCuePoint': null,
+        'setInPoint': null,
+        'setOutPoint': null,
+        'clearInOut': null,
         'tab1': null,
         'tab2': null,
         'tab3': null,
@@ -2767,6 +2773,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     case 'recordCuePoint':
                         recordCuePointBtn.click();
                         break;
+                    case 'setInPoint':
+                        setInPointBtn.click();
+                        break;
+                    case 'setOutPoint':
+                        setOutPointBtn.click();
+                        break;
+                    case 'clearInOut':
+                        clearInOutBtn.click();
+                        break;
                     case 'tab1':
                         switchTab(0);
                         break;
@@ -2935,6 +2950,15 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'recordCuePoint':
                 recordCuePointBtn.click();
                 break;
+            case 'setInPoint':
+                setInPointBtn.click();
+                break;
+            case 'setOutPoint':
+                setOutPointBtn.click();
+                break;
+            case 'clearInOut':
+                clearInOutBtn.click();
+                break;
             case 'tab1':
                 switchTab(0);
                 break;
@@ -3039,6 +3063,9 @@ document.addEventListener('DOMContentLoaded', function() {
         'nextCuePoint': 'Next Cue Point',
         'restartClip': 'Restart Clip',
         'recordCuePoint': 'Record Cue Point',
+        'setInPoint': 'Set In Point',
+        'setOutPoint': 'Set Out Point',
+        'clearInOut': 'Clear In/Out Points',
         'tab1': 'Switch to Tab 1',
         'tab2': 'Switch to Tab 2',
         'tab3': 'Switch to Tab 3',
@@ -3268,6 +3295,9 @@ document.addEventListener('DOMContentLoaded', function() {
             'nextCuePoint': 'w',
             'restartClip': 'r',
             'recordCuePoint': 'c',
+            'setInPoint': 'i',
+            'setOutPoint': 'o',
+            'clearInOut': 'Shift+x',
             'tab1': '1',
             'tab2': '2',
             'tab3': '3',
@@ -3379,6 +3409,22 @@ document.addEventListener('DOMContentLoaded', function() {
     nextCuePointBtn.addEventListener('click', function() {
         console.log('Next cue point button clicked');
         navigateToNextCuePoint();
+    });
+
+    // In/Out Point buttons
+    setInPointBtn.addEventListener('click', function() {
+        console.log('Set In Point button clicked');
+        setInPoint();
+    });
+
+    setOutPointBtn.addEventListener('click', function() {
+        console.log('Set Out Point button clicked');
+        setOutPoint();
+    });
+
+    clearInOutBtn.addEventListener('click', function() {
+        console.log('Clear In/Out button clicked');
+        clearInOutPoints();
     });
 
     // Timeline event listeners
