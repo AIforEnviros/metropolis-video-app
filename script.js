@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveShortcutsBtn = document.getElementById('saveShortcutsBtn');
     const outputWindowBtn = document.getElementById('outputWindowBtn');
     const addTabBtn = document.getElementById('addTabBtn');
+    const autoPlayToggle = document.getElementById('autoPlayToggle');
     const clipContextMenu = document.getElementById('clipContextMenu');
 
     // Output window reference
@@ -64,6 +65,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Track current video playing state (actual video state)
     let currentVideoPlaying = false;
+
+    // Global auto-play enabled (affects all clips)
+    let globalAutoPlayEnabled = true; // true = clips auto-play, false = clips stay paused
 
     // Track the currently selected clip
     let selectedClipSlot = null;
@@ -150,6 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'clearInOut': 'Shift+x',
         'zoomIn': '=',
         'zoomOut': '-',
+        'toggleAutoPlay': ' ',
         'tab1': '1',
         'tab2': '2',
         'tab3': '3',
@@ -172,6 +177,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'setInPoint': null,
         'setOutPoint': null,
         'clearInOut': null,
+        'toggleAutoPlay': null,
         'tab1': null,
         'tab2': null,
         'tab3': null,
@@ -223,6 +229,7 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedClipSlot: selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null,
             currentFolderPath: currentFolderPath,
             globalPlayIntent: globalPlayIntent,
+            globalAutoPlayEnabled: globalAutoPlayEnabled,
             keyboardShortcuts: keyboardShortcuts,
             midiMappings: midiMappings,
             allTabs: allTabs,
@@ -380,6 +387,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (sessionData.globalPlayIntent !== undefined) {
                 globalPlayIntent = sessionData.globalPlayIntent;
                 // updatePlayButtonState() removed - no global play/pause button
+            }
+
+            // Restore global auto-play setting
+            if (sessionData.globalAutoPlayEnabled !== undefined) {
+                globalAutoPlayEnabled = sessionData.globalAutoPlayEnabled;
+                autoPlayToggle.checked = globalAutoPlayEnabled;
+                console.log('Restored auto-play setting:', globalAutoPlayEnabled);
             }
 
             // Restore keyboard shortcuts
@@ -1125,13 +1139,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log(`Starting from In point: ${formatTime(inOut.inPoint)}`);
                 }
 
-                // Auto-play when clip is selected (team feedback: default play state is 'play')
-                globalPlayIntent = true;
-                video.play().then(() => {
-                    console.log('Auto-playing clip on selection');
-                }).catch(e => {
-                    console.error('Error auto-playing video:', e);
-                });
+                // Auto-play when clip is selected - only if global auto-play is enabled
+                if (globalAutoPlayEnabled) {
+                    globalPlayIntent = true;
+                    video.play().then(() => {
+                        console.log('Auto-playing clip on selection');
+                    }).catch(e => {
+                        console.error('Error auto-playing video:', e);
+                    });
+                } else {
+                    globalPlayIntent = false;
+                    console.log('Clip loaded but not playing (auto-play disabled)');
+                }
             }, { once: true });
         } else {
             // No video in this slot
@@ -1811,14 +1830,19 @@ document.addEventListener('DOMContentLoaded', function() {
             justNavigatedToCue = true;
             lastNavigatedCueTime = firstCuePoint.time;
 
-            // Pressing R always means "play from start" - set play intent
-            globalPlayIntent = true;
-            video.play().then(() => {
-                // updatePlayButtonState() removed
-                console.log(`R key: Restarted at cue 1/${cuePoints.length} at ${formatTime(firstCuePoint.time)}`);
-            }).catch(e => {
-                console.error('Error playing from first cue:', e);
-            });
+            // Restart - only auto-play if global auto-play is enabled
+            if (globalAutoPlayEnabled) {
+                globalPlayIntent = true;
+                video.play().then(() => {
+                    // updatePlayButtonState() removed
+                    console.log(`R key: Restarted at cue 1/${cuePoints.length} at ${formatTime(firstCuePoint.time)}`);
+                }).catch(e => {
+                    console.error('Error playing from first cue:', e);
+                });
+            } else {
+                globalPlayIntent = false;
+                console.log(`R key: Restarted at cue 1 but not playing (auto-play disabled)`);
+            }
         } else {
             // Jump to beginning if no cue points
             video.currentTime = 0;
@@ -1828,14 +1852,19 @@ document.addEventListener('DOMContentLoaded', function() {
             justNavigatedToCue = true;
             lastNavigatedCueTime = 0;
 
-            // Pressing R always means "play from start" - set play intent
-            globalPlayIntent = true;
-            video.play().then(() => {
-                // updatePlayButtonState() removed
-                console.log('R key: Restarted at beginning (no cue points)');
-            }).catch(e => {
-                console.error('Error playing from beginning:', e);
-            });
+            // Restart - only auto-play if global auto-play is enabled
+            if (globalAutoPlayEnabled) {
+                globalPlayIntent = true;
+                video.play().then(() => {
+                    // updatePlayButtonState() removed
+                    console.log('R key: Restarted at beginning (no cue points)');
+                }).catch(e => {
+                    console.error('Error playing from beginning:', e);
+                });
+            } else {
+                globalPlayIntent = false;
+                console.log('R key: Restarted at beginning but not playing (auto-play disabled)');
+            }
         }
     }
 
@@ -1880,13 +1909,19 @@ document.addEventListener('DOMContentLoaded', function() {
             justNavigatedToCue = true;
             lastNavigatedCueTime = 0;
 
-            globalPlayIntent = true;
-            video.play().then(() => {
-                // updatePlayButtonState() removed
-                console.log('Q key: Jumped to beginning before first cue');
-            }).catch(e => {
-                console.error('Error playing from beginning:', e);
-            });
+            // Auto-play only if enabled
+            if (globalAutoPlayEnabled) {
+                globalPlayIntent = true;
+                video.play().then(() => {
+                    // updatePlayButtonState() removed
+                    console.log('Q key: Jumped to beginning before first cue');
+                }).catch(e => {
+                    console.error('Error playing from beginning:', e);
+                });
+            } else {
+                globalPlayIntent = false;
+                console.log('Q key: Jumped to beginning but not playing (auto-play disabled)');
+            }
             return;
         }
 
@@ -1902,14 +1937,19 @@ document.addEventListener('DOMContentLoaded', function() {
         justNavigatedToCue = true;
         lastNavigatedCueTime = targetCuePoint.time;
 
-        // Pressing Q means "go back and play from previous cue" - set play intent
-        globalPlayIntent = true;
-        video.play().then(() => {
-            // updatePlayButtonState() removed
-            console.log(`Q key: Sequential navigation to cue ${prevIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
-        }).catch(e => {
-            console.error('Error playing from previous cue:', e);
-        });
+        // Pressing Q means "go back and play from previous cue" - only if auto-play enabled
+        if (globalAutoPlayEnabled) {
+            globalPlayIntent = true;
+            video.play().then(() => {
+                // updatePlayButtonState() removed
+                console.log(`Q key: Sequential navigation to cue ${prevIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
+            }).catch(e => {
+                console.error('Error playing from previous cue:', e);
+            });
+        } else {
+            globalPlayIntent = false;
+            console.log(`Q key: Navigated to cue ${prevIndex + 1} but not playing (auto-play disabled)`);
+        }
     }
 
     // Navigate to the next cue point
@@ -1976,13 +2016,18 @@ document.addEventListener('DOMContentLoaded', function() {
         justNavigatedToCue = true;
         lastNavigatedCueTime = targetCuePoint.time;
 
-        // Start playing - will play until next cue and stop (via cue-stop logic)
-        globalPlayIntent = true;
-        video.play().then(() => {
-            // updatePlayButtonState() removed
-        }).catch(e => {
-            console.error('Error playing to next cue:', e);
-        });
+        // Start playing - only if global auto-play is enabled
+        if (globalAutoPlayEnabled) {
+            globalPlayIntent = true;
+            video.play().then(() => {
+                // updatePlayButtonState() removed
+            }).catch(e => {
+                console.error('Error playing to next cue:', e);
+            });
+        } else {
+            globalPlayIntent = false;
+            console.log('Navigated to cue point but not playing (auto-play disabled)');
+        }
     }
 
     // Timeline functionality
@@ -2045,6 +2090,14 @@ document.addEventListener('DOMContentLoaded', function() {
         container.scrollLeft = Math.max(0, scrollPosition);
 
         console.log(`Timeline zoom set to ${zoomLevel}x`);
+    }
+
+    // Toggle global auto-play
+    function toggleGlobalAutoPlay() {
+        globalAutoPlayEnabled = !globalAutoPlayEnabled;
+        autoPlayToggle.checked = globalAutoPlayEnabled;
+        markSessionModified();
+        console.log(`Global auto-play ${globalAutoPlayEnabled ? 'enabled' : 'disabled'}`);
     }
 
     // Cue marker drag tooltip element
@@ -2684,6 +2737,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const clipNumber = selectedClipSlot.dataset.clipNumber;
 
+        // DEBUG: Log file object properties
+        console.log('=== LOADING FILE ===');
+        console.log('File object:', file);
+        console.log('file.name:', file.name);
+        console.log('file.path:', file.path);
+        console.log('file.type:', file.type);
+
         // In Electron, use file:// protocol path instead of blob URLs
         const filePath = file.path || file.name; // file.path from Electron directory reading
         const url = `file:///${filePath.replace(/\\/g, '/')}`;
@@ -2845,6 +2905,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (timelineZoomLevel > 1) {
                             setTimelineZoom(timelineZoomLevel / 2);
                         }
+                        break;
+                    case 'toggleAutoPlay':
+                        toggleGlobalAutoPlay();
                         break;
                     case 'tab1':
                         switchTab(0);
@@ -3033,6 +3096,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     setTimelineZoom(timelineZoomLevel / 2);
                 }
                 break;
+            case 'toggleAutoPlay':
+                toggleGlobalAutoPlay();
+                break;
             case 'tab1':
                 switchTab(0);
                 break;
@@ -3142,6 +3208,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'clearInOut': 'Clear In/Out Points',
         'zoomIn': 'Zoom Timeline In',
         'zoomOut': 'Zoom Timeline Out',
+        'toggleAutoPlay': 'Toggle Auto-Play',
         'tab1': 'Switch to Tab 1',
         'tab2': 'Switch to Tab 2',
         'tab3': 'Switch to Tab 3',
@@ -3514,6 +3581,12 @@ document.addEventListener('DOMContentLoaded', function() {
     clearInOutBtn.addEventListener('click', function() {
         console.log('Clear In/Out button clicked');
         clearInOutPoints();
+    });
+
+    // Auto-Play Toggle
+    autoPlayToggle.addEventListener('change', function() {
+        console.log('Auto-play toggle clicked');
+        toggleGlobalAutoPlay();
     });
 
     // Timeline event listeners
