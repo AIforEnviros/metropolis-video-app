@@ -342,7 +342,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Restore folder path and auto-load directory contents
             if (sessionData.currentFolderPath) {
                 currentFolderPath = sessionData.currentFolderPath;
-                currentPathDisplay.textContent = currentFolderPath;
+                // currentPathDisplay.textContent = currentFolderPath; // REMOVED - file browser removed
 
                 // Automatically load directory contents
                 try {
@@ -2335,7 +2335,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const folderPath = file.path.substring(0, file.path.lastIndexOf('\\'));
             if (!currentFolderPath || currentFolderPath === '' || !currentFolderPath.includes('\\')) {
                 currentFolderPath = folderPath;
-                currentPathDisplay.textContent = currentFolderPath;
+                // currentPathDisplay.textContent = currentFolderPath; // REMOVED - file browser removed
                 console.log('Auto-detected folder path from video file:', currentFolderPath);
             }
         }
