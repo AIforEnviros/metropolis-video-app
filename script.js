@@ -230,7 +230,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 clipNames: tabClipNames,
                 clipModes: tabClipModes,
                 clipCueStop: tabClipCueStop,
-                currentCueIndex: tabClipCurrentCueIndex
+                currentCueIndex: tabClipCurrentCueIndex,
+                inOutPoints: tabClipInOutPoints
             }
         };
     }
@@ -338,6 +339,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Restoring current cue indices:', sessionData.tabs.currentCueIndex);
                 Object.assign(tabClipCurrentCueIndex, sessionData.tabs.currentCueIndex);
             }
+            if (sessionData.tabs.inOutPoints) {
+                console.log('Restoring In/Out points:', sessionData.tabs.inOutPoints);
+                Object.assign(tabClipInOutPoints, sessionData.tabs.inOutPoints);
+            }
 
             console.log('After restoring - tab data:', tabClipVideos);
 
@@ -352,6 +357,10 @@ document.addEventListener('DOMContentLoaded', function() {
             clipCuePoints = tabClipCuePoints[currentTab];
             clipSpeeds = tabClipSpeeds[currentTab];
             clipNames = tabClipNames[currentTab];
+            clipModes = tabClipModes[currentTab];
+            clipCueStop = tabClipCueStop[currentTab];
+            clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
+            clipInOutPoints = tabClipInOutPoints[currentTab];
             console.log('Current tab video data:', clipVideos);
 
             // Restore folder path (keep for backward compatibility)
@@ -447,6 +456,7 @@ document.addEventListener('DOMContentLoaded', function() {
         refreshClipMatrix();
         // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+        updateInOutMarkersOnTimeline();
         updateSpeedControls();
 
         // Clear video player
@@ -1119,6 +1129,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update cue points list for the newly selected clip
         // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+        updateInOutMarkersOnTimeline();
         updateSpeedControls();
     }
 
@@ -1415,6 +1426,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update the display
         // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+        updateInOutMarkersOnTimeline();
     }
 
     // In/Out point functions
@@ -2266,6 +2278,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipModes = tabClipModes[currentTab];
         clipCueStop = tabClipCueStop[currentTab];
         clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
+        clipInOutPoints = tabClipInOutPoints[currentTab];
 
         // Clear current selection (each tab has its own selection)
         if (selectedClipSlot) {
@@ -2283,6 +2296,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update UI for new tab
         // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+        updateInOutMarkersOnTimeline();
         updateSpeedControls();
         // updatePlayButtonState() removed
     }
@@ -2702,6 +2716,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+        updateInOutMarkersOnTimeline();
     }
 
     // File browser removed - drag videos from OS file explorer directly onto clip slots
