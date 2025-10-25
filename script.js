@@ -180,7 +180,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Session management functions
     function createSessionData() {
-        // Create a clean copy of video data with thumbnails
+        // Create a clean copy of video data with thumbnails and file paths
         const cleanVideos = {};
         Object.keys(tabClipVideos).forEach(tabIndex => {
             cleanVideos[tabIndex] = {};
@@ -188,7 +188,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const video = tabClipVideos[tabIndex][clipNumber];
                 cleanVideos[tabIndex][clipNumber] = {
                     name: video.name,
-                    type: video.type,
+                    filePath: video.filePath || null,  // Save file path for automatic reconnection
                     // Store thumbnail if available
                     thumbnail: video.thumbnail || null
                 };
@@ -339,41 +339,13 @@ document.addEventListener('DOMContentLoaded', function() {
             clipNames = tabClipNames[currentTab];
             console.log('Current tab video data:', clipVideos);
 
-            // Restore folder path and auto-load directory contents
+            // Restore folder path (keep for backward compatibility)
             if (sessionData.currentFolderPath) {
                 currentFolderPath = sessionData.currentFolderPath;
-                // currentPathDisplay.textContent = currentFolderPath; // REMOVED - file browser removed
-
-                // Automatically load directory contents
-                try {
-                    console.log('Auto-loading folder contents from:', currentFolderPath);
-                    const dirResult = await window.electronAPI.readDirectory(currentFolderPath);
-
-                    if (dirResult.success) {
-                        const files = dirResult.files.map(fileInfo => ({
-                            name: fileInfo.name,
-                            path: fileInfo.path,
-                            size: fileInfo.size,
-                            isDirectory: fileInfo.isDirectory
-                        }));
-                        displayFiles(files);
-                        upFolderBtn.disabled = false;
-                        console.log(`Auto-loaded ${files.length} files from saved folder`);
-
-                        // Auto-connect video files to session slots
-                        const videoFiles = files.filter(file => !file.isDirectory && isVideoFile(file.name));
-                        console.log(`Found ${videoFiles.length} video files, attempting auto-connection...`);
-                        videoFiles.forEach(file => {
-                            autoConnectSessionVideo(file);
-                        });
-                    } else {
-                        console.warn('Could not auto-load folder:', dirResult.error);
-                    }
-                } catch (error) {
-                    console.warn('Error auto-loading folder contents:', error);
-                    // Non-fatal - user can manually browse if folder is inaccessible
-                }
             }
+
+            // Auto-reconnect videos using saved file paths
+            await reconnectVideosFromPaths();
 
             // Restore global play intent
             if (sessionData.globalPlayIntent !== undefined) {
@@ -520,6 +492,55 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         // If all videos are connected, don't show any alert (silent success)
         console.log(`Session reconnection status: ${connectedVideos}/${totalVideos} videos connected`);
+    }
+
+    // Reconnect videos using saved file paths
+    async function reconnectVideosFromPaths() {
+        console.log('=== AUTO-RECONNECTING VIDEOS FROM SAVED PATHS ===');
+
+        let totalVideos = 0;
+        let reconnectedVideos = 0;
+
+        // Loop through all tabs
+        for (let tabIndex = 0; tabIndex < 5; tabIndex++) {
+            const tabVideos = tabClipVideos[tabIndex];
+
+            for (const clipNumber in tabVideos) {
+                const videoData = tabVideos[clipNumber];
+
+                // Check if this slot has a video with a saved filePath but no url
+                if (videoData && videoData.name && videoData.filePath && !videoData.url) {
+                    totalVideos++;
+                    console.log(`Attempting to reconnect: ${videoData.name} from ${videoData.filePath}`);
+
+                    try {
+                        // Create file URL for Electron
+                        const url = `file:///${videoData.filePath.replace(/\\/g, '/')}`;
+
+                        // Update the video data with URL
+                        videoData.url = url;
+                        videoData.file = {
+                            name: videoData.name,
+                            path: videoData.filePath
+                        };
+
+                        console.log(`✓ Reconnected: ${videoData.name}`);
+                        reconnectedVideos++;
+
+                    } catch (error) {
+                        console.warn(`✗ Failed to reconnect ${videoData.name}:`, error.message);
+                    }
+                }
+            }
+        }
+
+        console.log(`Reconnection complete: ${reconnectedVideos}/${totalVideos} videos reconnected`);
+
+        // Refresh UI
+        refreshClipMatrix();
+
+        // Show status if there are disconnected videos
+        attemptAutoReconnect();
     }
 
     // Auto-connect loaded session videos when files are found
