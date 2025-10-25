@@ -68,6 +68,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track the currently selected clip
     let selectedClipSlot = null;
 
+    // Timeline zoom level (1x, 2x, 4x, 8x)
+    let timelineZoomLevel = 1;
+
     // Track which tab is currently active
     let currentTab = 0;
 
@@ -145,6 +148,8 @@ document.addEventListener('DOMContentLoaded', function() {
         'setInPoint': 'i',
         'setOutPoint': 'o',
         'clearInOut': 'Shift+x',
+        'zoomIn': '=',
+        'zoomOut': '-',
         'tab1': '1',
         'tab2': '2',
         'tab3': '3',
@@ -2017,6 +2022,31 @@ document.addEventListener('DOMContentLoaded', function() {
         totalDurationDisplay.textContent = formatTimeShort(videoDuration);
     }
 
+    // Set timeline zoom level
+    function setTimelineZoom(zoomLevel) {
+        timelineZoomLevel = zoomLevel;
+
+        // Apply zoom to timeline track width
+        timelineTrack.style.width = `${100 * zoomLevel}%`;
+
+        // Update active button state
+        document.querySelectorAll('.zoom-btn').forEach(btn => {
+            if (parseInt(btn.dataset.zoom) === zoomLevel) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // Scroll to keep current playback position in view
+        const container = timelineTrack.parentElement;
+        const progress = video.currentTime / videoDuration;
+        const scrollPosition = (container.scrollWidth * progress) - (container.clientWidth / 2);
+        container.scrollLeft = Math.max(0, scrollPosition);
+
+        console.log(`Timeline zoom set to ${zoomLevel}x`);
+    }
+
     // Cue marker drag tooltip element
     let cueMarkerDragTooltip = null;
 
@@ -2804,6 +2834,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     case 'clearInOut':
                         clearInOutBtn.click();
                         break;
+                    case 'zoomIn':
+                        // Cycle through zoom levels: 1 -> 2 -> 4 -> 8
+                        if (timelineZoomLevel < 8) {
+                            setTimelineZoom(timelineZoomLevel * 2);
+                        }
+                        break;
+                    case 'zoomOut':
+                        // Cycle through zoom levels: 8 -> 4 -> 2 -> 1
+                        if (timelineZoomLevel > 1) {
+                            setTimelineZoom(timelineZoomLevel / 2);
+                        }
+                        break;
                     case 'tab1':
                         switchTab(0);
                         break;
@@ -2981,6 +3023,16 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'clearInOut':
                 clearInOutBtn.click();
                 break;
+            case 'zoomIn':
+                if (timelineZoomLevel < 8) {
+                    setTimelineZoom(timelineZoomLevel * 2);
+                }
+                break;
+            case 'zoomOut':
+                if (timelineZoomLevel > 1) {
+                    setTimelineZoom(timelineZoomLevel / 2);
+                }
+                break;
             case 'tab1':
                 switchTab(0);
                 break;
@@ -3088,6 +3140,8 @@ document.addEventListener('DOMContentLoaded', function() {
         'setInPoint': 'Set In Point',
         'setOutPoint': 'Set Out Point',
         'clearInOut': 'Clear In/Out Points',
+        'zoomIn': 'Zoom Timeline In',
+        'zoomOut': 'Zoom Timeline Out',
         'tab1': 'Switch to Tab 1',
         'tab2': 'Switch to Tab 2',
         'tab3': 'Switch to Tab 3',
@@ -3320,6 +3374,8 @@ document.addEventListener('DOMContentLoaded', function() {
             'setInPoint': 'i',
             'setOutPoint': 'o',
             'clearInOut': 'Shift+x',
+            'zoomIn': '=',
+            'zoomOut': '-',
             'tab1': '1',
             'tab2': '2',
             'tab3': '3',
@@ -3347,6 +3403,17 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // File browser event listeners removed - drag videos from OS file explorer instead
+
+    // Timeline zoom button event listeners
+    document.querySelectorAll('.zoom-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const zoomLevel = parseInt(this.dataset.zoom);
+            setTimelineZoom(zoomLevel);
+        });
+    });
+
+    // Initialize zoom to 1x
+    setTimelineZoom(1);
 
     // Initialize the matrix
     createClipMatrix();

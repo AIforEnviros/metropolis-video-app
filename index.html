@@ -391,6 +391,8 @@
 
         .timeline-container {
             margin: 15px 0;
+            overflow-x: auto;
+            overflow-y: hidden;
         }
 
         .timeline-track {
@@ -401,6 +403,9 @@
             margin-bottom: 8px;
             cursor: pointer;
             border: 1px solid #555;
+            width: 100%; /* Will be scaled by zoom */
+            min-width: 100%;
+            transition: width 0.2s ease;
         }
 
         .timeline-progress {
@@ -440,6 +445,37 @@
             font-size: 12px;
             color: #888;
             font-family: monospace;
+        }
+
+        .timeline-zoom-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+            font-size: 12px;
+        }
+
+        .zoom-btn {
+            background-color: #333;
+            color: #ddd;
+            border: 1px solid #555;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .zoom-btn:hover {
+            background-color: #444;
+            border-color: #777;
+        }
+
+        .zoom-btn.active {
+            background-color: #458588;
+            border-color: #6fabc5;
+            color: white;
         }
 
         .cue-markers {
@@ -1199,6 +1235,13 @@
                 </div>
                 <div class="timeline-time">
                     <span id="currentTime">00:00</span> / <span id="totalDuration">00:00</span>
+                </div>
+                <div class="timeline-zoom-controls">
+                    <label>Zoom:</label>
+                    <button class="zoom-btn" data-zoom="1">1x</button>
+                    <button class="zoom-btn" data-zoom="2">2x</button>
+                    <button class="zoom-btn" data-zoom="4">4x</button>
+                    <button class="zoom-btn" data-zoom="8">8x</button>
                 </div>
             </div>
 
