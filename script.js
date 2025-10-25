@@ -1113,6 +1113,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const clipSpeed = clipSpeeds[clipNumber] || 1.0;
                 setVideoSpeed(clipSpeed);
 
+                // If In point is set, start from In point
+                const inOut = clipInOutPoints[clipNumber];
+                if (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) {
+                    video.currentTime = inOut.inPoint;
+                    console.log(`Starting from In point: ${formatTime(inOut.inPoint)}`);
+                }
+
                 // Auto-play when clip is selected (team feedback: default play state is 'play')
                 globalPlayIntent = true;
                 video.play().then(() => {
@@ -3644,6 +3651,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
     video.addEventListener('timeupdate', function() {
         updateTimeline();
+
+        // In/Out point behavior
+        if (selectedClipSlot && !video.paused) {
+            const clipNumber = selectedClipSlot.dataset.clipNumber;
+            const inOut = clipInOutPoints[clipNumber];
+
+            if (inOut) {
+                const currentTime = video.currentTime;
+                const inPoint = inOut.inPoint;
+                const outPoint = inOut.outPoint;
+
+                // If Out point is set and we've passed it
+                if (outPoint !== undefined && outPoint !== null && currentTime >= outPoint) {
+                    // Loop back to In point (or start if no In point)
+                    video.currentTime = (inPoint !== undefined && inPoint !== null) ? inPoint : 0;
+                    console.log(`Reached Out point, looping to ${(inPoint !== undefined && inPoint !== null) ? formatTime(inPoint) : 'start'}`);
+                }
+
+                // If In point is set and we're before it (shouldn't happen normally, but handle it)
+                if (inPoint !== undefined && inPoint !== null && currentTime < inPoint && currentTime > 0.1) {
+                    video.currentTime = inPoint;
+                    console.log(`Before In point, jumping to ${formatTime(inPoint)}`);
+                }
+            }
+        }
 
         // Cue point stop behavior
         if (selectedClipSlot) {
