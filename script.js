@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const clipsMatrix = document.getElementById('clipsMatrix');
     const recordCuePointBtn = document.getElementById('recordCuePointBtn');
-    const cuePointsList = document.getElementById('cuePointsList');
+    // const cuePointsList = document.getElementById('cuePointsList'); // REMOVED - list UI removed, cue points visible on timeline
     const restartClipBtn = document.getElementById('restartClipBtn');
     const prevCuePointBtn = document.getElementById('prevCuePointBtn');
     const nextCuePointBtn = document.getElementById('nextCuePointBtn');
@@ -458,7 +458,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Clear UI
         refreshClipMatrix();
-        updateCuePointsList();
+        // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
         updateSpeedControls();
 
@@ -897,7 +897,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const selectedClipNumber = parseInt(selectedClipSlot.dataset.clipNumber);
             if (selectedClipNumber === sourceClipNumber || selectedClipNumber === targetClipNumber) {
                 loadClipIntoPlayer(selectedClipNumber);
-                updateCuePointsList();
+                // updateCuePointsList(); // REMOVED - cue points visible on timeline
                 updateCueMarkersOnTimeline();
                 updateSpeedControls();
             }
@@ -984,7 +984,7 @@ document.addEventListener('DOMContentLoaded', function() {
             updateTransportButtonStates();
 
             // Clear cue points display
-            updateCuePointsList();
+            // updateCuePointsList(); // REMOVED - cue points visible on timeline
         }
 
         markSessionModified();
@@ -1081,7 +1081,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Update cue points list for the newly selected clip
-        updateCuePointsList();
+        // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
         updateSpeedControls();
     }
@@ -1377,7 +1377,7 @@ document.addEventListener('DOMContentLoaded', function() {
         markSessionModified();
 
         // Update the display
-        updateCuePointsList();
+        // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
     }
 
@@ -1444,34 +1444,8 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Changed speed for clip ${clipNumber} to ${newSpeed}x`);
     }
 
-    // Update the visual display of cue points for the currently selected clip
-    function updateCuePointsList() {
-        if (!selectedClipSlot) {
-            cuePointsList.innerHTML = '<p class="no-cue-points">No clip selected</p>';
-            return;
-        }
-
-        const clipNumber = selectedClipSlot.dataset.clipNumber;
-        const cuePoints = clipCuePoints[clipNumber] || [];
-
-        if (cuePoints.length === 0) {
-            cuePointsList.innerHTML = '<p class="no-cue-points">No cue points recorded</p>';
-            return;
-        }
-
-        // Build the cue points list HTML
-        let html = '';
-        cuePoints.forEach((cuePoint, index) => {
-            html += `
-                <div class="cue-point-item">
-                    <span>Cue ${index + 1}</span>
-                    <span class="cue-point-time">${formatTime(cuePoint.time)}</span>
-                </div>
-            `;
-        });
-
-        cuePointsList.innerHTML = html;
-    }
+    // REMOVED: updateCuePointsList() function - cue points list UI removed, cue points visible on timeline instead
+    // function updateCuePointsList() { ... }
 
     // Jump to the first cue point of the current clip, or beginning if no cue points
     function restartClip() {
@@ -1782,7 +1756,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 // Update cue points list in real-time
-                updateCuePointsList();
+                // updateCuePointsList(); // REMOVED - cue points visible on timeline
             }
 
             function onMouseUp() {
@@ -1812,7 +1786,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateCueMarkersOnTimeline();
 
                 // Update list with sorted order
-                updateCuePointsList();
+                // updateCuePointsList(); // REMOVED - cue points visible on timeline
 
                 // Mark session as modified
                 markSessionModified();
@@ -1847,7 +1821,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Refresh markers and list
                 updateCueMarkersOnTimeline();
-                updateCuePointsList();
+                // updateCuePointsList(); // REMOVED - cue points visible on timeline
 
                 console.log(`Deleted cue point ${cueIndex + 1}`);
             }
@@ -1984,7 +1958,7 @@ document.addEventListener('DOMContentLoaded', function() {
         video.load();
 
         // Update UI for new tab
-        updateCuePointsList();
+        // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
         updateSpeedControls();
         // updatePlayButtonState() removed
@@ -2403,7 +2377,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clipCuePoints[clipNumber] = [];
         }
 
-        updateCuePointsList();
+        // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
     }
 
@@ -3045,7 +3019,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize UI state
     // updatePlayButtonState() removed
-    updateCuePointsList();
+    // updateCuePointsList(); // REMOVED - cue points visible on timeline
     updateSpeedControls();
     updateSessionStatus('No session loaded');
 
