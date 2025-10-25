@@ -20,10 +20,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const restartClipBtn = document.getElementById('restartClipBtn');
     const prevCuePointBtn = document.getElementById('prevCuePointBtn');
     const nextCuePointBtn = document.getElementById('nextCuePointBtn');
+    const setInPointBtn = document.getElementById('setInPointBtn');
+    const setOutPointBtn = document.getElementById('setOutPointBtn');
+    const clearInOutBtn = document.getElementById('clearInOutBtn');
     const timelineTrack = document.getElementById('timelineTrack');
     const timelineProgress = document.getElementById('timelineProgress');
     const timelineHandle = document.getElementById('timelineHandle');
     const cueMarkers = document.getElementById('cueMarkers');
+    const inOutMarkers = document.getElementById('inOutMarkers');
     const currentTimeDisplay = document.getElementById('currentTime');
     const totalDurationDisplay = document.getElementById('totalDuration');
     const tabBar = document.getElementById('tabBar');
@@ -96,6 +100,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track current cue index for sequential navigation (tabIndex -> { clipNumber -> index })
     const tabClipCurrentCueIndex = {};
 
+    // Track In/Out points for each clip (tabIndex -> { clipNumber -> { inPoint: time, outPoint: time } })
+    const tabClipInOutPoints = {};
+
     // Initialize tab data structures for default 5 tabs
     for (let i = 0; i < 5; i++) {
         tabClipVideos[i] = {};
@@ -105,6 +112,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipModes[i] = {};
         tabClipCueStop[i] = {};
         tabClipCurrentCueIndex[i] = {};
+        tabClipInOutPoints[i] = {};
     }
 
     // Legacy references for current tab's data (for compatibility)
@@ -115,6 +123,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let clipModes = tabClipModes[currentTab];
     let clipCueStop = tabClipCueStop[currentTab];
     let clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
+    let clipInOutPoints = tabClipInOutPoints[currentTab];
 
     // File browser state
     let currentFolderPath = '';
@@ -1400,6 +1409,279 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update the display
         // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+    }
+
+    // In/Out point functions
+    function setInPoint() {
+        if (!selectedClipSlot) {
+            alert('Please select a clip first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        if (!clipVideos[clipNumber]) {
+            alert('Please load a video into the selected clip first');
+            return;
+        }
+
+        if (!video.src || videoDuration === 0) {
+            alert('No video is currently loaded');
+            return;
+        }
+
+        const currentTime = video.currentTime;
+
+        // Initialize In/Out points for this clip if it doesn't exist
+        if (!clipInOutPoints[clipNumber]) {
+            clipInOutPoints[clipNumber] = {};
+        }
+
+        // Set the In point
+        clipInOutPoints[clipNumber].inPoint = currentTime;
+
+        console.log(`Set In Point at ${formatTime(currentTime)} for clip ${clipNumber}`);
+
+        // Mark session as modified
+        markSessionModified();
+
+        // Update the display
+        updateInOutMarkersOnTimeline();
+    }
+
+    function setOutPoint() {
+        if (!selectedClipSlot) {
+            alert('Please select a clip first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        if (!clipVideos[clipNumber]) {
+            alert('Please load a video into the selected clip first');
+            return;
+        }
+
+        if (!video.src || videoDuration === 0) {
+            alert('No video is currently loaded');
+            return;
+        }
+
+        const currentTime = video.currentTime;
+
+        // Initialize In/Out points for this clip if it doesn't exist
+        if (!clipInOutPoints[clipNumber]) {
+            clipInOutPoints[clipNumber] = {};
+        }
+
+        // Set the Out point
+        clipInOutPoints[clipNumber].outPoint = currentTime;
+
+        console.log(`Set Out Point at ${formatTime(currentTime)} for clip ${clipNumber}`);
+
+        // Mark session as modified
+        markSessionModified();
+
+        // Update the display
+        updateInOutMarkersOnTimeline();
+    }
+
+    function clearInOutPoints() {
+        if (!selectedClipSlot) {
+            alert('Please select a clip first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        // Clear the In/Out points for this clip
+        if (clipInOutPoints[clipNumber]) {
+            delete clipInOutPoints[clipNumber];
+            console.log(`Cleared In/Out points for clip ${clipNumber}`);
+
+            // Mark session as modified
+            markSessionModified();
+
+            // Update the display
+            updateInOutMarkersOnTimeline();
+        }
+    }
+
+    // Update In/Out point markers on timeline
+    function updateInOutMarkersOnTimeline() {
+        // Clear existing markers
+        inOutMarkers.innerHTML = '';
+
+        if (!selectedClipSlot || videoDuration === 0) {
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const inOut = clipInOutPoints[clipNumber];
+
+        if (!inOut) {
+            return;
+        }
+
+        // Create In Point marker
+        if (inOut.inPoint !== undefined && inOut.inPoint !== null) {
+            const inMarker = document.createElement('div');
+            inMarker.className = 'in-marker';
+            const position = (inOut.inPoint / videoDuration) * 100;
+            inMarker.style.left = `${position}%`;
+            inMarker.title = `In Point: ${formatTime(inOut.inPoint)}`;
+            inMarker.dataset.markerType = 'in';
+
+            // Make marker draggable
+            setupInOutMarkerDrag(inMarker, clipNumber, 'in');
+
+            inOutMarkers.appendChild(inMarker);
+        }
+
+        // Create Out Point marker
+        if (inOut.outPoint !== undefined && inOut.outPoint !== null) {
+            const outMarker = document.createElement('div');
+            outMarker.className = 'out-marker';
+            const position = (inOut.outPoint / videoDuration) * 100;
+            outMarker.style.left = `${position}%`;
+            outMarker.title = `Out Point: ${formatTime(inOut.outPoint)}`;
+            outMarker.dataset.markerType = 'out';
+
+            // Make marker draggable
+            setupInOutMarkerDrag(outMarker, clipNumber, 'out');
+
+            inOutMarkers.appendChild(outMarker);
+        }
+    }
+
+    // Setup In/Out marker drag functionality
+    function setupInOutMarkerDrag(marker, clipNumber, markerType) {
+        let isDragging = false;
+        let dragStarted = false;
+        let dragTooltip = null;
+        let wasPlayingBeforeDrag = false;
+
+        marker.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            dragStarted = false;
+
+            const rect = timelineTrack.getBoundingClientRect();
+
+            function onMouseMove(moveEvent) {
+                if (!dragStarted) {
+                    dragStarted = true;
+                    isDragging = true;
+                    marker.classList.add('dragging');
+
+                    wasPlayingBeforeDrag = !video.paused;
+                    if (wasPlayingBeforeDrag) {
+                        video.pause();
+                        if (outputVideo) outputVideo.pause();
+                    }
+
+                    dragTooltip = document.createElement('div');
+                    dragTooltip.className = 'cue-drag-tooltip';
+                    document.body.appendChild(dragTooltip);
+                }
+
+                if (!isDragging) return;
+
+                const moveX = moveEvent.clientX - rect.left;
+                const percentage = Math.max(0, Math.min(1, moveX / rect.width));
+                const newTime = percentage * videoDuration;
+
+                marker.style.left = `${percentage * 100}%`;
+
+                dragTooltip.style.left = `${moveEvent.clientX + 15}px`;
+                dragTooltip.style.top = `${moveEvent.clientY - 10}px`;
+                dragTooltip.textContent = `${markerType === 'in' ? 'In' : 'Out'}: ${formatTime(newTime)}`;
+
+                // Update the In/Out point time
+                if (!clipInOutPoints[clipNumber]) {
+                    clipInOutPoints[clipNumber] = {};
+                }
+
+                if (markerType === 'in') {
+                    clipInOutPoints[clipNumber].inPoint = newTime;
+                } else {
+                    clipInOutPoints[clipNumber].outPoint = newTime;
+                }
+
+                // Scrub video
+                if (video && video.duration > 0) {
+                    try {
+                        video.currentTime = newTime;
+                        if (outputVideo && outputVideo.duration > 0) {
+                            outputVideo.currentTime = newTime;
+                        }
+                    } catch (e) {
+                        console.error('Error scrubbing video:', e);
+                    }
+                }
+            }
+
+            function onMouseUp() {
+                if (dragStarted && isDragging) {
+                    isDragging = false;
+                    marker.classList.remove('dragging');
+
+                    if (dragTooltip) {
+                        dragTooltip.remove();
+                        dragTooltip = null;
+                    }
+
+                    if (wasPlayingBeforeDrag) {
+                        video.play().catch(e => console.error('Error resuming playback:', e));
+                        if (outputVideo) {
+                            outputVideo.play().catch(e => console.error('Error resuming output playback:', e));
+                        }
+                    }
+
+                    markSessionModified();
+                }
+
+                dragStarted = false;
+                isDragging = false;
+
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+
+        // Double-click to delete (same as cue points)
+        marker.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const confirmMsg = `Delete ${markerType === 'in' ? 'In' : 'Out'} Point?`;
+
+            if (confirm(confirmMsg)) {
+                if (clipInOutPoints[clipNumber]) {
+                    if (markerType === 'in') {
+                        delete clipInOutPoints[clipNumber].inPoint;
+                    } else {
+                        delete clipInOutPoints[clipNumber].outPoint;
+                    }
+
+                    // If both are deleted, remove the object
+                    if (!clipInOutPoints[clipNumber].inPoint && !clipInOutPoints[clipNumber].outPoint) {
+                        delete clipInOutPoints[clipNumber];
+                    }
+
+                    markSessionModified();
+                    updateInOutMarkersOnTimeline();
+
+                    console.log(`Deleted ${markerType === 'in' ? 'In' : 'Out'} Point`);
+                }
+            }
+        });
     }
 
     // Speed control functions

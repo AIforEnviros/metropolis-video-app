@@ -312,6 +312,41 @@
             cursor: not-allowed;
         }
 
+        /* In/Out point controls */
+        .inout-point-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .inout-btn {
+            background-color: #458588;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .inout-btn:hover {
+            background-color: #6fabc5;
+        }
+
+        .inout-btn.clear-btn {
+            background-color: #cc241d;
+        }
+
+        .inout-btn.clear-btn:hover {
+            background-color: #fb4934;
+        }
+
+        .inout-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
         /* Cue points list CSS removed - cue points visible on timeline */
 
         .cue-point-navigation {
@@ -441,6 +476,65 @@
             transform: translateX(-50%) scaleX(2.5) scaleY(1.5);
             background-color: #ffaa77;
             z-index: 20;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+        }
+
+        /* In/Out point markers on timeline */
+        .in-marker {
+            position: absolute;
+            top: -2px;
+            width: 4px;
+            height: 12px;
+            background-color: #90ee90;
+            border-radius: 1px;
+            transform: translateX(-50%);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            pointer-events: auto;
+            cursor: grab;
+            transition: transform 0.1s ease;
+            z-index: 15;
+        }
+
+        .in-marker:hover {
+            transform: translateX(-50%) scaleX(2) scaleY(1.2);
+            background-color: #b0ffb0;
+            z-index: 25;
+        }
+
+        .in-marker.dragging {
+            cursor: grabbing;
+            transform: translateX(-50%) scaleX(2.5) scaleY(1.5);
+            background-color: #d0ffd0;
+            z-index: 30;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+        }
+
+        .out-marker {
+            position: absolute;
+            top: -2px;
+            width: 4px;
+            height: 12px;
+            background-color: #ff6b6b;
+            border-radius: 1px;
+            transform: translateX(-50%);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            pointer-events: auto;
+            cursor: grab;
+            transition: transform 0.1s ease;
+            z-index: 15;
+        }
+
+        .out-marker:hover {
+            transform: translateX(-50%) scaleX(2) scaleY(1.2);
+            background-color: #ff8b8b;
+            z-index: 25;
+        }
+
+        .out-marker.dragging {
+            cursor: grabbing;
+            transform: translateX(-50%) scaleX(2.5) scaleY(1.5);
+            background-color: #ffabab;
+            z-index: 30;
             box-shadow: 0 2px 6px rgba(0,0,0,0.5);
         }
 
@@ -1101,6 +1195,7 @@
                     <div class="timeline-progress" id="timelineProgress"></div>
                     <div class="timeline-handle" id="timelineHandle"></div>
                     <div class="cue-markers" id="cueMarkers"></div>
+                    <div class="inout-markers" id="inOutMarkers"></div>
                 </div>
                 <div class="timeline-time">
                     <span id="currentTime">00:00</span> / <span id="totalDuration">00:00</span>
@@ -1126,6 +1221,16 @@
 
             <div style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px; color: #888;">
                 💡 <strong>Tip:</strong> Double-click cue markers on timeline to delete
+            </div>
+
+            <h3>In/Out Points</h3>
+            <div class="inout-point-controls">
+                <button id="setInPointBtn" class="inout-btn">Set In Point (I)</button>
+                <button id="setOutPointBtn" class="inout-btn">Set Out Point (O)</button>
+                <button id="clearInOutBtn" class="inout-btn clear-btn">Clear In/Out</button>
+            </div>
+            <div style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px; color: #888;">
+                💡 <strong>Tip:</strong> In/Out points trim playback range. Drag markers to adjust.
             </div>
 
             <h3>Speed Control</h3>
