@@ -450,7 +450,6 @@ document.addEventListener('DOMContentLoaded', function() {
             tabClipSpeeds[i] = {};
             tabClipNames[i] = {};
             tabClipModes[i] = {};
-            tabClipCueStop[i] = {};
             tabClipCurrentCueIndex[i] = {};
         }
 
@@ -2475,7 +2474,6 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipSpeeds[newTabIndex] = {};
         tabClipNames[newTabIndex] = {};
         tabClipModes[newTabIndex] = {};
-        tabClipCueStop[newTabIndex] = {};
 
         // Create tab button
         const tabBtn = document.createElement('button');
@@ -2650,7 +2648,6 @@ document.addEventListener('DOMContentLoaded', function() {
         delete tabClipSpeeds[tabIndex];
         delete tabClipNames[tabIndex];
         delete tabClipModes[tabIndex];
-        delete tabClipCueStop[tabIndex];
         delete tabCustomNames[tabIndex];
 
         // Remove tab button from UI
