@@ -1094,12 +1094,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const clipSpeed = clipSpeeds[clipNumber] || 1.0;
                 setVideoSpeed(clipSpeed);
 
-                // If In point is set, start from In point
+                // ALWAYS start at In Point (or 0:00 if not set)
                 const inOut = clipInOutPoints[clipNumber];
-                if (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) {
-                    video.currentTime = inOut.inPoint;
-                    console.log(`Starting from In point: ${formatTime(inOut.inPoint)}`);
-                }
+                const startTime = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
+                video.currentTime = startTime;
+                // Update timeline immediately to show position
+                updateTimeline();
+                console.log(`Starting from ${startTime > 0 ? 'In point' : 'beginning'}: ${formatTime(startTime)}`);
 
                 // Auto-play when clip is selected - only if global auto-play is enabled
                 if (globalAutoPlayEnabled) {
