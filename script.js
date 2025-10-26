@@ -3785,28 +3785,106 @@ document.addEventListener('DOMContentLoaded', function() {
         // Note: Timeline updates now handled by requestAnimationFrame for smooth 60fps motion
         // updateTimeline() is called from smoothUpdateTimeline() instead
 
-        // In/Out point behavior
+        // Mode-aware playback behavior (In/Out points + cue points)
         if (selectedClipSlot && !video.paused) {
             const clipNumber = selectedClipSlot.dataset.clipNumber;
+            const clipMode = clipModes[clipNumber] || 'loop';
             const inOut = clipInOutPoints[clipNumber];
+            const cuePoints = clipCuePoints[clipNumber] || [];
+            const currentTime = video.currentTime;
 
-            if (inOut) {
-                const currentTime = video.currentTime;
-                const inPoint = inOut.inPoint;
-                const outPoint = inOut.outPoint;
+            // Get In/Out points (default to video bounds)
+            const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
+            const outPoint = (inOut && inOut.outPoint !== undefined && inOut.outPoint !== null) ? inOut.outPoint : video.duration;
 
-                // If Out point is set and we've passed it
-                if (outPoint !== undefined && outPoint !== null && currentTime >= outPoint) {
-                    // Loop back to In point (or start if no In point)
-                    video.currentTime = (inPoint !== undefined && inPoint !== null) ? inPoint : 0;
-                    console.log(`Reached Out point, looping to ${(inPoint !== undefined && inPoint !== null) ? formatTime(inPoint) : 'start'}`);
-                }
+            // Safety check: if before In Point, jump to it
+            if (currentTime < inPoint && currentTime > 0.1) {
+                video.currentTime = inPoint;
+                updateTimeline();
+                console.log(`Before In point, jumping to ${formatTime(inPoint)}`);
+                return;
+            }
 
-                // If In point is set and we're before it (shouldn't happen normally, but handle it)
-                if (inPoint !== undefined && inPoint !== null && currentTime < inPoint && currentTime > 0.1) {
-                    video.currentTime = inPoint;
-                    console.log(`Before In point, jumping to ${formatTime(inPoint)}`);
-                }
+            // Mode-specific behavior when reaching Out Point or cue points
+            switch (clipMode) {
+                case 'forward':
+                    // Play continuously from In to Out, ignoring cues
+                    if (currentTime >= outPoint) {
+                        video.pause();
+                        globalPlayIntent = false;
+                        console.log(`[forward] Reached Out point, stopped`);
+                    }
+                    break;
+
+                case 'loop':
+                    // Loop back to In Point when reaching Out Point
+                    if (currentTime >= outPoint) {
+                        video.currentTime = inPoint;
+                        updateTimeline();
+                        console.log(`[loop] Reached Out point, looping to ${formatTime(inPoint)}`);
+                    }
+                    break;
+
+                case 'forward-stop':
+                    // Stop at each cue point OR Out Point (whichever comes first)
+                    // Check Out Point first
+                    if (currentTime >= outPoint) {
+                        video.pause();
+                        globalPlayIntent = false;
+                        console.log(`[forward-stop] Reached Out point, stopped`);
+                        break;
+                    }
+
+                    // Check cue points (only in forward direction, not during bounce)
+                    if (bounceDirection === 1 && cuePoints.length > 0) {
+                        for (let i = 0; i < cuePoints.length; i++) {
+                            const cuePoint = cuePoints[i];
+                            // If within 0.1 seconds of a cue point, pause
+                            if (Math.abs(currentTime - cuePoint.time) < 0.1) {
+                                // Don't stop if we just navigated to this cue point
+                                if (justNavigatedToCue && Math.abs(cuePoint.time - lastNavigatedCueTime) < 0.15) {
+                                    // Clear the flag once we've moved past
+                                    if (Math.abs(currentTime - lastNavigatedCueTime) > 0.2) {
+                                        justNavigatedToCue = false;
+                                    }
+                                    continue; // Skip stopping
+                                }
+
+                                video.pause();
+                                globalPlayIntent = false;
+                                clipCurrentCueIndex[clipNumber] = i;
+                                console.log(`[forward-stop] Stopped at cue ${i + 1}/${cuePoints.length}: ${formatTime(cuePoint.time)}`);
+                                break;
+                            }
+                        }
+                    }
+                    break;
+
+                case 'forward-next':
+                    // Play to Out Point, then wait for 'w' to go to next clip
+                    if (currentTime >= outPoint) {
+                        video.pause();
+                        globalPlayIntent = false;
+                        console.log(`[forward-next] Reached Out point, waiting for next clip trigger`);
+                    }
+                    break;
+
+                case 'bounce':
+                    // Bounce mode - leave existing behavior
+                    // (Will be refined in future work)
+                    if (currentTime >= outPoint) {
+                        video.currentTime = inPoint;
+                        updateTimeline();
+                    }
+                    break;
+
+                default:
+                    // Default to loop behavior
+                    if (currentTime >= outPoint) {
+                        video.currentTime = inPoint;
+                        updateTimeline();
+                    }
+                    break;
             }
         }
 
