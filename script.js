@@ -2138,6 +2138,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!isDragging) {
             timelineProgress.style.width = `${progress}%`;
             timelineHandle.style.left = `${progress}%`;
+
+            // Auto-scroll zoomed timeline to follow playback
+            if (timelineZoomLevel > 1 && !video.paused) {
+                const container = timelineTrack.parentElement;
+                const scrollPosition = (container.scrollWidth * progress / 100) - (container.clientWidth / 2);
+                container.scrollLeft = Math.max(0, scrollPosition);
+            }
         }
 
         currentTimeDisplay.textContent = formatTimeShort(currentTime);
