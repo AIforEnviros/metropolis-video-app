@@ -2449,10 +2449,29 @@ document.addEventListener('DOMContentLoaded', function() {
         event.preventDefault();
         isDragging = true;
 
-        const rect = timelineTrack.getBoundingClientRect();
+        const container = timelineTrack.parentElement;
 
         function onMouseMove(e) {
             if (!isDragging || videoDuration === 0) return;
+
+            // Auto-scroll when dragging near container edges (when zoomed)
+            if (timelineZoomLevel > 1) {
+                const containerRect = container.getBoundingClientRect();
+                const edgeThreshold = 50; // pixels from edge to trigger scroll
+                const scrollSpeed = 15; // pixels to scroll per frame
+
+                if (e.clientX < containerRect.left + edgeThreshold) {
+                    // Near left edge - scroll left
+                    container.scrollLeft = Math.max(0, container.scrollLeft - scrollSpeed);
+                } else if (e.clientX > containerRect.right - edgeThreshold) {
+                    // Near right edge - scroll right
+                    const maxScroll = container.scrollWidth - container.clientWidth;
+                    container.scrollLeft = Math.min(maxScroll, container.scrollLeft + scrollSpeed);
+                }
+            }
+
+            // Recalculate rect after potential scroll
+            const rect = timelineTrack.getBoundingClientRect();
 
             const moveX = e.clientX - rect.left;
             const percentage = Math.max(0, Math.min(1, moveX / rect.width));
