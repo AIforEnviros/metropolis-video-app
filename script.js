@@ -1936,7 +1936,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Get In/Out points (default to video bounds)
         const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
-        const outPoint = (inOut && inOut.outPoint !== undefined && inOut.outPoint !== null) ? inOut.outPoint : video.duration;
+        const outPoint = (inOut && inOut.outPoint !== undefined && inOut.outPoint !== null) ? inOut.outPoint : (video.duration || 0);
+
+        // Special handling for modes with no cue points
+        if (cuePoints.length === 0) {
+            if (clipMode === 'forward-stop') {
+                // No cue points: loop back to In Point
+                video.currentTime = inPoint;
+                updateTimeline();
+                console.log(`[forward-stop] No cue points, looping to In Point: ${formatTime(inPoint)}`);
+
+                if (globalAutoPlayEnabled) {
+                    globalPlayIntent = true;
+                    video.play().catch(e => console.error('Error playing:', e));
+                }
+                return;
+            } else if (clipMode === 'forward-next') {
+                // No cue points: go to next clip
+                goToNextClip();
+                return;
+            } else {
+                // Other modes without cue points
+                console.log('No cue points to navigate to');
+                return;
+            }
+        }
 
         // Find next cue point after current time
         let targetCuePoint = null;
@@ -1950,10 +1974,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // Mode-specific behavior when no cue ahead
+        // Mode-specific behavior when no cue ahead (but cue points exist)
         if (!targetCuePoint) {
             if (clipMode === 'forward-stop') {
-                // At or past Out Point: loop back to In Point
+                // At or past last cue/Out Point: loop back to In Point
                 if (currentTime >= outPoint - 0.1) {
                     video.currentTime = inPoint;
                     updateTimeline();
@@ -3850,7 +3874,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // updateTimeline() is called from smoothUpdateTimeline() instead
 
         // Mode-aware playback behavior (In/Out points + cue points)
-        if (selectedClipSlot && !video.paused) {
+        if (selectedClipSlot && !video.paused && video.duration && !isNaN(video.duration)) {
             const clipNumber = selectedClipSlot.dataset.clipNumber;
             const clipMode = clipModes[clipNumber] || 'loop';
             const inOut = clipInOutPoints[clipNumber];
@@ -3861,11 +3885,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
             const outPoint = (inOut && inOut.outPoint !== undefined && inOut.outPoint !== null) ? inOut.outPoint : video.duration;
 
+            // Safety check: if In Point is after Out Point (invalid), ignore In Point
+            const validInPoint = (inPoint < outPoint) ? inPoint : 0;
+            const validOutPoint = (inPoint < outPoint) ? outPoint : video.duration;
+
             // Safety check: if before In Point, jump to it
-            if (currentTime < inPoint && currentTime > 0.1) {
-                video.currentTime = inPoint;
+            if (currentTime < validInPoint && currentTime > 0.1) {
+                video.currentTime = validInPoint;
                 updateTimeline();
-                console.log(`Before In point, jumping to ${formatTime(inPoint)}`);
+                console.log(`Before In point, jumping to ${formatTime(validInPoint)}`);
                 return;
             }
 
@@ -3873,7 +3901,7 @@ document.addEventListener('DOMContentLoaded', function() {
             switch (clipMode) {
                 case 'forward':
                     // Play continuously from In to Out, ignoring cues
-                    if (currentTime >= outPoint) {
+                    if (currentTime >= validOutPoint) {
                         video.pause();
                         globalPlayIntent = false;
                         console.log(`[forward] Reached Out point, stopped`);
@@ -3882,17 +3910,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 case 'loop':
                     // Loop back to In Point when reaching Out Point
-                    if (currentTime >= outPoint) {
-                        video.currentTime = inPoint;
+                    if (currentTime >= validOutPoint) {
+                        video.currentTime = validInPoint;
                         updateTimeline();
-                        console.log(`[loop] Reached Out point, looping to ${formatTime(inPoint)}`);
+                        console.log(`[loop] Reached Out point, looping to ${formatTime(validInPoint)}`);
                     }
                     break;
 
                 case 'forward-stop':
                     // Stop at each cue point OR Out Point (whichever comes first)
                     // Check Out Point first
-                    if (currentTime >= outPoint) {
+                    if (currentTime >= validOutPoint) {
                         video.pause();
                         globalPlayIntent = false;
                         console.log(`[forward-stop] Reached Out point, stopped`);
@@ -3926,7 +3954,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 case 'forward-next':
                     // Play to Out Point, then wait for 'w' to go to next clip
-                    if (currentTime >= outPoint) {
+                    if (currentTime >= validOutPoint) {
                         video.pause();
                         globalPlayIntent = false;
                         console.log(`[forward-next] Reached Out point, waiting for next clip trigger`);
@@ -3936,16 +3964,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 case 'bounce':
                     // Bounce mode - leave existing behavior
                     // (Will be refined in future work)
-                    if (currentTime >= outPoint) {
-                        video.currentTime = inPoint;
+                    if (currentTime >= validOutPoint) {
+                        video.currentTime = validInPoint;
                         updateTimeline();
                     }
                     break;
 
                 default:
                     // Default to loop behavior
-                    if (currentTime >= outPoint) {
-                        video.currentTime = inPoint;
+                    if (currentTime >= validOutPoint) {
+                        video.currentTime = validInPoint;
                         updateTimeline();
                     }
                     break;
