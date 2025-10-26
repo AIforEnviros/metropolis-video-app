@@ -1827,6 +1827,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // Jump to first cue point and reset index to 0
             const firstCuePoint = cuePoints[0];
             video.currentTime = firstCuePoint.time;
+            // Update timeline immediately to move scrubber
+            updateTimeline();
             clipCurrentCueIndex[clipNumber] = 0;
 
             // Set flag to allow playing through this cue point
@@ -1849,6 +1851,8 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             // Jump to beginning if no cue points
             video.currentTime = 0;
+            // Update timeline immediately to move scrubber
+            updateTimeline();
             clipCurrentCueIndex[clipNumber] = -1;
 
             // Set flag to allow playing through first cue
@@ -1906,6 +1910,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (prevIndex < 0) {
             // Go to beginning if we're before first cue
             video.currentTime = 0;
+            // Update timeline immediately to move scrubber
+            updateTimeline();
             clipCurrentCueIndex[clipNumber] = -1;
 
             // Set flag to allow playing through first cue
@@ -1935,6 +1941,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Jump backwards to the previous cue point
         video.currentTime = targetCuePoint.time;
+        // Update timeline immediately to move scrubber
+        updateTimeline();
 
         // Set flag to allow playing through this cue point
         justNavigatedToCue = true;
@@ -2006,6 +2014,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (distanceToCue > 0.1) {
             // NOT at the cue - JUMP to it
             video.currentTime = targetCuePoint.time;
+            // Update timeline immediately to move scrubber
+            updateTimeline();
             console.log(`W key: Jumped to cue ${targetIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
         } else {
             // Already AT the cue - just play from here
