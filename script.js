@@ -75,6 +75,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Timeline zoom level (1x, 2x, 4x, 8x)
     let timelineZoomLevel = 1;
 
+    // Timeline smooth animation frame ID for 60fps updates
+    let timelineAnimationFrame = null;
+
     // Track which tab is currently active
     let currentTab = 0;
 
@@ -2067,6 +2070,32 @@ document.addEventListener('DOMContentLoaded', function() {
         totalDurationDisplay.textContent = formatTimeShort(videoDuration);
     }
 
+    // Smooth timeline update using requestAnimationFrame for 60fps updates
+    function smoothUpdateTimeline() {
+        updateTimeline();
+
+        // Continue updating at 60fps while video is playing
+        if (!video.paused && !video.ended) {
+            timelineAnimationFrame = requestAnimationFrame(smoothUpdateTimeline);
+        }
+    }
+
+    // Start smooth timeline updates
+    function startSmoothTimelineUpdates() {
+        if (timelineAnimationFrame) {
+            cancelAnimationFrame(timelineAnimationFrame);
+        }
+        timelineAnimationFrame = requestAnimationFrame(smoothUpdateTimeline);
+    }
+
+    // Stop smooth timeline updates
+    function stopSmoothTimelineUpdates() {
+        if (timelineAnimationFrame) {
+            cancelAnimationFrame(timelineAnimationFrame);
+            timelineAnimationFrame = null;
+        }
+    }
+
     // Set timeline zoom level
     function setTimelineZoom(zoomLevel) {
         timelineZoomLevel = zoomLevel;
@@ -3765,6 +3794,8 @@ document.addEventListener('DOMContentLoaded', function() {
             currentlyPlayingClipNumber = selectedClipSlot.dataset.clipNumber;
             updatePlayingIndicator();
         }
+        // Start smooth 60fps timeline updates
+        startSmoothTimelineUpdates();
         // Note: Don't change globalPlayIntent here - only user actions should
     });
 
@@ -3772,6 +3803,11 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Video pause event fired');
         currentVideoPlaying = false;
         updatePlayingIndicator();
+
+        // Stop smooth timeline updates
+        stopSmoothTimelineUpdates();
+        // Update timeline one last time to show final position
+        updateTimeline();
 
         // Cancel bounce animation if playing
         if (bounceAnimationFrame) {
@@ -3790,7 +3826,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     video.addEventListener('timeupdate', function() {
-        updateTimeline();
+        // Note: Timeline updates now handled by requestAnimationFrame for smooth 60fps motion
+        // updateTimeline() is called from smoothUpdateTimeline() instead
 
         // In/Out point behavior
         if (selectedClipSlot && !video.paused) {
