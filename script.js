@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'clearInOut': 'Shift+x',
         'zoomIn': '=',
         'zoomOut': '-',
-        'toggleAutoPlay': ' ',
+        'pausePlay': 'Space',
         'tab1': '1',
         'tab2': '2',
         'tab3': '3',
@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'setInPoint': null,
         'setOutPoint': null,
         'clearInOut': null,
-        'toggleAutoPlay': null,
+        'pausePlay': null,
         'tab1': null,
         'tab2': null,
         'tab3': null,
@@ -390,11 +390,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Restore keyboard shortcuts
             if (sessionData.keyboardShortcuts) {
+                // Migrate old toggleAutoPlay to pausePlay
+                if (sessionData.keyboardShortcuts.toggleAutoPlay !== undefined) {
+                    if (!sessionData.keyboardShortcuts.pausePlay) {
+                        sessionData.keyboardShortcuts.pausePlay = sessionData.keyboardShortcuts.toggleAutoPlay;
+                        console.log('Migrated toggleAutoPlay shortcut to pausePlay');
+                    }
+                    delete sessionData.keyboardShortcuts.toggleAutoPlay;
+                }
+                // Ensure pausePlay has default spacebar mapping if missing
+                if (sessionData.keyboardShortcuts.pausePlay === undefined) {
+                    sessionData.keyboardShortcuts.pausePlay = 'Space';
+                    console.log('Set default spacebar mapping for pausePlay');
+                }
+                // Also migrate old ' ' (space char) format to 'Space' (string)
+                if (sessionData.keyboardShortcuts.pausePlay === ' ') {
+                    sessionData.keyboardShortcuts.pausePlay = 'Space';
+                    console.log('Migrated space character to Space string for pausePlay');
+                }
                 keyboardShortcuts = { ...keyboardShortcuts, ...sessionData.keyboardShortcuts };
             }
 
             // Restore MIDI mappings
             if (sessionData.midiMappings) {
+                // Migrate old toggleAutoPlay to pausePlay
+                if (sessionData.midiMappings.toggleAutoPlay !== undefined) {
+                    if (!sessionData.midiMappings.pausePlay) {
+                        sessionData.midiMappings.pausePlay = sessionData.midiMappings.toggleAutoPlay;
+                        console.log('Migrated toggleAutoPlay MIDI mapping to pausePlay');
+                    }
+                    delete sessionData.midiMappings.toggleAutoPlay;
+                }
+                // Ensure pausePlay is initialized (null by default for MIDI)
+                if (sessionData.midiMappings.pausePlay === undefined) {
+                    sessionData.midiMappings.pausePlay = null;
+                }
                 midiMappings = { ...midiMappings, ...sessionData.midiMappings };
                 console.log('Restored MIDI mappings:', midiMappings);
             }
@@ -2173,6 +2203,35 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Global auto-play ${globalAutoPlayEnabled ? 'enabled' : 'disabled'}`);
     }
 
+    // Pause/Play video toggle
+    function pausePlayVideo() {
+        if (!video.src) {
+            console.log('No video loaded, cannot pause/play');
+            return;
+        }
+
+        if (video.paused) {
+            // Video is paused, play it
+            globalPlayIntent = true;
+            video.play().then(() => {
+                console.log('Video playing (spacebar)');
+                if (outputVideo) {
+                    outputVideo.play().catch(e => console.error('Error playing output video:', e));
+                }
+            }).catch(e => {
+                console.error('Error playing video:', e);
+            });
+        } else {
+            // Video is playing, pause it
+            globalPlayIntent = false;
+            video.pause();
+            console.log('Video paused (spacebar)');
+            if (outputVideo) {
+                outputVideo.pause();
+            }
+        }
+    }
+
     // Cue marker drag tooltip element
     let cueMarkerDragTooltip = null;
 
@@ -2976,8 +3035,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             setTimelineZoom(timelineZoomLevel / 2);
                         }
                         break;
-                    case 'toggleAutoPlay':
-                        toggleGlobalAutoPlay();
+                    case 'pausePlay':
+                        pausePlayVideo();
                         break;
                     case 'tab1':
                         switchTab(0);
@@ -3166,8 +3225,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     setTimelineZoom(timelineZoomLevel / 2);
                 }
                 break;
-            case 'toggleAutoPlay':
-                toggleGlobalAutoPlay();
+            case 'pausePlay':
+                pausePlayVideo();
                 break;
             case 'tab1':
                 switchTab(0);
@@ -3278,7 +3337,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'clearInOut': 'Clear In/Out Points',
         'zoomIn': 'Zoom Timeline In',
         'zoomOut': 'Zoom Timeline Out',
-        'toggleAutoPlay': 'Toggle Auto-Play',
+        'pausePlay': 'Pause/Play Video',
         'tab1': 'Switch to Tab 1',
         'tab2': 'Switch to Tab 2',
         'tab3': 'Switch to Tab 3',
@@ -3513,6 +3572,7 @@ document.addEventListener('DOMContentLoaded', function() {
             'clearInOut': 'Shift+x',
             'zoomIn': '=',
             'zoomOut': '-',
+            'pausePlay': 'Space',
             'tab1': '1',
             'tab2': '2',
             'tab3': '3',
