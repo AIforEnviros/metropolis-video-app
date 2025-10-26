@@ -104,9 +104,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Modes: 'forward', 'loop', 'forward-stop', 'forward-next', 'bounce'
     const tabClipModes = {};
 
-    // Track whether clips stop at cue points (tabIndex -> { clipNumber -> boolean })
-    const tabClipCueStop = {};
-
     // Track current cue index for sequential navigation (tabIndex -> { clipNumber -> index })
     const tabClipCurrentCueIndex = {};
 
@@ -120,7 +117,6 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipSpeeds[i] = {};
         tabClipNames[i] = {};
         tabClipModes[i] = {};
-        tabClipCueStop[i] = {};
         tabClipCurrentCueIndex[i] = {};
         tabClipInOutPoints[i] = {};
     }
@@ -131,7 +127,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let clipSpeeds = tabClipSpeeds[currentTab];
     let clipNames = tabClipNames[currentTab];
     let clipModes = tabClipModes[currentTab];
-    let clipCueStop = tabClipCueStop[currentTab];
     let clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
     let clipInOutPoints = tabClipInOutPoints[currentTab];
 
@@ -244,7 +239,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 speeds: tabClipSpeeds,
                 clipNames: tabClipNames,
                 clipModes: tabClipModes,
-                clipCueStop: tabClipCueStop,
                 currentCueIndex: tabClipCurrentCueIndex,
                 inOutPoints: tabClipInOutPoints
             }
@@ -346,10 +340,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Restoring clip modes:', sessionData.tabs.clipModes);
                 Object.assign(tabClipModes, sessionData.tabs.clipModes);
             }
-            if (sessionData.tabs.clipCueStop) {
-                console.log('Restoring cue stop settings:', sessionData.tabs.clipCueStop);
-                Object.assign(tabClipCueStop, sessionData.tabs.clipCueStop);
-            }
             if (sessionData.tabs.currentCueIndex) {
                 console.log('Restoring current cue indices:', sessionData.tabs.currentCueIndex);
                 Object.assign(tabClipCurrentCueIndex, sessionData.tabs.currentCueIndex);
@@ -373,7 +363,6 @@ document.addEventListener('DOMContentLoaded', function() {
             clipSpeeds = tabClipSpeeds[currentTab];
             clipNames = tabClipNames[currentTab];
             clipModes = tabClipModes[currentTab];
-            clipCueStop = tabClipCueStop[currentTab];
             clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
             clipInOutPoints = tabClipInOutPoints[currentTab];
             console.log('Current tab video data:', clipVideos);
@@ -471,7 +460,6 @@ document.addEventListener('DOMContentLoaded', function() {
         clipSpeeds = tabClipSpeeds[currentTab];
         clipNames = tabClipNames[currentTab];
         clipModes = tabClipModes[currentTab];
-        clipCueStop = tabClipCueStop[currentTab];
         clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
 
         // Clear UI
@@ -904,7 +892,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const sourceSpeed = clipSpeeds[sourceClipNumber] || 1.0;
         const sourceName = clipNames[sourceClipNumber];
         const sourceMode = clipModes[sourceClipNumber] || 'loop';
-        const sourceCueStop = clipCueStop[sourceClipNumber];
 
         // Save target clip data (for swap)
         const targetVideo = clipVideos[targetClipNumber];
@@ -912,7 +899,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const targetSpeed = clipSpeeds[targetClipNumber] || 1.0;
         const targetName = clipNames[targetClipNumber];
         const targetMode = clipModes[targetClipNumber] || 'loop';
-        const targetCueStop = clipCueStop[targetClipNumber];
 
         // Move source to target
         if (sourceVideo) {
@@ -921,14 +907,12 @@ document.addEventListener('DOMContentLoaded', function() {
             clipSpeeds[targetClipNumber] = sourceSpeed;
             if (sourceName) clipNames[targetClipNumber] = sourceName;
             clipModes[targetClipNumber] = sourceMode;
-            if (sourceCueStop !== undefined) clipCueStop[targetClipNumber] = sourceCueStop;
         } else {
             delete clipVideos[targetClipNumber];
             delete clipCuePoints[targetClipNumber];
             delete clipSpeeds[targetClipNumber];
             delete clipNames[targetClipNumber];
             delete clipModes[targetClipNumber];
-            delete clipCueStop[targetClipNumber];
         }
 
         // Move target to source (swap)
@@ -938,14 +922,12 @@ document.addEventListener('DOMContentLoaded', function() {
             clipSpeeds[sourceClipNumber] = targetSpeed;
             if (targetName) clipNames[sourceClipNumber] = targetName;
             clipModes[sourceClipNumber] = targetMode;
-            if (targetCueStop !== undefined) clipCueStop[sourceClipNumber] = targetCueStop;
         } else {
             delete clipVideos[sourceClipNumber];
             delete clipCuePoints[sourceClipNumber];
             delete clipSpeeds[sourceClipNumber];
             delete clipNames[sourceClipNumber];
             delete clipModes[sourceClipNumber];
-            delete clipCueStop[sourceClipNumber];
         }
 
         // Update UI for both slots
@@ -998,9 +980,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Remove playback mode
         delete clipModes[clipNumber];
 
-        // Remove cue stop setting
-        delete clipCueStop[clipNumber];
-
         // Update the clip slot UI
         const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
         if (slot) {
@@ -1038,11 +1017,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 modeIndicator.remove();
             }
 
-            // Remove cue stop toggle
-            const cueStopToggle = slot.querySelector('.clip-cue-stop-toggle');
-            if (cueStopToggle) {
-                cueStopToggle.remove();
-            }
         }
 
         // If this was the selected slot and it was playing, pause the video
@@ -1057,21 +1031,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         markSessionModified();
         console.log(`Cleared clip ${clipNumber}`);
-    }
-
-    // Toggle cue point stop setting for a clip
-    function toggleClipCueStop(clipNumber) {
-        // Default is true if not set
-        const currentSetting = clipCueStop[clipNumber] !== undefined ? clipCueStop[clipNumber] : true;
-        clipCueStop[clipNumber] = !currentSetting;
-        markSessionModified();
-        console.log(`Clip ${clipNumber} cue stop: ${clipCueStop[clipNumber]}`);
-
-        // Update visual indicator
-        const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
-        if (slot) {
-            updateSlotAppearance(slot, clipVideos[clipNumber]);
-        }
     }
 
     // Handle clip selection
@@ -1227,9 +1186,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const clipNumber = slot.dataset.clipNumber;
         const customName = clipNames[clipNumber] || `Clip ${clipNumber}`;
 
-        // Get mode and cue stop settings
+        // Get mode setting
         const clipMode = clipModes[clipNumber] || 'loop';
-        const cueStopEnabled = clipCueStop[clipNumber] !== undefined ? clipCueStop[clipNumber] : true;
 
         // Mode icon mapping
         const modeIcons = {
@@ -1262,9 +1220,6 @@ document.addEventListener('DOMContentLoaded', function() {
             slot.innerHTML = `
                 ${thumbnailHtml}
                 <div class="clip-mode-indicator" title="Playback Mode: ${clipMode}">${modeIcon}</div>
-                <div class="clip-cue-stop-toggle ${cueStopEnabled ? 'active' : ''}" data-clip-number="${clipNumber}" title="${cueStopEnabled ? 'Stop at cue points' : 'Play through cue points'}">
-                    ${cueStopEnabled ? '⏸|▶' : '▶→▶'}
-                </div>
                 <div class="clip-slot-content">
                     <div class="clip-slot-label" data-clip-number="${clipNumber}">${customName}</div>
                     <div class="clip-slot-filename">${videoData.name}</div>
@@ -1287,15 +1242,6 @@ document.addEventListener('DOMContentLoaded', function() {
             label.addEventListener('dblclick', function(e) {
                 e.stopPropagation();
                 startEditingClipName(clipNumber, label);
-            });
-        }
-
-        // Add cue stop toggle click handler
-        const cueStopToggle = slot.querySelector('.clip-cue-stop-toggle');
-        if (cueStopToggle) {
-            cueStopToggle.addEventListener('click', function(e) {
-                e.stopPropagation();
-                toggleClipCueStop(clipNumber);
             });
         }
     }
@@ -2405,7 +2351,6 @@ document.addEventListener('DOMContentLoaded', function() {
         clipSpeeds = tabClipSpeeds[currentTab];
         clipNames = tabClipNames[currentTab];
         clipModes = tabClipModes[currentTab];
-        clipCueStop = tabClipCueStop[currentTab];
         clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
         clipInOutPoints = tabClipInOutPoints[currentTab];
 
@@ -3860,44 +3805,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (inPoint !== undefined && inPoint !== null && currentTime < inPoint && currentTime > 0.1) {
                     video.currentTime = inPoint;
                     console.log(`Before In point, jumping to ${formatTime(inPoint)}`);
-                }
-            }
-        }
-
-        // Cue point stop behavior
-        if (selectedClipSlot) {
-            const clipNumber = selectedClipSlot.dataset.clipNumber;
-            const cueStopEnabled = clipCueStop[clipNumber] !== undefined ? clipCueStop[clipNumber] : true;
-            const cuePoints = clipCuePoints[clipNumber] || [];
-
-            if (cueStopEnabled && cuePoints.length > 0 && !video.paused) {
-                // Check if we've reached a cue point (only in forward playback, not during bounce reverse)
-                if (bounceDirection === 1) {
-                    const currentTime = video.currentTime;
-                    for (let i = 0; i < cuePoints.length; i++) {
-                        const cuePoint = cuePoints[i];
-                        // If within 0.1 seconds of a cue point, pause
-                        if (Math.abs(currentTime - cuePoint.time) < 0.1) {
-                            // Don't stop if we just navigated to this cue point
-                            if (justNavigatedToCue && Math.abs(cuePoint.time - lastNavigatedCueTime) < 0.15) {
-                                // Clear the flag once we've moved past the navigated cue point
-                                if (Math.abs(currentTime - lastNavigatedCueTime) > 0.2) {
-                                    justNavigatedToCue = false;
-                                }
-                                continue; // Skip stopping at this cue point
-                            }
-
-                            video.pause();
-                            globalPlayIntent = false;
-                            // updatePlayButtonState() removed
-
-                            // Update current cue index to this cue point
-                            clipCurrentCueIndex[clipNumber] = i;
-
-                            console.log(`Stopped at cue ${i + 1}/${cuePoints.length}: ${formatTime(cuePoint.time)}`);
-                            break;
-                        }
-                    }
                 }
             }
         }
