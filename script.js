@@ -1910,7 +1910,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Navigate to the next cue point
+    // Navigate to the next cue point (mode-aware)
     function navigateToNextCuePoint() {
         if (!selectedClipSlot) {
             alert('Please select a clip first');
@@ -1929,16 +1929,16 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        const clipMode = clipModes[clipNumber] || 'loop';
         const cuePoints = clipCuePoints[clipNumber] || [];
-
-        if (cuePoints.length === 0) {
-            alert('No cue points to navigate to');
-            return;
-        }
-
+        const inOut = clipInOutPoints[clipNumber];
         const currentTime = video.currentTime;
 
-        // Find next cue point after current time (time-based search)
+        // Get In/Out points (default to video bounds)
+        const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
+        const outPoint = (inOut && inOut.outPoint !== undefined && inOut.outPoint !== null) ? inOut.outPoint : video.duration;
+
+        // Find next cue point after current time
         let targetCuePoint = null;
         let targetIndex = -1;
 
@@ -1950,9 +1950,38 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // Mode-specific behavior when no cue ahead
         if (!targetCuePoint) {
-            console.log('No more cue points ahead');
-            return;
+            if (clipMode === 'forward-stop') {
+                // At or past Out Point: loop back to In Point
+                if (currentTime >= outPoint - 0.1) {
+                    video.currentTime = inPoint;
+                    updateTimeline();
+                    clipCurrentCueIndex[clipNumber] = -1;
+                    console.log(`[forward-stop] At Out Point, looping to In Point: ${formatTime(inPoint)}`);
+
+                    if (globalAutoPlayEnabled) {
+                        globalPlayIntent = true;
+                        video.play().catch(e => console.error('Error playing:', e));
+                    }
+                    return;
+                } else {
+                    console.log('No more cue points ahead');
+                    return;
+                }
+            } else if (clipMode === 'forward-next') {
+                // At Out Point: go to next clip
+                if (currentTime >= outPoint - 0.1) {
+                    goToNextClip();
+                    return;
+                } else {
+                    console.log('No more cue points ahead');
+                    return;
+                }
+            } else {
+                console.log('No more cue points ahead');
+                return;
+            }
         }
 
         // Check if we're already AT this cue point (within tolerance)
@@ -1961,7 +1990,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (distanceToCue > 0.1) {
             // NOT at the cue - JUMP to it
             video.currentTime = targetCuePoint.time;
-            // Update timeline immediately to move scrubber
             updateTimeline();
             console.log(`W key: Jumped to cue ${targetIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
         } else {
@@ -1987,6 +2015,42 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             globalPlayIntent = false;
             console.log('Navigated to cue point but not playing (auto-play disabled)');
+        }
+    }
+
+    // Navigate to next clip (for forward-next mode)
+    function goToNextClip() {
+        if (!selectedClipSlot) return;
+
+        const currentClipNumber = parseInt(selectedClipSlot.dataset.clipNumber);
+
+        // Find next clip with video in current tab
+        let nextClipNumber = null;
+        for (let i = currentClipNumber + 1; i < 36; i++) {
+            if (clipVideos[i]) {
+                nextClipNumber = i;
+                break;
+            }
+        }
+
+        // If no clip ahead, loop to first clip with video
+        if (nextClipNumber === null) {
+            for (let i = 0; i <= currentClipNumber; i++) {
+                if (clipVideos[i]) {
+                    nextClipNumber = i;
+                    break;
+                }
+            }
+        }
+
+        if (nextClipNumber !== null) {
+            const nextSlot = document.querySelector(`[data-clip-number="${nextClipNumber}"]`);
+            if (nextSlot) {
+                selectClipSlot(nextSlot);
+                console.log(`[forward-next] Advanced to next clip: ${nextClipNumber}`);
+            }
+        } else {
+            console.log('[forward-next] No other clips with video to advance to');
         }
     }
 
