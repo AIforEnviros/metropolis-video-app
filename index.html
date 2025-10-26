@@ -15,7 +15,7 @@
 
         .main-container {
             display: grid;
-            grid-template-columns: 220px 1fr 360px;
+            grid-template-columns: 1fr 360px;
             grid-template-rows: auto auto 1fr;
             gap: 20px;
             max-width: 1600px;
@@ -312,36 +312,42 @@
             cursor: not-allowed;
         }
 
-        .cue-points-list {
-            background-color: #1a1a1a;
-            border-radius: 5px;
-            padding: 15px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .cue-point-item {
-            background-color: #333;
-            padding: 8px 12px;
-            margin-bottom: 5px;
-            border-radius: 4px;
-            font-size: 12px;
+        /* In/Out point controls */
+        .inout-point-controls {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            gap: 8px;
         }
 
-        .cue-point-time {
-            font-weight: bold;
-            color: #90ee90;
+        .inout-btn {
+            background-color: #458588;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
         }
 
-        .no-cue-points {
-            text-align: center;
-            color: #888;
-            font-style: italic;
-            margin: 0;
+        .inout-btn:hover {
+            background-color: #6fabc5;
         }
+
+        .inout-btn.clear-btn {
+            background-color: #cc241d;
+        }
+
+        .inout-btn.clear-btn:hover {
+            background-color: #fb4934;
+        }
+
+        .inout-btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
+        /* Cue points list CSS removed - cue points visible on timeline */
 
         .cue-point-navigation {
             display: flex;
@@ -385,6 +391,31 @@
 
         .timeline-container {
             margin: 15px 0;
+            overflow-x: auto;
+            overflow-y: visible;
+            padding: 15px 10px 20px 10px;
+        }
+
+        /* Custom scrollbar styling */
+        .timeline-container::-webkit-scrollbar {
+            height: 10px;
+        }
+
+        .timeline-container::-webkit-scrollbar-track {
+            background: #2a2a2a;
+            border-radius: 4px;
+            border: 1px solid #555;
+        }
+
+        .timeline-container::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 4px;
+            border: 1px solid #666;
+        }
+
+        .timeline-container::-webkit-scrollbar-thumb:hover {
+            background: #777;
+            border-color: #888;
         }
 
         .timeline-track {
@@ -395,6 +426,9 @@
             margin-bottom: 8px;
             cursor: pointer;
             border: 1px solid #555;
+            width: 100%; /* Will be scaled by zoom */
+            min-width: 100%;
+            transition: width 0.2s ease;
         }
 
         .timeline-progress {
@@ -405,7 +439,6 @@
             background-color: #0066cc;
             border-radius: 4px;
             width: 0%;
-            transition: width 0.1s ease;
         }
 
         .timeline-handle {
@@ -420,7 +453,6 @@
             border: 2px solid #fff;
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
             transform: translateX(-50%);
-            transition: left 0.1s ease;
         }
 
         .timeline-handle:active {
@@ -434,6 +466,48 @@
             font-size: 12px;
             color: #888;
             font-family: monospace;
+        }
+
+        .timeline-zoom-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+
+        .zoom-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background-color: #333;
+            color: white;
+            border: 2px solid #555;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .zoom-btn:hover {
+            background-color: #555;
+            border-color: #777;
+            transform: scale(1.05);
+        }
+
+        .zoom-btn:active {
+            transform: scale(0.95);
+        }
+
+        .zoom-btn.active {
+            background-color: #458588;
+            border-color: #6fabc5;
+            color: white;
+            box-shadow: 0 0 8px rgba(69, 133, 136, 0.4);
         }
 
         .cue-markers {
@@ -473,6 +547,65 @@
             box-shadow: 0 2px 6px rgba(0,0,0,0.5);
         }
 
+        /* In/Out point markers on timeline */
+        .in-marker {
+            position: absolute;
+            top: -2px;
+            width: 4px;
+            height: 12px;
+            background-color: #90ee90;
+            border-radius: 1px;
+            transform: translateX(-50%);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            pointer-events: auto;
+            cursor: grab;
+            transition: transform 0.1s ease;
+            z-index: 15;
+        }
+
+        .in-marker:hover {
+            transform: translateX(-50%) scaleX(2) scaleY(1.2);
+            background-color: #b0ffb0;
+            z-index: 25;
+        }
+
+        .in-marker.dragging {
+            cursor: grabbing;
+            transform: translateX(-50%) scaleX(2.5) scaleY(1.5);
+            background-color: #d0ffd0;
+            z-index: 30;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+        }
+
+        .out-marker {
+            position: absolute;
+            top: -2px;
+            width: 4px;
+            height: 12px;
+            background-color: #ff0000;
+            border-radius: 1px;
+            transform: translateX(-50%);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            pointer-events: auto;
+            cursor: grab;
+            transition: transform 0.1s ease;
+            z-index: 15;
+        }
+
+        .out-marker:hover {
+            transform: translateX(-50%) scaleX(2) scaleY(1.2);
+            background-color: #ff3333;
+            z-index: 25;
+        }
+
+        .out-marker.dragging {
+            cursor: grabbing;
+            transform: translateX(-50%) scaleX(2.5) scaleY(1.5);
+            background-color: #ff6666;
+            z-index: 30;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+        }
+
         .cue-drag-tooltip {
             position: fixed;
             background-color: rgba(0, 0, 0, 0.9);
@@ -487,117 +620,7 @@
             border: 1px solid #ff6b35;
         }
 
-        .file-browser {
-            background-color: #2a2a2a;
-            border-radius: 8px;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            overflow: hidden;
-        }
-
-        .file-browser h3 {
-            margin: 0 0 10px 0;
-            font-size: 16px;
-            color: white;
-        }
-
-        .current-path {
-            background-color: #1a1a1a;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            color: #888;
-            font-family: monospace;
-            word-break: break-all;
-        }
-
-        .file-list {
-            flex: 1;
-            overflow-y: auto;
-            background-color: #1a1a1a;
-            border-radius: 4px;
-            padding: 8px;
-        }
-
-        .file-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 12px;
-            margin-bottom: 2px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.2s ease;
-            font-size: 13px;
-        }
-
-        .file-item:hover {
-            background-color: #333;
-        }
-
-        .file-item.directory {
-            color: #87ceeb;
-        }
-
-        .file-item.video-file {
-            color: #90ee90;
-        }
-
-        .file-item.video-file.draggable {
-            cursor: grab;
-        }
-
-        .file-item.video-file.dragging {
-            opacity: 0.5;
-            cursor: grabbing;
-        }
-
-        .file-item.other-file {
-            color: #ddd;
-        }
-
-        .file-name {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            margin-right: 10px;
-        }
-
-        .file-size {
-            font-size: 11px;
-            color: #888;
-            min-width: 60px;
-            text-align: right;
-        }
-
-        .file-browser-controls {
-            display: flex;
-            gap: 8px;
-        }
-
-        .browse-btn {
-            background-color: #333;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        .browse-btn:hover {
-            background-color: #555;
-        }
-
-        .browse-btn:disabled {
-            background-color: #666;
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
+        /* File browser CSS removed - drag videos from OS file explorer instead */
 
         .tabs-container {
             grid-column: 1 / -1;
@@ -667,6 +690,73 @@
 
         .add-tab-btn:hover {
             background-color: #3a7a3a;
+        }
+
+        /* Auto-play toggle switch */
+        .autoplay-toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background-color: #1a1a1a;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-left: 15px;
+        }
+
+        .autoplay-label {
+            font-size: 14px;
+            color: #ccc;
+            font-weight: 500;
+        }
+
+        /* iOS-style toggle switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #555;
+            transition: .4s;
+            border-radius: 26px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: #4CAF50;
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+
+        .toggle-slider:hover {
+            opacity: 0.8;
         }
 
         .remove-tab-btn {
@@ -1218,28 +1308,19 @@
                 <button class="tab-btn" data-tab="4"><span class="tab-btn-text">Tab 5</span><button class="remove-tab-btn" title="Remove tab">×</button></button>
                 <button class="add-tab-btn" id="addTabBtn" title="Add new tab">+</button>
             </div>
-        </div>
-
-        <div class="file-browser">
-            <h3>File Browser</h3>
-            <div class="current-path" id="currentPath">
-                Select folder to browse...
-            </div>
-            <div class="file-browser-controls">
-                <button id="browseFolderBtn" class="browse-btn">Browse Folder</button>
-                <button id="upFolderBtn" class="browse-btn" disabled>Up</button>
-            </div>
-            <div class="file-list" id="fileList">
-                <div class="file-item other-file">
-                    <span class="file-name">Click "Browse Folder" to start...</span>
-                    <span class="file-size"></span>
-                </div>
+            <div class="autoplay-toggle-container">
+                <span class="autoplay-label">Auto-Play</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="autoPlayToggle" checked>
+                    <span class="toggle-slider"></span>
+                </label>
             </div>
         </div>
 
         <div class="content-area">
             <div class="clips-matrix" id="clipsMatrix">
                 <!-- 6x6 grid will be generated by JavaScript -->
+                <!-- Drag videos from your file explorer directly onto clip slots -->
             </div>
         </div>
 
@@ -1256,18 +1337,24 @@
                     <div class="timeline-progress" id="timelineProgress"></div>
                     <div class="timeline-handle" id="timelineHandle"></div>
                     <div class="cue-markers" id="cueMarkers"></div>
+                    <div class="inout-markers" id="inOutMarkers"></div>
                 </div>
                 <div class="timeline-time">
                     <span id="currentTime">00:00</span> / <span id="totalDuration">00:00</span>
                 </div>
             </div>
 
-            <h3>Global Transport Controls</h3>
+            <div class="timeline-zoom-controls">
+                <label>Zoom:</label>
+                <button class="zoom-btn" data-zoom="1">1x</button>
+                <button class="zoom-btn" data-zoom="2">2x</button>
+                <button class="zoom-btn" data-zoom="4">4x</button>
+                <button class="zoom-btn" data-zoom="8">8x</button>
+            </div>
+
+            <h3>Clip Navigation</h3>
             <div class="transport-controls">
                 <button id="prevClipBtn" class="transport-btn" title="Previous Clip">⏮</button>
-                <button id="reverseBtn" class="transport-btn" title="Reverse Play">⏪</button>
-                <button id="pausePlayBtn" class="transport-btn" title="Pause/Play">⏸</button>
-                <button id="forwardBtn" class="transport-btn" title="Forward Play">⏩</button>
                 <button id="nextClipBtn" class="transport-btn" title="Next Clip">⏭</button>
             </div>
 
@@ -1280,6 +1367,17 @@
                 <button id="restartClipBtn" class="cue-nav-btn" title="Restart Clip">⏮⏮</button>
                 <button id="prevCuePointBtn" class="cue-nav-btn" title="Previous Cue Point">⏮</button>
                 <button id="nextCuePointBtn" class="cue-nav-btn" title="Next Cue Point">⏭</button>
+            </div>
+
+            <div style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px; color: #888;">
+                💡 <strong>Tip:</strong> Double-click cue markers on timeline to delete
+            </div>
+
+            <!-- Hidden In/Out Point controls (functionality via hotkeys only) -->
+            <div id="hiddenInOutControls" style="display: none;">
+                <button id="setInPointBtn" class="inout-btn">Set In Point (I)</button>
+                <button id="setOutPointBtn" class="inout-btn">Set Out Point (O)</button>
+                <button id="clearInOutBtn" class="inout-btn clear-btn">Clear In/Out</button>
             </div>
 
             <h3>Speed Control</h3>
@@ -1304,10 +1402,7 @@
                 </div>
             </div>
 
-            <h3>Cue Points</h3>
-            <div class="cue-points-list" id="cuePointsList">
-                <p class="no-cue-points">No cue points recorded</p>
-            </div>
+            <!-- Cue points list removed - visible on timeline instead -->
         </div>
     </div>
 

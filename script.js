@@ -12,28 +12,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const video = document.getElementById('videoPlayer');
     const prevClipBtn = document.getElementById('prevClipBtn');
-    const reverseBtn = document.getElementById('reverseBtn');
-    const pausePlayBtn = document.getElementById('pausePlayBtn');
-    const forwardBtn = document.getElementById('forwardBtn');
     const nextClipBtn = document.getElementById('nextClipBtn');
 
     const clipsMatrix = document.getElementById('clipsMatrix');
     const recordCuePointBtn = document.getElementById('recordCuePointBtn');
-    const cuePointsList = document.getElementById('cuePointsList');
+    // const cuePointsList = document.getElementById('cuePointsList'); // REMOVED - list UI removed, cue points visible on timeline
     const restartClipBtn = document.getElementById('restartClipBtn');
     const prevCuePointBtn = document.getElementById('prevCuePointBtn');
     const nextCuePointBtn = document.getElementById('nextCuePointBtn');
+    const setInPointBtn = document.getElementById('setInPointBtn');
+    const setOutPointBtn = document.getElementById('setOutPointBtn');
+    const clearInOutBtn = document.getElementById('clearInOutBtn');
     const timelineTrack = document.getElementById('timelineTrack');
     const timelineProgress = document.getElementById('timelineProgress');
     const timelineHandle = document.getElementById('timelineHandle');
     const cueMarkers = document.getElementById('cueMarkers');
+    const inOutMarkers = document.getElementById('inOutMarkers');
     const currentTimeDisplay = document.getElementById('currentTime');
     const totalDurationDisplay = document.getElementById('totalDuration');
     const tabBar = document.getElementById('tabBar');
-    const browseFolderBtn = document.getElementById('browseFolderBtn');
-    const upFolderBtn = document.getElementById('upFolderBtn');
-    const currentPathDisplay = document.getElementById('currentPath');
-    const fileList = document.getElementById('fileList');
+    // File browser elements removed - drag videos from OS file explorer instead
     const speedSlider = document.getElementById('speedSlider');
     const speedValue = document.getElementById('speedValue');
     const speedPresetBtns = document.querySelectorAll('.speed-preset-btn');
@@ -48,6 +46,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveShortcutsBtn = document.getElementById('saveShortcutsBtn');
     const outputWindowBtn = document.getElementById('outputWindowBtn');
     const addTabBtn = document.getElementById('addTabBtn');
+    const autoPlayToggle = document.getElementById('autoPlayToggle');
     const clipContextMenu = document.getElementById('clipContextMenu');
 
     // Output window reference
@@ -67,8 +66,17 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track current video playing state (actual video state)
     let currentVideoPlaying = false;
 
+    // Global auto-play enabled (affects all clips)
+    let globalAutoPlayEnabled = true; // true = clips auto-play, false = clips stay paused
+
     // Track the currently selected clip
     let selectedClipSlot = null;
+
+    // Timeline zoom level (1x, 2x, 4x, 8x)
+    let timelineZoomLevel = 1;
+
+    // Timeline smooth animation frame ID for 60fps updates
+    let timelineAnimationFrame = null;
 
     // Track which tab is currently active
     let currentTab = 0;
@@ -102,6 +110,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track current cue index for sequential navigation (tabIndex -> { clipNumber -> index })
     const tabClipCurrentCueIndex = {};
 
+    // Track In/Out points for each clip (tabIndex -> { clipNumber -> { inPoint: time, outPoint: time } })
+    const tabClipInOutPoints = {};
+
     // Initialize tab data structures for default 5 tabs
     for (let i = 0; i < 5; i++) {
         tabClipVideos[i] = {};
@@ -111,6 +122,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipModes[i] = {};
         tabClipCueStop[i] = {};
         tabClipCurrentCueIndex[i] = {};
+        tabClipInOutPoints[i] = {};
     }
 
     // Legacy references for current tab's data (for compatibility)
@@ -121,6 +133,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let clipModes = tabClipModes[currentTab];
     let clipCueStop = tabClipCueStop[currentTab];
     let clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
+    let clipInOutPoints = tabClipInOutPoints[currentTab];
 
     // File browser state
     let currentFolderPath = '';
@@ -133,14 +146,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Keyboard shortcuts configuration
     let keyboardShortcuts = {
-        'playPause': 'Space',
         'previousClip': 'ArrowLeft',
         'nextClip': 'ArrowRight',
         'previousCuePoint': 'q',
         'nextCuePoint': 'w',
         'restartClip': 'r',
         'recordCuePoint': 'c',
-        'reversePlay': 'Shift+r',
+        'setInPoint': 'i',
+        'setOutPoint': 'o',
+        'clearInOut': 'Shift+x',
+        'zoomIn': '=',
+        'zoomOut': '-',
+        'toggleAutoPlay': ' ',
         'tab1': '1',
         'tab2': '2',
         'tab3': '3',
@@ -154,14 +171,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // MIDI mappings configuration (parallel to keyboard shortcuts)
     let midiMappings = {
-        'playPause': null,
         'previousClip': null,
         'nextClip': null,
         'previousCuePoint': null,
         'nextCuePoint': null,
         'restartClip': null,
         'recordCuePoint': null,
-        'reversePlay': null,
+        'setInPoint': null,
+        'setOutPoint': null,
+        'clearInOut': null,
+        'toggleAutoPlay': null,
         'tab1': null,
         'tab2': null,
         'tab3': null,
@@ -190,7 +209,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Session management functions
     function createSessionData() {
-        // Create a clean copy of video data with thumbnails
+        // Create a clean copy of video data with thumbnails and file paths
         const cleanVideos = {};
         Object.keys(tabClipVideos).forEach(tabIndex => {
             cleanVideos[tabIndex] = {};
@@ -198,7 +217,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const video = tabClipVideos[tabIndex][clipNumber];
                 cleanVideos[tabIndex][clipNumber] = {
                     name: video.name,
-                    type: video.type,
+                    filePath: video.filePath || null,  // Save file path for automatic reconnection
                     // Store thumbnail if available
                     thumbnail: video.thumbnail || null
                 };
@@ -213,6 +232,7 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedClipSlot: selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null,
             currentFolderPath: currentFolderPath,
             globalPlayIntent: globalPlayIntent,
+            globalAutoPlayEnabled: globalAutoPlayEnabled,
             keyboardShortcuts: keyboardShortcuts,
             midiMappings: midiMappings,
             allTabs: allTabs,
@@ -225,7 +245,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 clipNames: tabClipNames,
                 clipModes: tabClipModes,
                 clipCueStop: tabClipCueStop,
-                currentCueIndex: tabClipCurrentCueIndex
+                currentCueIndex: tabClipCurrentCueIndex,
+                inOutPoints: tabClipInOutPoints
             }
         };
     }
@@ -333,6 +354,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Restoring current cue indices:', sessionData.tabs.currentCueIndex);
                 Object.assign(tabClipCurrentCueIndex, sessionData.tabs.currentCueIndex);
             }
+            if (sessionData.tabs.inOutPoints) {
+                console.log('Restoring In/Out points:', sessionData.tabs.inOutPoints);
+                Object.assign(tabClipInOutPoints, sessionData.tabs.inOutPoints);
+            }
 
             console.log('After restoring - tab data:', tabClipVideos);
 
@@ -347,48 +372,31 @@ document.addEventListener('DOMContentLoaded', function() {
             clipCuePoints = tabClipCuePoints[currentTab];
             clipSpeeds = tabClipSpeeds[currentTab];
             clipNames = tabClipNames[currentTab];
+            clipModes = tabClipModes[currentTab];
+            clipCueStop = tabClipCueStop[currentTab];
+            clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
+            clipInOutPoints = tabClipInOutPoints[currentTab];
             console.log('Current tab video data:', clipVideos);
 
-            // Restore folder path and auto-load directory contents
+            // Restore folder path (keep for backward compatibility)
             if (sessionData.currentFolderPath) {
                 currentFolderPath = sessionData.currentFolderPath;
-                currentPathDisplay.textContent = currentFolderPath;
-
-                // Automatically load directory contents
-                try {
-                    console.log('Auto-loading folder contents from:', currentFolderPath);
-                    const dirResult = await window.electronAPI.readDirectory(currentFolderPath);
-
-                    if (dirResult.success) {
-                        const files = dirResult.files.map(fileInfo => ({
-                            name: fileInfo.name,
-                            path: fileInfo.path,
-                            size: fileInfo.size,
-                            isDirectory: fileInfo.isDirectory
-                        }));
-                        displayFiles(files);
-                        upFolderBtn.disabled = false;
-                        console.log(`Auto-loaded ${files.length} files from saved folder`);
-
-                        // Auto-connect video files to session slots
-                        const videoFiles = files.filter(file => !file.isDirectory && isVideoFile(file.name));
-                        console.log(`Found ${videoFiles.length} video files, attempting auto-connection...`);
-                        videoFiles.forEach(file => {
-                            autoConnectSessionVideo(file);
-                        });
-                    } else {
-                        console.warn('Could not auto-load folder:', dirResult.error);
-                    }
-                } catch (error) {
-                    console.warn('Error auto-loading folder contents:', error);
-                    // Non-fatal - user can manually browse if folder is inaccessible
-                }
             }
+
+            // Auto-reconnect videos using saved file paths
+            await reconnectVideosFromPaths();
 
             // Restore global play intent
             if (sessionData.globalPlayIntent !== undefined) {
                 globalPlayIntent = sessionData.globalPlayIntent;
-                updatePlayButtonState();
+                // updatePlayButtonState() removed - no global play/pause button
+            }
+
+            // Restore global auto-play setting
+            if (sessionData.globalAutoPlayEnabled !== undefined) {
+                globalAutoPlayEnabled = sessionData.globalAutoPlayEnabled;
+                autoPlayToggle.checked = globalAutoPlayEnabled;
+                console.log('Restored auto-play setting:', globalAutoPlayEnabled);
             }
 
             // Restore keyboard shortcuts
@@ -468,8 +476,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Clear UI
         refreshClipMatrix();
-        updateCuePointsList();
+        // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+        updateInOutMarkersOnTimeline();
         updateSpeedControls();
 
         // Clear video player
@@ -522,14 +531,63 @@ document.addEventListener('DOMContentLoaded', function() {
         if (disconnectedVideos > 0) {
             if (connectedVideos > 0) {
                 // Some connected, some not
-                alert(`Session loaded!\n\n${connectedVideos} of ${totalVideos} video(s) auto-connected.\n\n${disconnectedVideos} video(s) need reconnection - use "Browse Folder" to reconnect.`);
+                alert(`Session loaded!\n\n${connectedVideos} of ${totalVideos} video(s) auto-connected.\n\n${disconnectedVideos} video(s) need reconnection - drag and drop video files from your file explorer to reconnect.`);
             } else {
                 // None connected
-                alert(`Session loaded!\n\n${totalVideos} video slot(s) restored with thumbnails.\n\nUse "Browse Folder" to reconnect videos - files with matching names will auto-connect.`);
+                alert(`Session loaded!\n\n${totalVideos} video slot(s) restored with thumbnails.\n\nDrag and drop video files from your file explorer to reconnect - files with matching names will auto-connect.`);
             }
         }
         // If all videos are connected, don't show any alert (silent success)
         console.log(`Session reconnection status: ${connectedVideos}/${totalVideos} videos connected`);
+    }
+
+    // Reconnect videos using saved file paths
+    async function reconnectVideosFromPaths() {
+        console.log('=== AUTO-RECONNECTING VIDEOS FROM SAVED PATHS ===');
+
+        let totalVideos = 0;
+        let reconnectedVideos = 0;
+
+        // Loop through all tabs
+        for (let tabIndex = 0; tabIndex < 5; tabIndex++) {
+            const tabVideos = tabClipVideos[tabIndex];
+
+            for (const clipNumber in tabVideos) {
+                const videoData = tabVideos[clipNumber];
+
+                // Check if this slot has a video with a saved filePath but no url
+                if (videoData && videoData.name && videoData.filePath && !videoData.url) {
+                    totalVideos++;
+                    console.log(`Attempting to reconnect: ${videoData.name} from ${videoData.filePath}`);
+
+                    try {
+                        // Create file URL for Electron
+                        const url = `file:///${videoData.filePath.replace(/\\/g, '/')}`;
+
+                        // Update the video data with URL
+                        videoData.url = url;
+                        videoData.file = {
+                            name: videoData.name,
+                            path: videoData.filePath
+                        };
+
+                        console.log(`✓ Reconnected: ${videoData.name}`);
+                        reconnectedVideos++;
+
+                    } catch (error) {
+                        console.warn(`✗ Failed to reconnect ${videoData.name}:`, error.message);
+                    }
+                }
+            }
+        }
+
+        console.log(`Reconnection complete: ${reconnectedVideos}/${totalVideos} videos reconnected`);
+
+        // Refresh UI
+        refreshClipMatrix();
+
+        // Show status if there are disconnected videos
+        attemptAutoReconnect();
     }
 
     // Auto-connect loaded session videos when files are found
@@ -803,7 +861,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipContextMenu.style.top = top + 'px';
 
         // Get current mode for this clip (default is 'forward-stop')
-        const currentMode = clipModes[clipNumber] || 'forward-stop';
+        const currentMode = clipModes[clipNumber] || 'loop';
 
         // Update active state for menu items
         const menuItems = clipContextMenu.querySelectorAll('.context-menu-item');
@@ -845,7 +903,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const sourceCuePoints = clipCuePoints[sourceClipNumber] || [];
         const sourceSpeed = clipSpeeds[sourceClipNumber] || 1.0;
         const sourceName = clipNames[sourceClipNumber];
-        const sourceMode = clipModes[sourceClipNumber] || 'forward-stop';
+        const sourceMode = clipModes[sourceClipNumber] || 'loop';
         const sourceCueStop = clipCueStop[sourceClipNumber];
 
         // Save target clip data (for swap)
@@ -853,7 +911,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const targetCuePoints = clipCuePoints[targetClipNumber] || [];
         const targetSpeed = clipSpeeds[targetClipNumber] || 1.0;
         const targetName = clipNames[targetClipNumber];
-        const targetMode = clipModes[targetClipNumber] || 'forward-stop';
+        const targetMode = clipModes[targetClipNumber] || 'loop';
         const targetCueStop = clipCueStop[targetClipNumber];
 
         // Move source to target
@@ -907,7 +965,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const selectedClipNumber = parseInt(selectedClipSlot.dataset.clipNumber);
             if (selectedClipNumber === sourceClipNumber || selectedClipNumber === targetClipNumber) {
                 loadClipIntoPlayer(selectedClipNumber);
-                updateCuePointsList();
+                // updateCuePointsList(); // REMOVED - cue points visible on timeline
                 updateCueMarkersOnTimeline();
                 updateSpeedControls();
             }
@@ -994,7 +1052,7 @@ document.addEventListener('DOMContentLoaded', function() {
             updateTransportButtonStates();
 
             // Clear cue points display
-            updateCuePointsList();
+            // updateCuePointsList(); // REMOVED - cue points visible on timeline
         }
 
         markSessionModified();
@@ -1051,7 +1109,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 video.volume = 0;
 
                 // Set loop mode based on clip mode
-                const clipMode = clipModes[clipNumber] || 'forward-stop';
+                const clipMode = clipModes[clipNumber] || 'loop';
                 video.loop = (clipMode === 'loop');
 
                 video.load();
@@ -1059,7 +1117,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 // Video data exists but no valid URL - this is from a loaded session
                 console.warn(`Video slot ${clipNumber} has data but no valid URL:`, videoData);
-                console.log('Video needs to be reconnected from file browser');
+                console.log('Video needs to be reconnected - drag and drop file');
 
                 // Clear the video player
                 video.src = '';
@@ -1067,7 +1125,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Show user-friendly message
                 if (videoData.name) {
-                    alert(`Video "${videoData.name}" needs to be reconnected. Please browse to the folder containing your video files.`);
+                    alert(`Video "${videoData.name}" needs to be reconnected. Drag and drop the video file onto this clip slot to reconnect.`);
                 }
             }
 
@@ -1077,30 +1135,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 const clipSpeed = clipSpeeds[clipNumber] || 1.0;
                 setVideoSpeed(clipSpeed);
 
-                // Don't auto-play - respect user's globalPlayIntent
-                // If globalPlayIntent is true, play; otherwise stay paused
-                if (globalPlayIntent) {
+                // If In point is set, start from In point
+                const inOut = clipInOutPoints[clipNumber];
+                if (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) {
+                    video.currentTime = inOut.inPoint;
+                    console.log(`Starting from In point: ${formatTime(inOut.inPoint)}`);
+                }
+
+                // Auto-play when clip is selected - only if global auto-play is enabled
+                if (globalAutoPlayEnabled) {
+                    globalPlayIntent = true;
                     video.play().then(() => {
-                        console.log('Resumed playback on clip selection (globalPlayIntent was true)');
-                        updatePlayButtonState();
+                        console.log('Auto-playing clip on selection');
                     }).catch(e => {
-                        console.error('Error resuming playback:', e);
+                        console.error('Error auto-playing video:', e);
                     });
                 } else {
-                    console.log('Clip loaded but not playing (globalPlayIntent was false)');
+                    globalPlayIntent = false;
+                    console.log('Clip loaded but not playing (auto-play disabled)');
                 }
             }, { once: true });
-
-            updatePlayButtonState();
         } else {
             // No video in this slot
             // globalPlayIntent unchanged - keep user's intent
-            updatePlayButtonState();
         }
 
         // Update cue points list for the newly selected clip
-        updateCuePointsList();
+        // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+        updateInOutMarkersOnTimeline();
         updateSpeedControls();
     }
 
@@ -1165,7 +1228,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const customName = clipNames[clipNumber] || `Clip ${clipNumber}`;
 
         // Get mode and cue stop settings
-        const clipMode = clipModes[clipNumber] || 'forward-stop';
+        const clipMode = clipModes[clipNumber] || 'loop';
         const cueStopEnabled = clipCueStop[clipNumber] !== undefined ? clipCueStop[clipNumber] : true;
 
         // Mode icon mapping
@@ -1341,16 +1404,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Navigated ${direction} to clip ${targetSlot.dataset.clipNumber}`);
     }
 
-    // Update pause/play button appearance based on global intent
-    function updatePlayButtonState() {
-        if (globalPlayIntent) {
-            pausePlayBtn.textContent = '⏸';
-            pausePlayBtn.classList.add('playing');
-        } else {
-            pausePlayBtn.textContent = '▶';
-            pausePlayBtn.classList.remove('playing');
-        }
-    }
+    // Note: updatePlayButtonState() removed - no global play/pause button anymore
 
     // Format time for display (convert seconds to MM:SS.ss)
     function formatTime(seconds) {
@@ -1404,8 +1458,282 @@ document.addEventListener('DOMContentLoaded', function() {
         markSessionModified();
 
         // Update the display
-        updateCuePointsList();
+        // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+        updateInOutMarkersOnTimeline();
+    }
+
+    // In/Out point functions
+    function setInPoint() {
+        if (!selectedClipSlot) {
+            alert('Please select a clip first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        if (!clipVideos[clipNumber]) {
+            alert('Please load a video into the selected clip first');
+            return;
+        }
+
+        if (!video.src || videoDuration === 0) {
+            alert('No video is currently loaded');
+            return;
+        }
+
+        const currentTime = video.currentTime;
+
+        // Initialize In/Out points for this clip if it doesn't exist
+        if (!clipInOutPoints[clipNumber]) {
+            clipInOutPoints[clipNumber] = {};
+        }
+
+        // Set the In point
+        clipInOutPoints[clipNumber].inPoint = currentTime;
+
+        console.log(`Set In Point at ${formatTime(currentTime)} for clip ${clipNumber}`);
+
+        // Mark session as modified
+        markSessionModified();
+
+        // Update the display
+        updateInOutMarkersOnTimeline();
+    }
+
+    function setOutPoint() {
+        if (!selectedClipSlot) {
+            alert('Please select a clip first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        if (!clipVideos[clipNumber]) {
+            alert('Please load a video into the selected clip first');
+            return;
+        }
+
+        if (!video.src || videoDuration === 0) {
+            alert('No video is currently loaded');
+            return;
+        }
+
+        const currentTime = video.currentTime;
+
+        // Initialize In/Out points for this clip if it doesn't exist
+        if (!clipInOutPoints[clipNumber]) {
+            clipInOutPoints[clipNumber] = {};
+        }
+
+        // Set the Out point
+        clipInOutPoints[clipNumber].outPoint = currentTime;
+
+        console.log(`Set Out Point at ${formatTime(currentTime)} for clip ${clipNumber}`);
+
+        // Mark session as modified
+        markSessionModified();
+
+        // Update the display
+        updateInOutMarkersOnTimeline();
+    }
+
+    function clearInOutPoints() {
+        if (!selectedClipSlot) {
+            alert('Please select a clip first');
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+
+        // Clear the In/Out points for this clip
+        if (clipInOutPoints[clipNumber]) {
+            delete clipInOutPoints[clipNumber];
+            console.log(`Cleared In/Out points for clip ${clipNumber}`);
+
+            // Mark session as modified
+            markSessionModified();
+
+            // Update the display
+            updateInOutMarkersOnTimeline();
+        }
+    }
+
+    // Update In/Out point markers on timeline
+    function updateInOutMarkersOnTimeline() {
+        // Clear existing markers
+        inOutMarkers.innerHTML = '';
+
+        if (!selectedClipSlot || videoDuration === 0) {
+            return;
+        }
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const inOut = clipInOutPoints[clipNumber];
+
+        if (!inOut) {
+            return;
+        }
+
+        // Create In Point marker
+        if (inOut.inPoint !== undefined && inOut.inPoint !== null) {
+            const inMarker = document.createElement('div');
+            inMarker.className = 'in-marker';
+            const position = (inOut.inPoint / videoDuration) * 100;
+            inMarker.style.left = `${position}%`;
+            inMarker.title = `In Point: ${formatTime(inOut.inPoint)}`;
+            inMarker.dataset.markerType = 'in';
+
+            // Make marker draggable
+            setupInOutMarkerDrag(inMarker, clipNumber, 'in');
+
+            inOutMarkers.appendChild(inMarker);
+        }
+
+        // Create Out Point marker
+        if (inOut.outPoint !== undefined && inOut.outPoint !== null) {
+            const outMarker = document.createElement('div');
+            outMarker.className = 'out-marker';
+            const position = (inOut.outPoint / videoDuration) * 100;
+            outMarker.style.left = `${position}%`;
+            outMarker.title = `Out Point: ${formatTime(inOut.outPoint)}`;
+            outMarker.dataset.markerType = 'out';
+
+            // Make marker draggable
+            setupInOutMarkerDrag(outMarker, clipNumber, 'out');
+
+            inOutMarkers.appendChild(outMarker);
+        }
+    }
+
+    // Setup In/Out marker drag functionality
+    function setupInOutMarkerDrag(marker, clipNumber, markerType) {
+        let isDragging = false;
+        let dragStarted = false;
+        let dragTooltip = null;
+        let wasPlayingBeforeDrag = false;
+
+        marker.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            dragStarted = false;
+
+            const rect = timelineTrack.getBoundingClientRect();
+
+            function onMouseMove(moveEvent) {
+                if (!dragStarted) {
+                    dragStarted = true;
+                    isDragging = true;
+                    marker.classList.add('dragging');
+
+                    wasPlayingBeforeDrag = !video.paused;
+                    if (wasPlayingBeforeDrag) {
+                        video.pause();
+                        if (outputVideo) outputVideo.pause();
+                    }
+
+                    dragTooltip = document.createElement('div');
+                    dragTooltip.className = 'cue-drag-tooltip';
+                    document.body.appendChild(dragTooltip);
+                }
+
+                if (!isDragging) return;
+
+                const moveX = moveEvent.clientX - rect.left;
+                const percentage = Math.max(0, Math.min(1, moveX / rect.width));
+                const newTime = percentage * videoDuration;
+
+                marker.style.left = `${percentage * 100}%`;
+
+                dragTooltip.style.left = `${moveEvent.clientX + 15}px`;
+                dragTooltip.style.top = `${moveEvent.clientY - 10}px`;
+                dragTooltip.textContent = `${markerType === 'in' ? 'In' : 'Out'}: ${formatTime(newTime)}`;
+
+                // Update the In/Out point time
+                if (!clipInOutPoints[clipNumber]) {
+                    clipInOutPoints[clipNumber] = {};
+                }
+
+                if (markerType === 'in') {
+                    clipInOutPoints[clipNumber].inPoint = newTime;
+                } else {
+                    clipInOutPoints[clipNumber].outPoint = newTime;
+                }
+
+                // Scrub video
+                if (video && video.duration > 0) {
+                    try {
+                        video.currentTime = newTime;
+                        if (outputVideo && outputVideo.duration > 0) {
+                            outputVideo.currentTime = newTime;
+                        }
+                    } catch (e) {
+                        console.error('Error scrubbing video:', e);
+                    }
+                }
+            }
+
+            function onMouseUp() {
+                if (dragStarted && isDragging) {
+                    isDragging = false;
+                    marker.classList.remove('dragging');
+
+                    if (dragTooltip) {
+                        dragTooltip.remove();
+                        dragTooltip = null;
+                    }
+
+                    if (wasPlayingBeforeDrag) {
+                        video.play().catch(e => console.error('Error resuming playback:', e));
+                        if (outputVideo) {
+                            outputVideo.play().catch(e => console.error('Error resuming output playback:', e));
+                        }
+                    }
+
+                    markSessionModified();
+                }
+
+                dragStarted = false;
+                isDragging = false;
+
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+
+        // Double-click to delete (same as cue points)
+        marker.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const confirmMsg = `Delete ${markerType === 'in' ? 'In' : 'Out'} Point?`;
+
+            if (confirm(confirmMsg)) {
+                if (clipInOutPoints[clipNumber]) {
+                    if (markerType === 'in') {
+                        delete clipInOutPoints[clipNumber].inPoint;
+                    } else {
+                        delete clipInOutPoints[clipNumber].outPoint;
+                    }
+
+                    // If both are deleted, remove the object
+                    if (!clipInOutPoints[clipNumber].inPoint && !clipInOutPoints[clipNumber].outPoint) {
+                        delete clipInOutPoints[clipNumber];
+                    }
+
+                    markSessionModified();
+                    updateInOutMarkersOnTimeline();
+
+                    console.log(`Deleted ${markerType === 'in' ? 'In' : 'Out'} Point`);
+                }
+            }
+        });
     }
 
     // Speed control functions
@@ -1471,34 +1799,8 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Changed speed for clip ${clipNumber} to ${newSpeed}x`);
     }
 
-    // Update the visual display of cue points for the currently selected clip
-    function updateCuePointsList() {
-        if (!selectedClipSlot) {
-            cuePointsList.innerHTML = '<p class="no-cue-points">No clip selected</p>';
-            return;
-        }
-
-        const clipNumber = selectedClipSlot.dataset.clipNumber;
-        const cuePoints = clipCuePoints[clipNumber] || [];
-
-        if (cuePoints.length === 0) {
-            cuePointsList.innerHTML = '<p class="no-cue-points">No cue points recorded</p>';
-            return;
-        }
-
-        // Build the cue points list HTML
-        let html = '';
-        cuePoints.forEach((cuePoint, index) => {
-            html += `
-                <div class="cue-point-item">
-                    <span>Cue ${index + 1}</span>
-                    <span class="cue-point-time">${formatTime(cuePoint.time)}</span>
-                </div>
-            `;
-        });
-
-        cuePointsList.innerHTML = html;
-    }
+    // REMOVED: updateCuePointsList() function - cue points list UI removed, cue points visible on timeline instead
+    // function updateCuePointsList() { ... }
 
     // Jump to the first cue point of the current clip, or beginning if no cue points
     function restartClip() {
@@ -1525,37 +1827,51 @@ document.addEventListener('DOMContentLoaded', function() {
             // Jump to first cue point and reset index to 0
             const firstCuePoint = cuePoints[0];
             video.currentTime = firstCuePoint.time;
+            // Update timeline immediately to move scrubber
+            updateTimeline();
             clipCurrentCueIndex[clipNumber] = 0;
 
             // Set flag to allow playing through this cue point
             justNavigatedToCue = true;
             lastNavigatedCueTime = firstCuePoint.time;
 
-            // Pressing R always means "play from start" - set play intent
-            globalPlayIntent = true;
-            video.play().then(() => {
-                updatePlayButtonState();
-                console.log(`R key: Restarted at cue 1/${cuePoints.length} at ${formatTime(firstCuePoint.time)}`);
-            }).catch(e => {
-                console.error('Error playing from first cue:', e);
-            });
+            // Restart - only auto-play if global auto-play is enabled
+            if (globalAutoPlayEnabled) {
+                globalPlayIntent = true;
+                video.play().then(() => {
+                    // updatePlayButtonState() removed
+                    console.log(`R key: Restarted at cue 1/${cuePoints.length} at ${formatTime(firstCuePoint.time)}`);
+                }).catch(e => {
+                    console.error('Error playing from first cue:', e);
+                });
+            } else {
+                globalPlayIntent = false;
+                console.log(`R key: Restarted at cue 1 but not playing (auto-play disabled)`);
+            }
         } else {
             // Jump to beginning if no cue points
             video.currentTime = 0;
+            // Update timeline immediately to move scrubber
+            updateTimeline();
             clipCurrentCueIndex[clipNumber] = -1;
 
             // Set flag to allow playing through first cue
             justNavigatedToCue = true;
             lastNavigatedCueTime = 0;
 
-            // Pressing R always means "play from start" - set play intent
-            globalPlayIntent = true;
-            video.play().then(() => {
-                updatePlayButtonState();
-                console.log('R key: Restarted at beginning (no cue points)');
-            }).catch(e => {
-                console.error('Error playing from beginning:', e);
-            });
+            // Restart - only auto-play if global auto-play is enabled
+            if (globalAutoPlayEnabled) {
+                globalPlayIntent = true;
+                video.play().then(() => {
+                    // updatePlayButtonState() removed
+                    console.log('R key: Restarted at beginning (no cue points)');
+                }).catch(e => {
+                    console.error('Error playing from beginning:', e);
+                });
+            } else {
+                globalPlayIntent = false;
+                console.log('R key: Restarted at beginning but not playing (auto-play disabled)');
+            }
         }
     }
 
@@ -1594,19 +1910,27 @@ document.addEventListener('DOMContentLoaded', function() {
         if (prevIndex < 0) {
             // Go to beginning if we're before first cue
             video.currentTime = 0;
+            // Update timeline immediately to move scrubber
+            updateTimeline();
             clipCurrentCueIndex[clipNumber] = -1;
 
             // Set flag to allow playing through first cue
             justNavigatedToCue = true;
             lastNavigatedCueTime = 0;
 
-            globalPlayIntent = true;
-            video.play().then(() => {
-                updatePlayButtonState();
-                console.log('Q key: Jumped to beginning before first cue');
-            }).catch(e => {
-                console.error('Error playing from beginning:', e);
-            });
+            // Auto-play only if enabled
+            if (globalAutoPlayEnabled) {
+                globalPlayIntent = true;
+                video.play().then(() => {
+                    // updatePlayButtonState() removed
+                    console.log('Q key: Jumped to beginning before first cue');
+                }).catch(e => {
+                    console.error('Error playing from beginning:', e);
+                });
+            } else {
+                globalPlayIntent = false;
+                console.log('Q key: Jumped to beginning but not playing (auto-play disabled)');
+            }
             return;
         }
 
@@ -1617,19 +1941,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Jump backwards to the previous cue point
         video.currentTime = targetCuePoint.time;
+        // Update timeline immediately to move scrubber
+        updateTimeline();
 
         // Set flag to allow playing through this cue point
         justNavigatedToCue = true;
         lastNavigatedCueTime = targetCuePoint.time;
 
-        // Pressing Q means "go back and play from previous cue" - set play intent
-        globalPlayIntent = true;
-        video.play().then(() => {
-            updatePlayButtonState();
-            console.log(`Q key: Sequential navigation to cue ${prevIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
-        }).catch(e => {
-            console.error('Error playing from previous cue:', e);
-        });
+        // Pressing Q means "go back and play from previous cue" - only if auto-play enabled
+        if (globalAutoPlayEnabled) {
+            globalPlayIntent = true;
+            video.play().then(() => {
+                // updatePlayButtonState() removed
+                console.log(`Q key: Sequential navigation to cue ${prevIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
+            }).catch(e => {
+                console.error('Error playing from previous cue:', e);
+            });
+        } else {
+            globalPlayIntent = false;
+            console.log(`Q key: Navigated to cue ${prevIndex + 1} but not playing (auto-play disabled)`);
+        }
     }
 
     // Navigate to the next cue point
@@ -1683,6 +2014,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (distanceToCue > 0.1) {
             // NOT at the cue - JUMP to it
             video.currentTime = targetCuePoint.time;
+            // Update timeline immediately to move scrubber
+            updateTimeline();
             console.log(`W key: Jumped to cue ${targetIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
         } else {
             // Already AT the cue - just play from here
@@ -1696,13 +2029,18 @@ document.addEventListener('DOMContentLoaded', function() {
         justNavigatedToCue = true;
         lastNavigatedCueTime = targetCuePoint.time;
 
-        // Start playing - will play until next cue and stop (via cue-stop logic)
-        globalPlayIntent = true;
-        video.play().then(() => {
-            updatePlayButtonState();
-        }).catch(e => {
-            console.error('Error playing to next cue:', e);
-        });
+        // Start playing - only if global auto-play is enabled
+        if (globalAutoPlayEnabled) {
+            globalPlayIntent = true;
+            video.play().then(() => {
+                // updatePlayButtonState() removed
+            }).catch(e => {
+                console.error('Error playing to next cue:', e);
+            });
+        } else {
+            globalPlayIntent = false;
+            console.log('Navigated to cue point but not playing (auto-play disabled)');
+        }
     }
 
     // Timeline functionality
@@ -1742,6 +2080,65 @@ document.addEventListener('DOMContentLoaded', function() {
         totalDurationDisplay.textContent = formatTimeShort(videoDuration);
     }
 
+    // Smooth timeline update using requestAnimationFrame for 60fps updates
+    function smoothUpdateTimeline() {
+        updateTimeline();
+
+        // Continue updating at 60fps while video is playing
+        if (!video.paused && !video.ended) {
+            timelineAnimationFrame = requestAnimationFrame(smoothUpdateTimeline);
+        }
+    }
+
+    // Start smooth timeline updates
+    function startSmoothTimelineUpdates() {
+        if (timelineAnimationFrame) {
+            cancelAnimationFrame(timelineAnimationFrame);
+        }
+        timelineAnimationFrame = requestAnimationFrame(smoothUpdateTimeline);
+    }
+
+    // Stop smooth timeline updates
+    function stopSmoothTimelineUpdates() {
+        if (timelineAnimationFrame) {
+            cancelAnimationFrame(timelineAnimationFrame);
+            timelineAnimationFrame = null;
+        }
+    }
+
+    // Set timeline zoom level
+    function setTimelineZoom(zoomLevel) {
+        timelineZoomLevel = zoomLevel;
+
+        // Apply zoom to timeline track width
+        timelineTrack.style.width = `${100 * zoomLevel}%`;
+
+        // Update active button state
+        document.querySelectorAll('.zoom-btn').forEach(btn => {
+            if (parseInt(btn.dataset.zoom) === zoomLevel) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // Scroll to keep current playback position in view
+        const container = timelineTrack.parentElement;
+        const progress = video.currentTime / videoDuration;
+        const scrollPosition = (container.scrollWidth * progress) - (container.clientWidth / 2);
+        container.scrollLeft = Math.max(0, scrollPosition);
+
+        console.log(`Timeline zoom set to ${zoomLevel}x`);
+    }
+
+    // Toggle global auto-play
+    function toggleGlobalAutoPlay() {
+        globalAutoPlayEnabled = !globalAutoPlayEnabled;
+        autoPlayToggle.checked = globalAutoPlayEnabled;
+        markSessionModified();
+        console.log(`Global auto-play ${globalAutoPlayEnabled ? 'enabled' : 'disabled'}`);
+    }
+
     // Cue marker drag tooltip element
     let cueMarkerDragTooltip = null;
 
@@ -1750,6 +2147,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let isDraggingCue = false;
         let dragTooltip = null;
         let wasPlayingBeforeDrag = false;
+        let dragStarted = false;
 
         marker.addEventListener('mousedown', function(e) {
             // Only left click for dragging
@@ -1758,24 +2156,32 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             e.stopPropagation(); // Prevent timeline click
 
-            isDraggingCue = true;
-            marker.classList.add('dragging');
-
-            // Store play state and pause video for scrubbing
-            wasPlayingBeforeDrag = !video.paused;
-            if (wasPlayingBeforeDrag) {
-                video.pause();
-                if (outputVideo) outputVideo.pause();
-            }
-
-            // Create tooltip
-            dragTooltip = document.createElement('div');
-            dragTooltip.className = 'cue-drag-tooltip';
-            document.body.appendChild(dragTooltip);
+            // Don't set isDraggingCue yet - wait for actual mouse movement
+            dragStarted = false;
+            // marker.classList.add('dragging'); // Don't add class until actual drag
 
             const rect = timelineTrack.getBoundingClientRect();
 
             function onMouseMove(moveEvent) {
+                // Start dragging only after actual mouse movement
+                if (!dragStarted) {
+                    dragStarted = true;
+                    isDraggingCue = true;
+                    marker.classList.add('dragging');
+
+                    // Store play state and pause video for scrubbing
+                    wasPlayingBeforeDrag = !video.paused;
+                    if (wasPlayingBeforeDrag) {
+                        video.pause();
+                        if (outputVideo) outputVideo.pause();
+                    }
+
+                    // Create tooltip
+                    dragTooltip = document.createElement('div');
+                    dragTooltip.className = 'cue-drag-tooltip';
+                    document.body.appendChild(dragTooltip);
+                }
+
                 if (!isDraggingCue) return;
 
                 // Calculate new position
@@ -1809,40 +2215,45 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 // Update cue points list in real-time
-                updateCuePointsList();
+                // updateCuePointsList(); // REMOVED - cue points visible on timeline
             }
 
             function onMouseUp() {
-                if (!isDraggingCue) return;
+                // Only do cleanup if a drag actually occurred
+                if (dragStarted && isDraggingCue) {
+                    isDraggingCue = false;
+                    marker.classList.remove('dragging');
 
-                isDraggingCue = false;
-                marker.classList.remove('dragging');
-
-                // Remove tooltip
-                if (dragTooltip) {
-                    dragTooltip.remove();
-                    dragTooltip = null;
-                }
-
-                // Restore playing state if it was playing before drag
-                if (wasPlayingBeforeDrag) {
-                    video.play().catch(e => console.error('Error resuming playback:', e));
-                    if (outputVideo) {
-                        outputVideo.play().catch(e => console.error('Error resuming output playback:', e));
+                    // Remove tooltip
+                    if (dragTooltip) {
+                        dragTooltip.remove();
+                        dragTooltip = null;
                     }
+
+                    // Restore playing state if it was playing before drag
+                    if (wasPlayingBeforeDrag) {
+                        video.play().catch(e => console.error('Error resuming playback:', e));
+                        if (outputVideo) {
+                            outputVideo.play().catch(e => console.error('Error resuming output playback:', e));
+                        }
+                    }
+
+                    // Sort cue points by time after dragging
+                    clipCuePoints[clipNumber].sort((a, b) => a.time - b.time);
+
+                    // Refresh markers to show correct order
+                    updateCueMarkersOnTimeline();
+
+                    // Update list with sorted order
+                    // updateCuePointsList(); // REMOVED - cue points visible on timeline
+
+                    // Mark session as modified
+                    markSessionModified();
                 }
 
-                // Sort cue points by time after dragging
-                clipCuePoints[clipNumber].sort((a, b) => a.time - b.time);
-
-                // Refresh markers to show correct order
-                updateCueMarkersOnTimeline();
-
-                // Update list with sorted order
-                updateCuePointsList();
-
-                // Mark session as modified
-                markSessionModified();
+                // Reset drag state
+                dragStarted = false;
+                isDraggingCue = false;
 
                 // Clean up event listeners
                 document.removeEventListener('mousemove', onMouseMove);
@@ -1874,7 +2285,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Refresh markers and list
                 updateCueMarkersOnTimeline();
-                updateCuePointsList();
+                // updateCuePointsList(); // REMOVED - cue points visible on timeline
 
                 console.log(`Deleted cue point ${cueIndex + 1}`);
             }
@@ -1996,6 +2407,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipModes = tabClipModes[currentTab];
         clipCueStop = tabClipCueStop[currentTab];
         clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
+        clipInOutPoints = tabClipInOutPoints[currentTab];
 
         // Clear current selection (each tab has its own selection)
         if (selectedClipSlot) {
@@ -2011,10 +2423,11 @@ document.addEventListener('DOMContentLoaded', function() {
         video.load();
 
         // Update UI for new tab
-        updateCuePointsList();
+        // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+        updateInOutMarkersOnTimeline();
         updateSpeedControls();
-        updatePlayButtonState();
+        // updatePlayButtonState() removed
     }
 
     // Add a new tab
@@ -2363,6 +2776,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const clipNumber = selectedClipSlot.dataset.clipNumber;
 
+        // DEBUG: Log file object properties
+        console.log('=== LOADING FILE ===');
+        console.log('File object:', file);
+        console.log('file.name:', file.name);
+        console.log('file.path:', file.path);
+        console.log('file.type:', file.type);
+
         // In Electron, use file:// protocol path instead of blob URLs
         const filePath = file.path || file.name; // file.path from Electron directory reading
         const url = `file:///${filePath.replace(/\\/g, '/')}`;
@@ -2374,7 +2794,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const folderPath = file.path.substring(0, file.path.lastIndexOf('\\'));
             if (!currentFolderPath || currentFolderPath === '' || !currentFolderPath.includes('\\')) {
                 currentFolderPath = folderPath;
-                currentPathDisplay.textContent = currentFolderPath;
+                // currentPathDisplay.textContent = currentFolderPath; // REMOVED - file browser removed
                 console.log('Auto-detected folder path from video file:', currentFolderPath);
             }
         }
@@ -2430,46 +2850,12 @@ document.addEventListener('DOMContentLoaded', function() {
             clipCuePoints[clipNumber] = [];
         }
 
-        updateCuePointsList();
+        // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
+        updateInOutMarkersOnTimeline();
     }
 
-    // Browse folder using Electron API
-    async function browseFolder() {
-        try {
-            const result = await window.electronAPI.selectFolder();
-
-            if (result.canceled) {
-                console.log('Folder selection cancelled');
-                return;
-            }
-
-            currentFolderPath = result.folderPath;
-            currentPathDisplay.textContent = currentFolderPath;
-            console.log('Folder selected, currentFolderPath set to:', currentFolderPath);
-
-            // Read directory contents
-            const dirResult = await window.electronAPI.readDirectory(currentFolderPath);
-
-            if (dirResult.success) {
-                // Convert files to format expected by displayFiles
-                const files = dirResult.files.map(fileInfo => ({
-                    name: fileInfo.name,
-                    path: fileInfo.path,
-                    size: fileInfo.size,
-                    isDirectory: fileInfo.isDirectory
-                }));
-
-                displayFiles(files);
-                upFolderBtn.disabled = false;
-            } else {
-                throw new Error(dirResult.error || 'Failed to read directory');
-            }
-        } catch (error) {
-            console.error('Error accessing folder:', error);
-            alert('Unable to access folder. Please try again.');
-        }
-    }
+    // File browser removed - drag videos from OS file explorer directly onto clip slots
 
     // Keyboard shortcuts functions
     function parseKeyboardShortcut(shortcut) {
@@ -2520,9 +2906,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 event.stopPropagation();
 
                 switch (action) {
-                    case 'playPause':
-                        pausePlayBtn.click();
-                        break;
                     case 'previousClip':
                         prevClipBtn.click();
                         break;
@@ -2541,8 +2924,29 @@ document.addEventListener('DOMContentLoaded', function() {
                     case 'recordCuePoint':
                         recordCuePointBtn.click();
                         break;
-                    case 'reversePlay':
-                        reverseBtn.click();
+                    case 'setInPoint':
+                        setInPointBtn.click();
+                        break;
+                    case 'setOutPoint':
+                        setOutPointBtn.click();
+                        break;
+                    case 'clearInOut':
+                        clearInOutBtn.click();
+                        break;
+                    case 'zoomIn':
+                        // Cycle through zoom levels: 1 -> 2 -> 4 -> 8
+                        if (timelineZoomLevel < 8) {
+                            setTimelineZoom(timelineZoomLevel * 2);
+                        }
+                        break;
+                    case 'zoomOut':
+                        // Cycle through zoom levels: 8 -> 4 -> 2 -> 1
+                        if (timelineZoomLevel > 1) {
+                            setTimelineZoom(timelineZoomLevel / 2);
+                        }
+                        break;
+                    case 'toggleAutoPlay':
+                        toggleGlobalAutoPlay();
                         break;
                     case 'tab1':
                         switchTab(0);
@@ -2694,9 +3098,6 @@ document.addEventListener('DOMContentLoaded', function() {
     function executeMappedAction(action) {
         // Use the same action execution logic as keyboard shortcuts
         switch (action) {
-            case 'playPause':
-                pausePlayBtn.click();
-                break;
             case 'previousClip':
                 prevClipBtn.click();
                 break;
@@ -2715,8 +3116,27 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'recordCuePoint':
                 recordCuePointBtn.click();
                 break;
-            case 'reversePlay':
-                reverseBtn.click();
+            case 'setInPoint':
+                setInPointBtn.click();
+                break;
+            case 'setOutPoint':
+                setOutPointBtn.click();
+                break;
+            case 'clearInOut':
+                clearInOutBtn.click();
+                break;
+            case 'zoomIn':
+                if (timelineZoomLevel < 8) {
+                    setTimelineZoom(timelineZoomLevel * 2);
+                }
+                break;
+            case 'zoomOut':
+                if (timelineZoomLevel > 1) {
+                    setTimelineZoom(timelineZoomLevel / 2);
+                }
+                break;
+            case 'toggleAutoPlay':
+                toggleGlobalAutoPlay();
                 break;
             case 'tab1':
                 switchTab(0);
@@ -2816,14 +3236,18 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentEditingAction = null;
 
     const shortcutLabels = {
-        'playPause': 'Play/Pause',
         'previousClip': 'Previous Clip',
         'nextClip': 'Next Clip',
         'previousCuePoint': 'Previous Cue Point',
         'nextCuePoint': 'Next Cue Point',
         'restartClip': 'Restart Clip',
         'recordCuePoint': 'Record Cue Point',
-        'reversePlay': 'Reverse Play',
+        'setInPoint': 'Set In Point',
+        'setOutPoint': 'Set Out Point',
+        'clearInOut': 'Clear In/Out Points',
+        'zoomIn': 'Zoom Timeline In',
+        'zoomOut': 'Zoom Timeline Out',
+        'toggleAutoPlay': 'Toggle Auto-Play',
         'tab1': 'Switch to Tab 1',
         'tab2': 'Switch to Tab 2',
         'tab3': 'Switch to Tab 3',
@@ -3047,14 +3471,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function resetShortcutsToDefaults() {
         tempKeyboardShortcuts = {
-            'playPause': 'Space',
             'previousClip': 'ArrowLeft',
             'nextClip': 'ArrowRight',
             'previousCuePoint': 'q',
             'nextCuePoint': 'w',
             'restartClip': 'r',
             'recordCuePoint': 'c',
-            'reversePlay': 'Shift+r',
+            'setInPoint': 'i',
+            'setOutPoint': 'o',
+            'clearInOut': 'Shift+x',
+            'zoomIn': '=',
+            'zoomOut': '-',
             'tab1': '1',
             'tab2': '2',
             'tab3': '3',
@@ -3081,21 +3508,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Event listeners for file browser
-    browseFolderBtn.addEventListener('click', browseFolder);
+    // File browser event listeners removed - drag videos from OS file explorer instead
 
-    upFolderBtn.addEventListener('click', function() {
-        // For now, just clear the file list and reset to initial state
-        fileList.innerHTML = `
-            <div class="file-item other-file">
-                <span class="file-name">Click "Browse Folder" to start...</span>
-                <span class="file-size"></span>
-            </div>
-        `;
-        currentPathDisplay.textContent = 'Select folder to browse...';
-        currentFolderPath = '';
-        upFolderBtn.disabled = true;
+    // Timeline zoom button event listeners
+    document.querySelectorAll('.zoom-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const zoomLevel = parseInt(this.dataset.zoom);
+            setTimelineZoom(zoomLevel);
+        });
     });
+
+    // Initialize zoom to 1x
+    setTimelineZoom(1);
 
     // Initialize the matrix
     createClipMatrix();
@@ -3136,8 +3560,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Initialize UI state
-    updatePlayButtonState();
-    updateCuePointsList();
+    // updatePlayButtonState() removed
+    // updateCuePointsList(); // REMOVED - cue points visible on timeline
     updateSpeedControls();
     updateSessionStatus('No session loaded');
 
@@ -3149,106 +3573,8 @@ document.addEventListener('DOMContentLoaded', function() {
         navigateToClip('previous');
     });
 
-    // Reverse Play button (placeholder for now)
-    reverseBtn.addEventListener('click', function() {
-        console.log('Reverse play button clicked');
-
-        if (!selectedClipSlot) {
-            console.log('No clip selected for reverse playback');
-            return;
-        }
-
-        const clipNumber = selectedClipSlot.dataset.clipNumber;
-        const videoData = clipVideos[clipNumber];
-
-        if (!videoData) {
-            console.log('No video loaded in selected slot for reverse playback');
-            return;
-        }
-
-        // Set negative playback rate for reverse
-        if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
-            video.playbackRate = -1.0;
-
-            // If video is paused, start playing in reverse
-            if (video.paused) {
-                globalPlayIntent = true;
-                video.play().then(() => {
-                    console.log('Started reverse playback');
-                    updatePlayButtonState();
-                }).catch(e => {
-                    console.error('Error starting reverse playback:', e);
-                });
-            } else {
-                console.log('Switched to reverse playback');
-            }
-        } else {
-            console.log('Video not ready for reverse playback');
-        }
-    });
-
-    // Pause/Play toggle button
-    pausePlayBtn.addEventListener('click', function() {
-        console.log('Pause/Play button clicked');
-        if (!video.src) {
-            alert('Please select a clip with video first');
-            return;
-        }
-
-        // Toggle the global play intent based on user action
-        globalPlayIntent = !globalPlayIntent;
-        updatePlayButtonState();
-
-        if (globalPlayIntent) {
-            video.play().then(() => {
-                console.log('Video started playing');
-            }).catch(e => {
-                console.error('Error playing video:', e);
-                alert('Error playing video: ' + e.message);
-            });
-        } else {
-            video.pause();
-            console.log('Video paused by user');
-        }
-    });
-
-    // Forward Play button
-    forwardBtn.addEventListener('click', function() {
-        console.log('Forward play button clicked');
-
-        if (!selectedClipSlot) {
-            alert('Please select a clip slot first');
-            return;
-        }
-
-        const clipNumber = selectedClipSlot.dataset.clipNumber;
-        const videoData = clipVideos[clipNumber];
-
-        if (!videoData) {
-            alert('Please load a video into the selected clip slot first');
-            return;
-        }
-
-        if (!video.src) {
-            alert('No video loaded in player - please select a clip with video');
-            return;
-        }
-
-        // Set normal forward playback rate (restore from reverse if needed)
-        const clipSpeed = clipSpeeds[clipNumber] || 1.0;
-        video.playbackRate = clipSpeed;
-
-        // Set global intent to play when Forward Play is pressed
-        globalPlayIntent = true;
-        updatePlayButtonState();
-
-        video.play().then(() => {
-            console.log('Video started playing forward at speed:', clipSpeed);
-        }).catch(e => {
-            console.error('Error playing video:', e);
-            alert('Error playing video: ' + e.message);
-        });
-    });
+    // Removed: Reverse, Pause/Play, and Forward Play buttons per team feedback
+    // Only Previous and Next Clip buttons remain
 
     // Next Clip button
     nextClipBtn.addEventListener('click', function() {
@@ -3278,6 +3604,28 @@ document.addEventListener('DOMContentLoaded', function() {
     nextCuePointBtn.addEventListener('click', function() {
         console.log('Next cue point button clicked');
         navigateToNextCuePoint();
+    });
+
+    // In/Out Point buttons
+    setInPointBtn.addEventListener('click', function() {
+        console.log('Set In Point button clicked');
+        setInPoint();
+    });
+
+    setOutPointBtn.addEventListener('click', function() {
+        console.log('Set Out Point button clicked');
+        setOutPoint();
+    });
+
+    clearInOutBtn.addEventListener('click', function() {
+        console.log('Clear In/Out button clicked');
+        clearInOutPoints();
+    });
+
+    // Auto-Play Toggle
+    autoPlayToggle.addEventListener('change', function() {
+        console.log('Auto-play toggle clicked');
+        toggleGlobalAutoPlay();
     });
 
     // Timeline event listeners
@@ -3373,7 +3721,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!selectedClipSlot) return;
 
         const clipNumber = selectedClipSlot.dataset.clipNumber;
-        const mode = clipModes[clipNumber] || 'forward-stop';
+        const mode = clipModes[clipNumber] || 'loop';
 
         console.log(`Video ended for clip ${clipNumber} in mode: ${mode}`);
 
@@ -3442,7 +3790,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Forward-stop mode (default) - just stop
                 console.log('Forward-stop mode: Video stopped at end');
                 globalPlayIntent = false;
-                updatePlayButtonState();
+                // updatePlayButtonState() removed
                 updatePlayingIndicator();
                 break;
         }
@@ -3456,6 +3804,8 @@ document.addEventListener('DOMContentLoaded', function() {
             currentlyPlayingClipNumber = selectedClipSlot.dataset.clipNumber;
             updatePlayingIndicator();
         }
+        // Start smooth 60fps timeline updates
+        startSmoothTimelineUpdates();
         // Note: Don't change globalPlayIntent here - only user actions should
     });
 
@@ -3463,6 +3813,11 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Video pause event fired');
         currentVideoPlaying = false;
         updatePlayingIndicator();
+
+        // Stop smooth timeline updates
+        stopSmoothTimelineUpdates();
+        // Update timeline one last time to show final position
+        updateTimeline();
 
         // Cancel bounce animation if playing
         if (bounceAnimationFrame) {
@@ -3481,7 +3836,33 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     video.addEventListener('timeupdate', function() {
-        updateTimeline();
+        // Note: Timeline updates now handled by requestAnimationFrame for smooth 60fps motion
+        // updateTimeline() is called from smoothUpdateTimeline() instead
+
+        // In/Out point behavior
+        if (selectedClipSlot && !video.paused) {
+            const clipNumber = selectedClipSlot.dataset.clipNumber;
+            const inOut = clipInOutPoints[clipNumber];
+
+            if (inOut) {
+                const currentTime = video.currentTime;
+                const inPoint = inOut.inPoint;
+                const outPoint = inOut.outPoint;
+
+                // If Out point is set and we've passed it
+                if (outPoint !== undefined && outPoint !== null && currentTime >= outPoint) {
+                    // Loop back to In point (or start if no In point)
+                    video.currentTime = (inPoint !== undefined && inPoint !== null) ? inPoint : 0;
+                    console.log(`Reached Out point, looping to ${(inPoint !== undefined && inPoint !== null) ? formatTime(inPoint) : 'start'}`);
+                }
+
+                // If In point is set and we're before it (shouldn't happen normally, but handle it)
+                if (inPoint !== undefined && inPoint !== null && currentTime < inPoint && currentTime > 0.1) {
+                    video.currentTime = inPoint;
+                    console.log(`Before In point, jumping to ${formatTime(inPoint)}`);
+                }
+            }
+        }
 
         // Cue point stop behavior
         if (selectedClipSlot) {
@@ -3508,7 +3889,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                             video.pause();
                             globalPlayIntent = false;
-                            updatePlayButtonState();
+                            // updatePlayButtonState() removed
 
                             // Update current cue index to this cue point
                             clipCurrentCueIndex[clipNumber] = i;
