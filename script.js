@@ -1798,56 +1798,47 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const cuePoints = clipCuePoints[clipNumber] || [];
+        const inOut = clipInOutPoints[clipNumber];
 
+        // Get In Point (default to 0 if not set)
+        const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
+
+        // Jump to In Point
+        video.currentTime = inPoint;
+        updateTimeline();
+
+        // Find the cue index at or after In Point
+        let cueIndex = -1;
         if (cuePoints.length > 0) {
-            // Jump to first cue point and reset index to 0
-            const firstCuePoint = cuePoints[0];
-            video.currentTime = firstCuePoint.time;
-            // Update timeline immediately to move scrubber
-            updateTimeline();
-            clipCurrentCueIndex[clipNumber] = 0;
-
-            // Set flag to allow playing through this cue point
-            justNavigatedToCue = true;
-            lastNavigatedCueTime = firstCuePoint.time;
-
-            // Restart - only auto-play if global auto-play is enabled
-            if (globalAutoPlayEnabled) {
-                globalPlayIntent = true;
-                video.play().then(() => {
-                    // updatePlayButtonState() removed
-                    console.log(`R key: Restarted at cue 1/${cuePoints.length} at ${formatTime(firstCuePoint.time)}`);
-                }).catch(e => {
-                    console.error('Error playing from first cue:', e);
-                });
-            } else {
-                globalPlayIntent = false;
-                console.log(`R key: Restarted at cue 1 but not playing (auto-play disabled)`);
+            for (let i = 0; i < cuePoints.length; i++) {
+                if (cuePoints[i].time >= inPoint - 0.1) { // 0.1s tolerance
+                    cueIndex = i;
+                    break;
+                }
             }
+        }
+        clipCurrentCueIndex[clipNumber] = cueIndex;
+
+        // Set flag to allow playing through cue points
+        justNavigatedToCue = true;
+        lastNavigatedCueTime = inPoint;
+
+        // Restart - only auto-play if global auto-play is enabled
+        if (globalAutoPlayEnabled) {
+            globalPlayIntent = true;
+            video.play().then(() => {
+                // updatePlayButtonState() removed
+                if (inPoint > 0) {
+                    console.log(`R key: Restarted at In Point: ${formatTime(inPoint)}`);
+                } else {
+                    console.log('R key: Restarted at beginning (no In Point set)');
+                }
+            }).catch(e => {
+                console.error('Error playing from In Point:', e);
+            });
         } else {
-            // Jump to beginning if no cue points
-            video.currentTime = 0;
-            // Update timeline immediately to move scrubber
-            updateTimeline();
-            clipCurrentCueIndex[clipNumber] = -1;
-
-            // Set flag to allow playing through first cue
-            justNavigatedToCue = true;
-            lastNavigatedCueTime = 0;
-
-            // Restart - only auto-play if global auto-play is enabled
-            if (globalAutoPlayEnabled) {
-                globalPlayIntent = true;
-                video.play().then(() => {
-                    // updatePlayButtonState() removed
-                    console.log('R key: Restarted at beginning (no cue points)');
-                }).catch(e => {
-                    console.error('Error playing from beginning:', e);
-                });
-            } else {
-                globalPlayIntent = false;
-                console.log('R key: Restarted at beginning but not playing (auto-play disabled)');
-            }
+            globalPlayIntent = false;
+            console.log(`R key: Jumped to In Point but not playing (auto-play disabled)`);
         }
     }
 
@@ -1991,6 +1982,58 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // Check if we're currently AT any cue point (within tolerance)
+        // If auto-play is enabled: play from current position (maintains linear progression)
+        // If auto-play is disabled: skip to next cue (navigation still works)
+        let currentCueIndex = -1;
+        for (let i = 0; i < cuePoints.length; i++) {
+            if (Math.abs(currentTime - cuePoints[i].time) <= 0.1) {
+                currentCueIndex = i;
+                break;
+            }
+        }
+
+        if (currentCueIndex !== -1 && globalAutoPlayEnabled) {
+            // We're AT a cue point AND auto-play is enabled
+            // Check if this is the LAST cue point - if so, handle mode-specific behavior
+            const isLastCuePoint = (currentCueIndex === cuePoints.length - 1);
+
+            if (isLastCuePoint) {
+                // At last cue point - handle based on mode
+                if (clipMode === 'forward-next') {
+                    // Advance to next clip's In Point
+                    goToNextClip();
+                    return;
+                } else if (clipMode === 'forward-stop' || clipMode === 'loop') {
+                    // Loop back to In Point
+                    video.currentTime = inPoint;
+                    updateTimeline();
+                    clipCurrentCueIndex[clipNumber] = -1;
+                    console.log(`W key: At last cue, looping to In Point: ${formatTime(inPoint)}`);
+
+                    globalPlayIntent = true;
+                    video.play().catch(e => console.error('Error playing:', e));
+                    return;
+                }
+            }
+
+            // Not at last cue - play from current position to next cue
+            clipCurrentCueIndex[clipNumber] = currentCueIndex;
+            justNavigatedToCue = true;
+            lastNavigatedCueTime = cuePoints[currentCueIndex].time;
+
+            console.log(`W key: Playing from current cue ${currentCueIndex + 1}/${cuePoints.length} at ${formatTime(cuePoints[currentCueIndex].time)}`);
+
+            globalPlayIntent = true;
+            video.play().then(() => {
+                // Video will play forward and stop at next cue (forward-stop mode)
+            }).catch(e => {
+                console.error('Error playing from current cue:', e);
+            });
+            return;
+        }
+        // If at cue point but auto-play disabled: continue below to find next cue and jump to it
+
         // Find next cue point after current time
         let targetCuePoint = null;
         let targetIndex = -1;
@@ -2023,14 +2066,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
             } else if (clipMode === 'forward-next') {
-                // At Out Point: go to next clip
-                if (currentTime >= outPoint - 0.1) {
-                    goToNextClip();
-                    return;
-                } else {
-                    console.log('No more cue points ahead');
-                    return;
+                // No more cue points: go to next clip
+                goToNextClip();
+                return;
+            } else if (clipMode === 'loop') {
+                // Loop mode: loop back to In Point when no cue ahead
+                video.currentTime = inPoint;
+                updateTimeline();
+                clipCurrentCueIndex[clipNumber] = -1;
+                console.log(`[loop] At last cue, looping to In Point: ${formatTime(inPoint)}`);
+
+                if (globalAutoPlayEnabled) {
+                    globalPlayIntent = true;
+                    video.play().catch(e => console.error('Error playing:', e));
                 }
+                return;
             } else {
                 console.log('No more cue points ahead');
                 return;
