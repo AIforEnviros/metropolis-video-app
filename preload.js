@@ -28,6 +28,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveSession: (sessionData) => ipcRenderer.invoke('save-session', sessionData),
   loadSession: () => ipcRenderer.invoke('load-session'),
 
+  // Video reversal for bounce mode
+  generateReversedVideo: (videoPath) => ipcRenderer.invoke('generate-reversed-video', videoPath),
+  checkReversedVideo: (videoPath) => ipcRenderer.invoke('check-reversed-video', videoPath),
+
+  // Listen for video reversal progress updates
+  onReverseVideoProgress: (callback) => {
+    ipcRenderer.on('reverse-video-progress', (event, data) => callback(data));
+  },
+
   // MIDI operations
   getMIDIDevices: () => ipcRenderer.invoke('get-midi-devices'),
   selectMIDIDevice: (portIndex) => ipcRenderer.invoke('select-midi-device', portIndex),

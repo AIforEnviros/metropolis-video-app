@@ -2,6 +2,11 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const midi = require('@julusian/midi');
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegStatic = require('ffmpeg-static');
+
+// Set FFmpeg binary path
+ffmpeg.setFfmpegPath(ffmpegStatic);
 
 // Keep track of windows
 let mainWindow = null;
@@ -197,6 +202,97 @@ ipcMain.handle('get-file-path', async (event, filePath) => {
 });
 
 // ==============================================================
+// FFMPEG VIDEO REVERSAL FUNCTIONALITY
+// ==============================================================
+
+// IPC: Generate reversed video for bounce mode
+ipcMain.handle('generate-reversed-video', async (event, videoPath) => {
+  try {
+    console.log(`Starting video reversal for: ${videoPath}`);
+
+    // Parse original video path
+    const parsedPath = path.parse(videoPath);
+    const outputPath = path.join(parsedPath.dir, `${parsedPath.name}_reversed${parsedPath.ext}`);
+
+    // Check if reversed video already exists
+    try {
+      await fs.access(outputPath);
+      console.log(`Reversed video already exists: ${outputPath}`);
+      return { success: true, path: outputPath, cached: true };
+    } catch (err) {
+      // File doesn't exist, proceed with generation
+    }
+
+    return new Promise((resolve, reject) => {
+      // Track progress
+      let duration = 0;
+
+      ffmpeg(videoPath)
+        .videoFilters('reverse')
+        .audioFilters('areverse') // Also reverse audio if present
+        .output(outputPath)
+        .on('start', (commandLine) => {
+          console.log('FFmpeg command:', commandLine);
+        })
+        .on('codecData', (data) => {
+          duration = parseInt(data.duration.replace(/:/g, ''));
+        })
+        .on('progress', (progress) => {
+          if (duration > 0) {
+            const percent = (progress.timemark.replace(/:/g, '') / duration) * 100;
+            // Send progress updates to renderer
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('reverse-video-progress', {
+                videoPath,
+                percent: Math.min(percent, 100),
+                timemark: progress.timemark
+              });
+            }
+          }
+        })
+        .on('end', () => {
+          console.log(`Video reversal complete: ${outputPath}`);
+          resolve({
+            success: true,
+            path: outputPath,
+            cached: false
+          });
+        })
+        .on('error', (err, stdout, stderr) => {
+          console.error('FFmpeg error:', err.message);
+          console.error('FFmpeg stderr:', stderr);
+          reject(new Error(`Failed to reverse video: ${err.message}`));
+        })
+        .run();
+    });
+  } catch (error) {
+    console.error('Video reversal error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC: Check if reversed video exists
+ipcMain.handle('check-reversed-video', async (event, videoPath) => {
+  try {
+    const parsedPath = path.parse(videoPath);
+    const reversedPath = path.join(parsedPath.dir, `${parsedPath.name}_reversed${parsedPath.ext}`);
+
+    try {
+      await fs.access(reversedPath);
+      return { exists: true, path: reversedPath };
+    } catch (err) {
+      return { exists: false, path: reversedPath };
+    }
+  } catch (error) {
+    return { exists: false, error: error.message };
+  }
+});
+
+// ==============================================================
+// END FFMPEG FUNCTIONALITY
+// ==============================================================
+
+// ==============================================================
 // MIDI FUNCTIONALITY
 // ==============================================================
 
@@ -324,6 +420,20 @@ ipcMain.handle('get-current-midi-device', async () => {
 
 // ==============================================================
 // END MIDI FUNCTIONALITY
+// ==============================================================
+
+// ==============================================================
+// HARDWARE ACCELERATION FOR VIDEO PERFORMANCE
+// ==============================================================
+
+// Enable hardware acceleration and GPU optimizations for smooth video playback
+app.commandLine.appendSwitch('disable-frame-rate-limit');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+
+// ==============================================================
+// END HARDWARE ACCELERATION
 // ==============================================================
 
 // App lifecycle
