@@ -60,6 +60,8 @@
     }
   },
   "dependencies": {
-    "@julusian/midi": "^3.6.1"
+    "@julusian/midi": "^3.6.1",
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.3"
   }
 }
