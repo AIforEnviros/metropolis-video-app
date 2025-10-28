@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Available methods:', Object.keys(window.electronAPI));
 
     const video = document.getElementById('videoPlayer');
+    const videoReverse = document.getElementById('videoPlayerReverse'); // Reverse video for bounce mode
     const prevClipBtn = document.getElementById('prevClipBtn');
     const nextClipBtn = document.getElementById('nextClipBtn');
 
@@ -56,9 +57,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Performance optimizations - disable audio globally
     video.muted = true;
     video.volume = 0;
+    videoReverse.muted = true;
+    videoReverse.volume = 0;
 
     // Preload hint for faster loading
     video.preload = 'auto';
+    videoReverse.preload = 'auto';
 
     // Track global play intent (user's desired state)
     let globalPlayIntent = false; // true = user wants playing, false = user wants paused
@@ -88,6 +92,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track videos loaded into each slot for each tab (tabIndex -> { clipNumber -> video data })
     const tabClipVideos = {};
 
+    // Track reversed video paths for bounce mode (tabIndex -> { clipNumber -> reversed video path })
+    const tabClipReversedVideos = {};
+
     // Track cue points for each clip for each tab (tabIndex -> { clipNumber -> array of cue point objects })
     const tabClipCuePoints = {};
 
@@ -113,6 +120,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize tab data structures for default 5 tabs
     for (let i = 0; i < 5; i++) {
         tabClipVideos[i] = {};
+        tabClipReversedVideos[i] = {};
         tabClipCuePoints[i] = {};
         tabClipSpeeds[i] = {};
         tabClipNames[i] = {};
@@ -123,6 +131,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Legacy references for current tab's data (for compatibility)
     let clipVideos = tabClipVideos[currentTab];
+    let clipReversedVideos = tabClipReversedVideos[currentTab];
     let clipCuePoints = tabClipCuePoints[currentTab];
     let clipSpeeds = tabClipSpeeds[currentTab];
     let clipNames = tabClipNames[currentTab];
@@ -219,8 +228,22 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
+        // Create a clean copy of reversed video paths (for bounce mode)
+        const cleanReversedVideos = {};
+        Object.keys(tabClipReversedVideos).forEach(tabIndex => {
+            cleanReversedVideos[tabIndex] = {};
+            Object.keys(tabClipReversedVideos[tabIndex]).forEach(clipNumber => {
+                const reversedVideo = tabClipReversedVideos[tabIndex][clipNumber];
+                if (reversedVideo) {
+                    cleanReversedVideos[tabIndex][clipNumber] = {
+                        path: reversedVideo.path || null
+                    };
+                }
+            });
+        });
+
         return {
-            version: '1.4',
+            version: '1.5', // Updated version for reversed videos support
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -235,6 +258,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tabCustomNames: tabCustomNames,
             tabs: {
                 videos: cleanVideos,
+                reversedVideos: cleanReversedVideos,
                 cuePoints: tabClipCuePoints,
                 speeds: tabClipSpeeds,
                 clipNames: tabClipNames,
@@ -324,6 +348,25 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 });
             }
+            if (sessionData.tabs.reversedVideos) {
+                console.log('Restoring reversed videos:', sessionData.tabs.reversedVideos);
+                // Restore reversed video paths for bounce mode
+                Object.keys(sessionData.tabs.reversedVideos).forEach(tabIndex => {
+                    if (!tabClipReversedVideos[tabIndex]) {
+                        tabClipReversedVideos[tabIndex] = {};
+                    }
+                    Object.keys(sessionData.tabs.reversedVideos[tabIndex]).forEach(clipNumber => {
+                        const reversedData = sessionData.tabs.reversedVideos[tabIndex][clipNumber];
+                        if (reversedData && reversedData.path) {
+                            const reversedUrl = `file:///${reversedData.path.replace(/\\/g, '/')}`;
+                            tabClipReversedVideos[tabIndex][clipNumber] = {
+                                path: reversedData.path,
+                                url: reversedUrl
+                            };
+                        }
+                    });
+                });
+            }
             if (sessionData.tabs.cuePoints) {
                 console.log('Restoring cue points:', sessionData.tabs.cuePoints);
                 Object.assign(tabClipCuePoints, sessionData.tabs.cuePoints);
@@ -359,6 +402,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Update current tab references
             clipVideos = tabClipVideos[currentTab];
+            clipReversedVideos = tabClipReversedVideos[currentTab];
             clipCuePoints = tabClipCuePoints[currentTab];
             clipSpeeds = tabClipSpeeds[currentTab];
             clipNames = tabClipNames[currentTab];
@@ -366,6 +410,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
             clipInOutPoints = tabClipInOutPoints[currentTab];
             console.log('Current tab video data:', clipVideos);
+            console.log('Current tab reversed video data:', clipReversedVideos);
 
             // Restore folder path (keep for backward compatibility)
             if (sessionData.currentFolderPath) {
@@ -476,6 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Clear all tab data
         for (let i = 0; i < 5; i++) {
             tabClipVideos[i] = {};
+            tabClipReversedVideos[i] = {};
             tabClipCuePoints[i] = {};
             tabClipSpeeds[i] = {};
             tabClipNames[i] = {};
@@ -485,6 +531,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Update current references
         clipVideos = tabClipVideos[currentTab];
+        clipReversedVideos = tabClipReversedVideos[currentTab];
         clipCuePoints = tabClipCuePoints[currentTab];
         clipSpeeds = tabClipSpeeds[currentTab];
         clipNames = tabClipNames[currentTab];
@@ -904,6 +951,14 @@ document.addEventListener('DOMContentLoaded', function() {
         markSessionModified();
         console.log(`Set clip ${clipNumber} to mode: ${mode}`);
 
+        // If bounce mode is selected and video is loaded, generate/load reversed video
+        if (mode === 'bounce' && clipVideos[clipNumber]) {
+            const filePath = clipVideos[clipNumber].filePath;
+            if (filePath) {
+                loadReversedVideoForBounceMode(clipNumber, filePath);
+            }
+        }
+
         // Update visual indicator
         const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
         if (slot) {
@@ -1102,6 +1157,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 video.load();
                 console.log('Loaded video for selected slot:', videoData.name, 'Mode:', clipMode);
+
+                // If bounce mode, also load reversed video
+                if (clipMode === 'bounce' && clipReversedVideos[clipNumber]) {
+                    videoReverse.src = clipReversedVideos[clipNumber].url;
+                    videoReverse.muted = true;
+                    videoReverse.volume = 0;
+                    videoReverse.loop = false; // Never loop reversed video
+                    videoReverse.load();
+                    console.log('Loaded reversed video for bounce mode');
+                }
             } else {
                 // Video data exists but no valid URL - this is from a loaded session
                 console.warn(`Video slot ${clipNumber} has data but no valid URL:`, videoData);
@@ -2583,6 +2648,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Update legacy references to point to new tab's data
         clipVideos = tabClipVideos[currentTab];
+        clipReversedVideos = tabClipReversedVideos[currentTab];
         clipCuePoints = tabClipCuePoints[currentTab];
         clipSpeeds = tabClipSpeeds[currentTab];
         clipNames = tabClipNames[currentTab];
@@ -2618,10 +2684,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Initialize data structures for new tab
         tabClipVideos[newTabIndex] = {};
+        tabClipReversedVideos[newTabIndex] = {};
         tabClipCuePoints[newTabIndex] = {};
         tabClipSpeeds[newTabIndex] = {};
         tabClipNames[newTabIndex] = {};
         tabClipModes[newTabIndex] = {};
+        tabClipCurrentCueIndex[newTabIndex] = {};
+        tabClipInOutPoints[newTabIndex] = {};
 
         // Create tab button
         const tabBtn = document.createElement('button');
@@ -3032,6 +3101,89 @@ document.addEventListener('DOMContentLoaded', function() {
         // updateCuePointsList(); // REMOVED - cue points visible on timeline
         updateCueMarkersOnTimeline();
         updateInOutMarkersOnTimeline();
+
+        // Check if this clip is set to bounce mode - if so, generate/load reversed video
+        const clipMode = clipModes[clipNumber] || 'loop';
+        if (clipMode === 'bounce') {
+            loadReversedVideoForBounceMode(clipNumber, filePath);
+        }
+    }
+
+    // Generate/load reversed video for bounce mode
+    async function loadReversedVideoForBounceMode(clipNumber, filePath) {
+        try {
+            console.log(`Checking for reversed video for clip ${clipNumber}...`);
+
+            // Check if reversed video already exists
+            const checkResult = await window.electronAPI.checkReversedVideo(filePath);
+
+            if (checkResult.exists) {
+                // Load existing reversed video
+                console.log(`Reversed video exists: ${checkResult.path}`);
+                const reversedUrl = `file:///${checkResult.path.replace(/\\/g, '/')}`;
+                clipReversedVideos[clipNumber] = {
+                    path: checkResult.path,
+                    url: reversedUrl
+                };
+
+                // If this is the currently selected clip, load reversed video into element
+                if (selectedClipSlot && selectedClipSlot.dataset.clipNumber == clipNumber) {
+                    videoReverse.src = reversedUrl;
+                    videoReverse.load();
+                    console.log(`Loaded reversed video into player for clip ${clipNumber}`);
+                }
+            } else {
+                // Generate reversed video
+                console.log(`Generating reversed video for clip ${clipNumber}...`);
+                showReversalProgress(clipNumber, 'Starting...');
+
+                const result = await window.electronAPI.generateReversedVideo(filePath);
+
+                if (result.success) {
+                    const reversedUrl = `file:///${result.path.replace(/\\/g, '/')}`;
+                    clipReversedVideos[clipNumber] = {
+                        path: result.path,
+                        url: reversedUrl
+                    };
+
+                    // If this is the currently selected clip, load reversed video into element
+                    if (selectedClipSlot && selectedClipSlot.dataset.clipNumber == clipNumber) {
+                        videoReverse.src = reversedUrl;
+                        videoReverse.load();
+                        console.log(`Loaded newly generated reversed video into player for clip ${clipNumber}`);
+                    }
+
+                    showReversalProgress(clipNumber, 'Complete!');
+                    setTimeout(() => hideReversalProgress(clipNumber), 2000);
+                } else {
+                    console.error(`Failed to generate reversed video: ${result.error}`);
+                    alert(`Failed to generate reversed video: ${result.error}`);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading reversed video:', error);
+            alert(`Error loading reversed video: ${error.message}`);
+        }
+    }
+
+    // Show reversal progress indicator
+    function showReversalProgress(clipNumber, message) {
+        console.log(`Clip ${clipNumber}: ${message}`);
+        // TODO: Add UI progress indicator in clip slot or status bar
+    }
+
+    // Hide reversal progress indicator
+    function hideReversalProgress(clipNumber) {
+        console.log(`Clip ${clipNumber}: Progress hidden`);
+        // TODO: Hide UI progress indicator
+    }
+
+    // Listen for reversal progress updates from main process
+    if (window.electronAPI.onReverseVideoProgress) {
+        window.electronAPI.onReverseVideoProgress((data) => {
+            console.log(`Reversal progress: ${data.percent.toFixed(1)}% - ${data.timemark}`);
+            // TODO: Update UI progress indicator
+        });
     }
 
     // File browser removed - drag videos from OS file explorer directly onto clip slots
@@ -3918,50 +4070,42 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
 
             case 'bounce':
-                // Bounce mode - play backwards from end to start
-                console.log('Bounce mode: Reached end, playing in reverse');
-                bounceDirection = -1;
-                lastBounceTime = null; // Will be set on first frame
+                // Bounce mode - seamlessly switch to reversed video element
+                console.log('Bounce mode: Reached end, switching to reversed video');
 
-                // Cancel any existing animation frame
-                if (bounceAnimationFrame) {
-                    cancelAnimationFrame(bounceAnimationFrame);
+                if (!clipReversedVideos[clipNumber]) {
+                    console.error('No reversed video available for bounce mode');
+                    globalPlayIntent = false;
+                    updatePlayingIndicator();
+                    break;
                 }
 
-                // Smooth reverse playback using requestAnimationFrame
+                // Get the playback speed for synchronization
                 const currentSpeed = clipSpeeds[clipNumber] || 1.0;
 
-                function reversePlayback(timestamp) {
-                    if (bounceDirection === -1 && selectedClipSlot && selectedClipSlot.dataset.clipNumber === clipNumber) {
-                        // Initialize timestamp on first frame
-                        if (lastBounceTime === null) {
-                            lastBounceTime = timestamp;
-                        }
+                // Hide forward video, show reversed video
+                video.style.display = 'none';
+                videoReverse.style.display = 'block';
 
-                        // Calculate time delta (capped to prevent huge jumps)
-                        const deltaTime = Math.min((timestamp - lastBounceTime) / 1000, 0.1); // Max 100ms jump
-                        lastBounceTime = timestamp;
+                // Set reversed video to start and match speed
+                videoReverse.currentTime = 0;
+                videoReverse.playbackRate = currentSpeed;
 
-                        // Move backwards at the specified speed
-                        const newTime = video.currentTime - (deltaTime * currentSpeed);
-                        video.currentTime = Math.max(0, newTime);
+                // Play reversed video
+                videoReverse.play().then(() => {
+                    console.log('Bounce mode: Playing reversed video');
+                    bounceDirection = -1; // Track that we're going backwards
+                }).catch(e => {
+                    console.error('Error playing reversed video:', e);
+                });
 
-                        // When we reach the beginning, bounce forward
-                        if (video.currentTime <= 0.01) {
-                            bounceDirection = 1;
-                            video.currentTime = 0;
-                            bounceAnimationFrame = null;
-                            video.play(); // This will play forward and trigger 'ended' again
-                            console.log('Bounce mode: Reached start, bouncing forward');
-                        } else {
-                            // Continue reverse playback
-                            bounceAnimationFrame = requestAnimationFrame(reversePlayback);
-                        }
-                    }
+                // Update output window to show reversed video
+                if (outputVideo && outputWindow) {
+                    window.electronAPI.sendToOutputWindow({
+                        action: 'updateVideoSource',
+                        videoSrc: videoReverse.src
+                    });
                 }
-
-                // Start the reverse playback animation immediately
-                bounceAnimationFrame = requestAnimationFrame(reversePlayback);
                 break;
 
             case 'forward':
@@ -4013,6 +4157,42 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Video ended - handling based on playback mode');
         currentVideoPlaying = false;
         handlePlaybackEnd();
+    });
+
+    // Reversed video event listeners for bounce mode
+    videoReverse.addEventListener('ended', function() {
+        console.log('Reversed video ended - bouncing back to forward');
+
+        if (!selectedClipSlot) return;
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const mode = clipModes[clipNumber] || 'loop';
+
+        if (mode === 'bounce') {
+            // Hide reversed video, show forward video
+            videoReverse.style.display = 'none';
+            video.style.display = 'block';
+
+            // Reset forward video to beginning and play
+            video.currentTime = 0;
+            const currentSpeed = clipSpeeds[clipNumber] || 1.0;
+            video.playbackRate = currentSpeed;
+
+            video.play().then(() => {
+                console.log('Bounce mode: Bounced back to forward playback');
+                bounceDirection = 1; // Track that we're going forward
+            }).catch(e => {
+                console.error('Error playing forward video after bounce:', e);
+            });
+
+            // Update output window to show forward video
+            if (outputVideo && outputWindow) {
+                window.electronAPI.sendToOutputWindow({
+                    action: 'updateVideoSource',
+                    videoSrc: video.src
+                });
+            }
+        }
     });
 
     video.addEventListener('timeupdate', function() {
