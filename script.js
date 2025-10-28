@@ -1822,6 +1822,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Set flag to allow playing through cue points
         justNavigatedToCue = true;
         lastNavigatedCueTime = inPoint;
+        lastNavigatedCueIndex = cueIndex; // Allow playing through first cue at In Point
 
         // Restart - only auto-play if global auto-play is enabled
         if (globalAutoPlayEnabled) {
@@ -1884,6 +1885,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Set flag to allow playing through first cue
             justNavigatedToCue = true;
             lastNavigatedCueTime = 0;
+            lastNavigatedCueIndex = -1;
 
             // Auto-play only if enabled
             if (globalAutoPlayEnabled) {
@@ -1914,6 +1916,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Set flag to allow playing through this cue point
         justNavigatedToCue = true;
         lastNavigatedCueTime = targetCuePoint.time;
+        lastNavigatedCueIndex = prevIndex;
 
         // Pressing Q means "go back and play from previous cue" - only if auto-play enabled
         if (globalAutoPlayEnabled) {
@@ -2017,18 +2020,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // Not at last cue - play from current position to next cue
-            clipCurrentCueIndex[clipNumber] = currentCueIndex;
-            justNavigatedToCue = true;
-            lastNavigatedCueTime = cuePoints[currentCueIndex].time;
+            // Not at last cue - JUMP to next cue immediately (for instant progression)
+            const nextCueIndex = currentCueIndex + 1;
+            const nextCuePoint = cuePoints[nextCueIndex];
 
-            console.log(`W key: Playing from current cue ${currentCueIndex + 1}/${cuePoints.length} at ${formatTime(cuePoints[currentCueIndex].time)}`);
+            // Jump to next cue point
+            video.currentTime = nextCuePoint.time;
+            updateTimeline();
+
+            clipCurrentCueIndex[clipNumber] = nextCueIndex;
+            justNavigatedToCue = true;
+            lastNavigatedCueTime = nextCuePoint.time;
+            lastNavigatedCueIndex = nextCueIndex;
+
+            console.log(`W key: Jumped to next cue ${nextCueIndex + 1}/${cuePoints.length} at ${formatTime(nextCuePoint.time)}`);
 
             globalPlayIntent = true;
             video.play().then(() => {
                 // Video will play forward and stop at next cue (forward-stop mode)
             }).catch(e => {
-                console.error('Error playing from current cue:', e);
+                console.error('Error playing from next cue:', e);
             });
             return;
         }
@@ -2106,6 +2117,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Set flag to allow playing through this cue point
         justNavigatedToCue = true;
         lastNavigatedCueTime = targetCuePoint.time;
+        lastNavigatedCueIndex = targetIndex;
 
         // Start playing - only if global auto-play is enabled
         if (globalAutoPlayEnabled) {
@@ -2164,6 +2176,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track when we just navigated to a cue point (to allow playing through it)
     let justNavigatedToCue = false;
     let lastNavigatedCueTime = 0;
+    let lastNavigatedCueIndex = -1; // Track which cue point we just navigated to
 
     // Format time for timeline display (MM:SS)
     function formatTimeShort(seconds) {
@@ -4066,11 +4079,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             const cuePoint = cuePoints[i];
                             // If within 0.1 seconds of a cue point, pause
                             if (Math.abs(currentTime - cuePoint.time) < 0.1) {
-                                // Don't stop if we just navigated to this cue point
-                                if (justNavigatedToCue && Math.abs(cuePoint.time - lastNavigatedCueTime) < 0.15) {
-                                    // Clear the flag once we've moved past
-                                    if (Math.abs(currentTime - lastNavigatedCueTime) > 0.2) {
+                                // Don't stop if we just navigated to THIS SPECIFIC cue point
+                                if (justNavigatedToCue && i === lastNavigatedCueIndex) {
+                                    // Clear the flag once we've moved away from this cue point
+                                    if (Math.abs(currentTime - cuePoint.time) >= 0.1) {
                                         justNavigatedToCue = false;
+                                        lastNavigatedCueIndex = -1;
                                     }
                                     continue; // Skip stopping
                                 }
