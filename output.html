@@ -59,6 +59,9 @@
                     case 'setVolume':
                         video.volume = message.volume || 0;
                         break;
+                    case 'setLoop':
+                        video.loop = message.loop;
+                        break;
                 }
             });
         }

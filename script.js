@@ -4150,6 +4150,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Update output window to show reversed video
                 if (outputWindowOpen) {
+                    // Disable looping for bounce mode
+                    window.electronAPI.sendToOutputWindow({
+                        type: 'setLoop',
+                        loop: false
+                    });
                     // Load reversed video
                     window.electronAPI.sendToOutputWindow({
                         type: 'loadVideo',
@@ -4308,6 +4313,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Update output window to show forward video
                 if (outputWindowOpen) {
+                    // Disable looping for bounce mode
+                    window.electronAPI.sendToOutputWindow({
+                        type: 'setLoop',
+                        loop: false
+                    });
                     // Load forward video
                     window.electronAPI.sendToOutputWindow({
                         type: 'loadVideo',
@@ -4465,6 +4475,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         // Update output window to show reversed video
                         if (outputWindowOpen) {
                             const currentSpeed = clipSpeeds[clipNumber] || 1.0;
+                            // Disable looping for bounce mode
+                            window.electronAPI.sendToOutputWindow({
+                                type: 'setLoop',
+                                loop: false
+                            });
                             // Load reversed video
                             window.electronAPI.sendToOutputWindow({
                                 type: 'loadVideo',
@@ -4564,6 +4579,16 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!activeVideo.src) {
             return;
         }
+
+        // Get current clip mode to set loop state
+        const clipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
+        const mode = clipNumber ? (clipModes[clipNumber] || 'loop') : 'loop';
+
+        // Send loop state based on current mode
+        window.electronAPI.sendToOutputWindow({
+            type: 'setLoop',
+            loop: (mode === 'loop')
+        });
 
         // Send load video message with active video source
         window.electronAPI.sendToOutputWindow({
