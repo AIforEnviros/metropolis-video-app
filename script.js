@@ -50,9 +50,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const autoPlayToggle = document.getElementById('autoPlayToggle');
     const clipContextMenu = document.getElementById('clipContextMenu');
 
-    // Output window reference
-    let outputWindow = null;
-    let outputVideo = null;
+    // Output window reference - state tracked by outputWindowOpen variable below
 
     // Performance optimizations - disable audio globally
     video.muted = true;
@@ -4151,11 +4149,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 // Update output window to show reversed video
-                if (outputVideo && outputWindow) {
+                if (outputWindowOpen) {
+                    // Load reversed video
                     window.electronAPI.sendToOutputWindow({
-                        action: 'updateVideoSource',
-                        videoSrc: videoReverse.src
+                        type: 'loadVideo',
+                        src: videoReverse.src
                     });
+                    // Wait for video to load, then sync position and play
+                    setTimeout(() => {
+                        window.electronAPI.sendToOutputWindow({
+                            type: 'seek',
+                            time: reversedStartPosition
+                        });
+                        window.electronAPI.sendToOutputWindow({
+                            type: 'setPlaybackRate',
+                            rate: currentSpeed
+                        });
+                        window.electronAPI.sendToOutputWindow({
+                            type: 'play'
+                        });
+                    }, 100);
                 }
                 break;
 
@@ -4293,12 +4306,27 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('[bounce-reverse-timeupdate] Error playing forward video after reverse bounce:', e);
                 });
 
-                // Update output window
-                if (outputVideo && outputWindow) {
+                // Update output window to show forward video
+                if (outputWindowOpen) {
+                    // Load forward video
                     window.electronAPI.sendToOutputWindow({
-                        action: 'updateVideoSource',
-                        videoSrc: video.src
+                        type: 'loadVideo',
+                        src: video.src
                     });
+                    // Wait for video to load, then sync position and play
+                    setTimeout(() => {
+                        window.electronAPI.sendToOutputWindow({
+                            type: 'seek',
+                            time: inPoint
+                        });
+                        window.electronAPI.sendToOutputWindow({
+                            type: 'setPlaybackRate',
+                            rate: currentSpeed
+                        });
+                        window.electronAPI.sendToOutputWindow({
+                            type: 'play'
+                        });
+                    }, 100);
                 }
             }
         }
@@ -4434,12 +4462,28 @@ document.addEventListener('DOMContentLoaded', function() {
                             console.error('[bounce] Error playing reversed video:', e);
                         });
 
-                        // Update output window
-                        if (outputVideo && outputWindow) {
+                        // Update output window to show reversed video
+                        if (outputWindowOpen) {
+                            const currentSpeed = clipSpeeds[clipNumber] || 1.0;
+                            // Load reversed video
                             window.electronAPI.sendToOutputWindow({
-                                action: 'updateVideoSource',
-                                videoSrc: videoReverse.src
+                                type: 'loadVideo',
+                                src: videoReverse.src
                             });
+                            // Wait for video to load, then sync position and play
+                            setTimeout(() => {
+                                window.electronAPI.sendToOutputWindow({
+                                    type: 'seek',
+                                    time: reversedStartPosition
+                                });
+                                window.electronAPI.sendToOutputWindow({
+                                    type: 'setPlaybackRate',
+                                    rate: currentSpeed
+                                });
+                                window.electronAPI.sendToOutputWindow({
+                                    type: 'play'
+                                });
+                            }, 100);
                         }
                     }
                     break;
@@ -4580,6 +4624,37 @@ document.addEventListener('DOMContentLoaded', function() {
             window.electronAPI.sendToOutputWindow({
                 type: 'setPlaybackRate',
                 rate: video.playbackRate
+            });
+        }
+    });
+
+    // Add event listeners for reversed video element (for bounce mode sync)
+    videoReverse.addEventListener('play', function() {
+        if (outputWindowOpen && videoReverse.style.display !== 'none') {
+            window.electronAPI.sendToOutputWindow({ type: 'play' });
+        }
+    });
+
+    videoReverse.addEventListener('pause', function() {
+        if (outputWindowOpen && videoReverse.style.display !== 'none') {
+            window.electronAPI.sendToOutputWindow({ type: 'pause' });
+        }
+    });
+
+    videoReverse.addEventListener('seeked', function() {
+        if (outputWindowOpen && videoReverse.style.display !== 'none') {
+            window.electronAPI.sendToOutputWindow({
+                type: 'seek',
+                time: videoReverse.currentTime
+            });
+        }
+    });
+
+    videoReverse.addEventListener('ratechange', function() {
+        if (outputWindowOpen && videoReverse.style.display !== 'none') {
+            window.electronAPI.sendToOutputWindow({
+                type: 'setPlaybackRate',
+                rate: videoReverse.playbackRate
             });
         }
     });
