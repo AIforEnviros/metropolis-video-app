@@ -4554,28 +4554,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function syncToOutputWindow() {
-        if (!outputWindowOpen || !video.src) {
+        if (!outputWindowOpen) {
             return;
         }
 
-        // Send load video message
+        // Detect which video element is currently active (visible)
+        const activeVideo = (videoReverse.style.display !== 'none') ? videoReverse : video;
+
+        if (!activeVideo.src) {
+            return;
+        }
+
+        // Send load video message with active video source
         window.electronAPI.sendToOutputWindow({
             type: 'loadVideo',
-            src: video.src
+            src: activeVideo.src
         });
 
-        // Send current state
+        // Send current state of active video
         window.electronAPI.sendToOutputWindow({
             type: 'seek',
-            time: video.currentTime
+            time: activeVideo.currentTime
         });
 
         window.electronAPI.sendToOutputWindow({
             type: 'setPlaybackRate',
-            rate: video.playbackRate
+            rate: activeVideo.playbackRate
         });
 
-        if (!video.paused) {
+        if (!activeVideo.paused) {
             window.electronAPI.sendToOutputWindow({ type: 'play' });
         } else {
             window.electronAPI.sendToOutputWindow({ type: 'pause' });
@@ -4599,19 +4606,19 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     video.addEventListener('play', function() {
-        if (outputWindowOpen) {
+        if (outputWindowOpen && video.style.display !== 'none') {
             window.electronAPI.sendToOutputWindow({ type: 'play' });
         }
     });
 
     video.addEventListener('pause', function() {
-        if (outputWindowOpen) {
+        if (outputWindowOpen && video.style.display !== 'none') {
             window.electronAPI.sendToOutputWindow({ type: 'pause' });
         }
     });
 
     video.addEventListener('seeked', function() {
-        if (outputWindowOpen) {
+        if (outputWindowOpen && video.style.display !== 'none') {
             window.electronAPI.sendToOutputWindow({
                 type: 'seek',
                 time: video.currentTime
@@ -4620,7 +4627,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     video.addEventListener('ratechange', function() {
-        if (outputWindowOpen) {
+        if (outputWindowOpen && video.style.display !== 'none') {
             window.electronAPI.sendToOutputWindow({
                 type: 'setPlaybackRate',
                 rate: video.playbackRate
