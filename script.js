@@ -2260,22 +2260,34 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const currentTime = video.currentTime;
-        const progress = (currentTime / videoDuration) * 100;
+        // Check which video is currently playing (forward or reverse for bounce mode)
+        const isReversePlaying = videoReverse.style.display === 'block' && !videoReverse.paused;
+        const currentTime = isReversePlaying ? videoReverse.currentTime : video.currentTime;
+
+        // Calculate progress (reverse video plays 0→end, but timeline should show end→0)
+        let progress;
+        if (isReversePlaying) {
+            // Reverse video plays from 0 to end, so invert the progress for timeline
+            progress = 100 - ((currentTime / videoDuration) * 100);
+        } else {
+            progress = (currentTime / videoDuration) * 100;
+        }
 
         if (!isDragging) {
             timelineProgress.style.width = `${progress}%`;
             timelineHandle.style.left = `${progress}%`;
 
-            // Auto-scroll zoomed timeline to follow playback
-            if (timelineZoomLevel > 1 && !video.paused) {
+            // Auto-scroll zoomed timeline to follow playback (works for both directions)
+            if (timelineZoomLevel > 1 && (isReversePlaying || !video.paused)) {
                 const container = timelineTrack.parentElement;
                 const scrollPosition = (container.scrollWidth * progress / 100) - (container.clientWidth / 2);
                 container.scrollLeft = Math.max(0, scrollPosition);
             }
         }
 
-        currentTimeDisplay.textContent = formatTimeShort(currentTime);
+        // Display time (shows the actual position in the original video timeline)
+        const displayTime = isReversePlaying ? (videoDuration - currentTime) : currentTime;
+        currentTimeDisplay.textContent = formatTimeShort(displayTime);
         totalDurationDisplay.textContent = formatTimeShort(videoDuration);
     }
 
@@ -2283,8 +2295,11 @@ document.addEventListener('DOMContentLoaded', function() {
     function smoothUpdateTimeline() {
         updateTimeline();
 
-        // Continue updating at 60fps while video is playing
-        if (!video.paused && !video.ended) {
+        // Continue updating at 60fps while EITHER video is playing (forward or reverse for bounce mode)
+        const isForwardPlaying = !video.paused && !video.ended;
+        const isReversePlaying = videoReverse.style.display === 'block' && !videoReverse.paused && !videoReverse.ended;
+
+        if (isForwardPlaying || isReversePlaying) {
             timelineAnimationFrame = requestAnimationFrame(smoothUpdateTimeline);
         }
     }
@@ -4095,6 +4110,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 videoReverse.play().then(() => {
                     console.log('Bounce mode: Playing reversed video');
                     bounceDirection = -1; // Track that we're going backwards
+                    startSmoothTimelineUpdates(); // Start timeline animation for reverse playback
                 }).catch(e => {
                     console.error('Error playing reversed video:', e);
                 });
@@ -4289,12 +4305,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
 
                 case 'bounce':
-                    // Bounce mode - leave existing behavior
-                    // (Will be refined in future work)
-                    if (currentTime >= validOutPoint) {
-                        video.currentTime = validInPoint;
-                        updateTimeline();
-                    }
+                    // Bounce mode - let video play to end naturally
+                    // The 'ended' event handler will trigger the bounce to reversed video
+                    // Do NOT loop here - that interferes with proper bounce behavior
                     break;
 
                 default:
