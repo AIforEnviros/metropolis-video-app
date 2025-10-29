@@ -1780,8 +1780,31 @@ document.addEventListener('DOMContentLoaded', function() {
     // Speed control functions
     function setVideoSpeed(speed) {
         if (video.src) {
-            video.playbackRate = speed;
-            console.log(`Set video speed to ${speed}x`);
+            try {
+                video.playbackRate = speed;
+
+                // Also set speed for reversed video if it exists
+                if (videoReverse.src) {
+                    videoReverse.playbackRate = speed;
+                }
+
+                // Warn about potential instability at high speeds
+                if (speed > 4.0) {
+                    console.warn(`⚠️ High playback speed (${speed}x) may cause instability with some video codecs. Recommended maximum is 4x for stable playback.`);
+                } else {
+                    console.log(`Set video speed to ${speed}x`);
+                }
+            } catch (e) {
+                console.error(`Error setting playback speed to ${speed}x:`, e);
+                // Fallback to 1x if speed setting fails
+                video.playbackRate = 1.0;
+                if (videoReverse.src) {
+                    videoReverse.playbackRate = 1.0;
+                }
+                speedSlider.value = 1.0;
+                speedValue.textContent = '1.0x';
+                alert(`Unable to set playback speed to ${speed}x. Reset to 1x.\n\nHigh speeds (>4x) may not be supported by this video format.`);
+            }
         }
     }
 
@@ -4086,33 +4109,45 @@ document.addEventListener('DOMContentLoaded', function() {
 
             case 'bounce':
                 // Bounce mode - seamlessly switch to reversed video element
-                console.log('Bounce mode: Reached end, switching to reversed video');
+                // This handles the case when video reaches its natural end (no Out point set)
+                console.log('[bounce-ended] Video reached end, switching to reversed video');
 
                 if (!clipReversedVideos[clipNumber]) {
-                    console.error('No reversed video available for bounce mode');
+                    console.error('[bounce-ended] No reversed video available for bounce mode');
                     globalPlayIntent = false;
                     updatePlayingIndicator();
                     break;
                 }
 
+                // Get In/Out points to calculate where to start reversed video
+                const inOut = clipInOutPoints[clipNumber];
+                const outPoint = (inOut && inOut.outPoint !== undefined && inOut.outPoint !== null)
+                    ? inOut.outPoint : video.duration;
+
                 // Get the playback speed for synchronization
                 const currentSpeed = clipSpeeds[clipNumber] || 1.0;
+
+                // Calculate where to start reversed video (position representing Out point)
+                const videoDuration = video.duration;
+                const reversedStartPosition = videoDuration - outPoint;
 
                 // Hide forward video, show reversed video
                 video.style.display = 'none';
                 videoReverse.style.display = 'block';
 
-                // Set reversed video to start and match speed
-                videoReverse.currentTime = 0;
+                // Set reversed video to correct position and match speed
+                videoReverse.currentTime = reversedStartPosition;
                 videoReverse.playbackRate = currentSpeed;
+
+                console.log(`[bounce-ended] Starting reversed video at ${reversedStartPosition.toFixed(2)}s (represents ${outPoint.toFixed(2)}s)`);
 
                 // Play reversed video
                 videoReverse.play().then(() => {
-                    console.log('Bounce mode: Playing reversed video');
+                    console.log('[bounce-ended] Playing reversed video');
                     bounceDirection = -1; // Track that we're going backwards
                     startSmoothTimelineUpdates(); // Start timeline animation for reverse playback
                 }).catch(e => {
-                    console.error('Error playing reversed video:', e);
+                    console.error('[bounce-ended] Error playing reversed video:', e);
                 });
 
                 // Update output window to show reversed video
@@ -4177,7 +4212,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Reversed video event listeners for bounce mode
     videoReverse.addEventListener('ended', function() {
-        console.log('Reversed video ended - bouncing back to forward');
+        console.log('[bounce-reverse-ended] Reversed video ended - bouncing back to forward');
 
         if (!selectedClipSlot) return;
 
@@ -4185,20 +4220,27 @@ document.addEventListener('DOMContentLoaded', function() {
         const mode = clipModes[clipNumber] || 'loop';
 
         if (mode === 'bounce') {
+            // Get In/Out points
+            const inOut = clipInOutPoints[clipNumber];
+            const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null)
+                ? inOut.inPoint : 0;
+
             // Hide reversed video, show forward video
             videoReverse.style.display = 'none';
             video.style.display = 'block';
 
-            // Reset forward video to beginning and play
-            video.currentTime = 0;
+            // Reset forward video to In point and play
+            video.currentTime = inPoint;
             const currentSpeed = clipSpeeds[clipNumber] || 1.0;
             video.playbackRate = currentSpeed;
 
+            console.log(`[bounce-reverse-ended] Restarting forward playback at In point: ${inPoint.toFixed(2)}s`);
+
             video.play().then(() => {
-                console.log('Bounce mode: Bounced back to forward playback');
+                console.log('[bounce-reverse-ended] Bounced back to forward playback');
                 bounceDirection = 1; // Track that we're going forward
             }).catch(e => {
-                console.error('Error playing forward video after bounce:', e);
+                console.error('[bounce-reverse-ended] Error playing forward video after bounce:', e);
             });
 
             // Update output window to show forward video
@@ -4207,6 +4249,57 @@ document.addEventListener('DOMContentLoaded', function() {
                     action: 'updateVideoSource',
                     videoSrc: video.src
                 });
+            }
+        }
+    });
+
+    // Reversed video timeupdate listener for In/Out point bounce detection
+    videoReverse.addEventListener('timeupdate', function() {
+        if (!selectedClipSlot || videoReverse.paused) return;
+
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const mode = clipModes[clipNumber] || 'loop';
+
+        if (mode === 'bounce' && video.duration > 0) {
+            // Get In/Out points
+            const inOut = clipInOutPoints[clipNumber];
+            const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null)
+                ? inOut.inPoint : 0;
+
+            // Calculate position in reversed video that represents the In point
+            // reversed position = duration - forward position
+            const videoDuration = video.duration;
+            const reversedEndPosition = videoDuration - inPoint;
+
+            // Check if we've reached or passed the In point position (with small tolerance)
+            if (videoReverse.currentTime >= reversedEndPosition - 0.05) {
+                console.log(`[bounce-reverse-timeupdate] Reached In point (reversed pos: ${videoReverse.currentTime.toFixed(2)}s = forward pos: ${inPoint.toFixed(2)}s), bouncing to forward`);
+
+                // Pause reversed video
+                videoReverse.pause();
+
+                // Hide reversed video, show forward video
+                videoReverse.style.display = 'none';
+                video.style.display = 'block';
+
+                // Start forward video at In point
+                video.currentTime = inPoint;
+                const currentSpeed = clipSpeeds[clipNumber] || 1.0;
+                video.playbackRate = currentSpeed;
+
+                video.play().then(() => {
+                    bounceDirection = 1; // Track that we're going forward
+                }).catch(e => {
+                    console.error('[bounce-reverse-timeupdate] Error playing forward video after reverse bounce:', e);
+                });
+
+                // Update output window
+                if (outputVideo && outputWindow) {
+                    window.electronAPI.sendToOutputWindow({
+                        action: 'updateVideoSource',
+                        videoSrc: video.src
+                    });
+                }
             }
         }
     });
@@ -4305,9 +4398,50 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
 
                 case 'bounce':
-                    // Bounce mode - let video play to end naturally
-                    // The 'ended' event handler will trigger the bounce to reversed video
-                    // Do NOT loop here - that interferes with proper bounce behavior
+                    // Bounce mode - trigger bounce when reaching Out point
+                    if (currentTime >= validOutPoint - 0.05) {
+                        console.log(`[bounce] Reached Out point at ${formatTime(currentTime)}, switching to reverse`);
+
+                        // Check if reversed video exists
+                        if (!clipReversedVideos[clipNumber]) {
+                            console.error('[bounce] No reversed video available');
+                            video.pause();
+                            globalPlayIntent = false;
+                            updatePlayingIndicator();
+                            break;
+                        }
+
+                        // Pause forward video
+                        video.pause();
+
+                        // Calculate where to start reversed video
+                        // Reversed video position that represents the Out point
+                        const videoDuration = video.duration;
+                        const reversedStartPosition = videoDuration - validOutPoint;
+
+                        // Switch to reversed video
+                        video.style.display = 'none';
+                        videoReverse.style.display = 'block';
+                        videoReverse.currentTime = reversedStartPosition;
+                        videoReverse.playbackRate = clipSpeeds[clipNumber] || 1.0;
+
+                        console.log(`[bounce] Starting reversed video at ${reversedStartPosition.toFixed(2)}s (represents ${validOutPoint.toFixed(2)}s)`);
+
+                        videoReverse.play().then(() => {
+                            bounceDirection = -1;
+                            startSmoothTimelineUpdates();
+                        }).catch(e => {
+                            console.error('[bounce] Error playing reversed video:', e);
+                        });
+
+                        // Update output window
+                        if (outputVideo && outputWindow) {
+                            window.electronAPI.sendToOutputWindow({
+                                action: 'updateVideoSource',
+                                videoSrc: videoReverse.src
+                            });
+                        }
+                    }
                     break;
 
                 default:
