@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const midi = require('@julusian/midi');
@@ -65,9 +65,14 @@ ipcMain.handle('open-output-window', async () => {
     return { success: true, windowId: outputWindow.id };
   }
 
-  outputWindow = new BrowserWindow({
-    width: 1920,
-    height: 1080,
+  // Detect external display for output window
+  const displays = screen.getAllDisplays();
+  const externalDisplay = displays.find((display) => {
+    return display.bounds.x !== 0 || display.bounds.y !== 0;
+  });
+
+  // Configure window options based on display detection
+  let windowOptions = {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -75,7 +80,25 @@ ipcMain.handle('open-output-window', async () => {
     },
     title: 'Metropolis Output',
     backgroundColor: '#000000'
-  });
+  };
+
+  if (externalDisplay) {
+    // External display detected - position output window there in fullscreen
+    windowOptions.x = externalDisplay.bounds.x;
+    windowOptions.y = externalDisplay.bounds.y;
+    windowOptions.width = externalDisplay.bounds.width;
+    windowOptions.height = externalDisplay.bounds.height;
+    windowOptions.fullscreen = true;
+    windowOptions.frame = false;
+    console.log(`Output window positioned on external display at ${externalDisplay.bounds.x},${externalDisplay.bounds.y} (${externalDisplay.bounds.width}x${externalDisplay.bounds.height})`);
+  } else {
+    // No external display - use default size on primary display
+    windowOptions.width = 1920;
+    windowOptions.height = 1080;
+    console.log('No external display detected, using default output window size');
+  }
+
+  outputWindow = new BrowserWindow(windowOptions);
 
   // Load a simple output HTML or communicate with main window
   outputWindow.loadFile('output.html');
