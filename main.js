@@ -20,6 +20,9 @@ let midiDevices = [];
 // Development mode detection
 const isDev = process.argv.includes('--dev');
 
+// MIDI debug mode (enable with: npm start -- --midi-debug)
+const MIDI_DEBUG = process.argv.includes('--midi-debug');
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -354,14 +357,33 @@ function connectMIDIDevice(portIndex) {
   try {
     // Close existing connection if any
     if (midiInput && currentMIDIPort !== null) {
+      const oldDeviceName = midiDevices[currentMIDIPort].name;
+      const newDeviceName = midiDevices[portIndex].name;
+      console.log(`Switching MIDI device: ${oldDeviceName} → ${newDeviceName}`);
+
       midiInput.closePort();
+
+      // FIX: Remove all old event listeners to prevent stacking
+      midiInput.removeAllListeners('message');
+      if (MIDI_DEBUG) console.log('✓ Removed old MIDI message listeners');
     }
 
-    // Open the specified port
-    midiInput.openPort(portIndex);
-    currentMIDIPort = portIndex;
+    // Open the specified port with enhanced error handling
+    try {
+      midiInput.openPort(portIndex);
+      currentMIDIPort = portIndex;
+      console.log(`✓ Connected to MIDI device: ${midiDevices[portIndex].name}`);
+    } catch (openError) {
+      console.error(`✗ Failed to open MIDI port ${portIndex}:`, openError.message);
 
-    console.log(`Connected to MIDI device: ${midiDevices[portIndex].name}`);
+      // Check if this is a network MIDI device
+      const deviceName = midiDevices[portIndex].name.toLowerCase();
+      if (deviceName.includes('ipmidi') || deviceName.includes('network') || deviceName.includes('rtp')) {
+        console.warn('⚠ Network MIDI detected - connection may require additional time or configuration');
+      }
+
+      throw openError;
+    }
 
     // Set up message callback
     midiInput.on('message', (deltaTime, message) => {
@@ -394,13 +416,15 @@ function connectMIDIDevice(portIndex) {
         mainWindow.webContents.send('midi-message', midiMessage);
       }
 
-      // Log for debugging
-      console.log(`MIDI: ${midiMessage.type} Ch${channel} [${data1}, ${data2}]`);
+      // Verbose logging (only in debug mode)
+      if (MIDI_DEBUG) {
+        console.log(`MIDI: ${midiMessage.type} Ch${channel} [${data1}, ${data2}]`);
+      }
     });
 
     return { success: true, port: portIndex, name: midiDevices[portIndex].name };
   } catch (error) {
-    console.error('MIDI connection error:', error);
+    console.error('✗ MIDI connection error:', error.message);
     return { success: false, error: error.message };
   }
 }
