@@ -373,6 +373,13 @@ function connectMIDIDevice(portIndex) {
       midiInput.openPort(portIndex);
       currentMIDIPort = portIndex;
       console.log(`✓ Connected to MIDI device: ${midiDevices[portIndex].name}`);
+
+      // Log port details for diagnostics
+      console.log(`📋 MIDI Port Details:`, {
+        index: portIndex,
+        name: midiDevices[portIndex].name,
+        totalPorts: midiInput.getPortCount()
+      });
     } catch (openError) {
       console.error(`✗ Failed to open MIDI port ${portIndex}:`, openError.message);
 
@@ -387,6 +394,9 @@ function connectMIDIDevice(portIndex) {
 
     // Set up message callback
     midiInput.on('message', (deltaTime, message) => {
+      // DIAGNOSTIC: Always log raw messages to prove they arrive (not behind MIDI_DEBUG)
+      console.log('🎹 RAW MIDI RECEIVED:', message, 'deltaTime:', deltaTime);
+
       // Parse MIDI message
       const [status, data1, data2] = message;
       const messageType = status & 0xF0; // Get message type (high nibble)
@@ -421,6 +431,9 @@ function connectMIDIDevice(portIndex) {
         console.log(`MIDI: ${midiMessage.type} Ch${channel} [${data1}, ${data2}]`);
       }
     });
+
+    // Confirm listener is attached and waiting
+    console.log('👂 MIDI message listener attached and waiting for messages...');
 
     return { success: true, port: portIndex, name: midiDevices[portIndex].name };
   } catch (error) {
