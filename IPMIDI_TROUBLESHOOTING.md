@@ -1,12 +1,54 @@
 # ipMIDI Troubleshooting Guide
 
-**Date**: 2025-10-25
-**Status**: Investigation in progress
-**Branch**: `feature/team-feedback-improvements`
+**Date**: 2025-10-25 (Initial investigation) → 2025-11-07 (Updated)
+**Status**: ✅ Root cause identified - Issue is in Ableton/macOS configuration, NOT app code
+**Branch**: `master` (commits: c3716ce, dd8710c)
 
 ---
 
-## Problem Statement
+## 🎯 SUMMARY (Updated 2025-11-07)
+
+### Root Cause Identified ✅
+**The issue is NOT in our app code.** ipMIDI messages are not reaching ANY application on macOS, including external MIDI monitor apps.
+
+### Key Finding
+When testing with **MIDI Monitor** (third-party macOS app), it also shows **NO messages** from ipMIDI when triggering from Ableton Live. This proves the problem is in the **Ableton → ipMIDI → macOS routing configuration**, not in our application's MIDI handling.
+
+### Code Fixes Applied (Working Correctly)
+**Commit c3716ce:** Fixed event listener management
+- Added `removeAllListeners('message')` to prevent stacking
+- Added tiered logging with `--midi-debug` flag
+- Enhanced error handling for network MIDI
+- **Result:** App code is correct and working as expected
+
+**Commit dd8710c:** Added comprehensive diagnostic logging
+- Raw message logging: `🎹 RAW MIDI RECEIVED: [...]`
+- Port details logging: `📋 MIDI Port Details: {...}`
+- Listener confirmation: `👂 MIDI message listener attached and waiting...`
+- **Result:** Confirms messages never reach app's message handler
+
+### Testing Results
+✅ Hardware MIDI keyboard → App: **Works perfectly**
+❌ Ableton → ipMIDI → App: **No messages received**
+❌ Ableton → ipMIDI → MIDI Monitor: **No messages received**
+✅ macOS Network MIDI session: **Connected (no error badge)**
+✅ Ableton MIDI preferences: **ipMIDI Track output enabled**
+
+### Conclusion
+The Ableton/macOS/ipMIDI routing chain is not functioning, despite appearing configured correctly. Issue is likely:
+1. **Network MIDI session missing receiving endpoint** (Network MIDI requires both sender and receiver)
+2. **ipMIDI loopback not supported** (if trying to route on same Mac, use IAC Driver instead)
+3. **Ableton not actually sending to ipMIDI** (configuration appears correct but not functioning)
+
+### Next Steps
+1. **Clarify setup intent:** Is ipMIDI for loopback (same Mac) or network (Mac to Mac)?
+2. **If loopback:** Switch to **IAC Driver** (built-in macOS MIDI routing for same-computer)
+3. **If network:** Verify Network MIDI session has both sender AND receiver configured
+4. **Test Ableton routing:** Verify MIDI actually leaves Ableton to ipMIDI output
+
+---
+
+## Original Problem Statement (2025-10-25)
 
 The ipMIDI device (MIDI from Ableton Live via network MIDI) is detected and appears in the MIDI Device dropdown, but does not receive MIDI messages when selected. MIDI learn functionality also fails with ipMIDI.
 
@@ -211,5 +253,82 @@ try {
 
 ---
 
-**Last Updated**: 2025-10-25
-**Next Session**: Resume with diagnostic test
+## Diagnostic Session Log (2025-11-07)
+
+### Phase 1: Event Listener Fix
+**Commit:** `c3716ce`
+**Changes:**
+- Added `midiInput.removeAllListeners('message')` before opening new device
+- Implemented `MIDI_DEBUG` flag for verbose logging (`npm start -- --midi-debug`)
+- Added enhanced error handling with network MIDI detection
+- Device switching logs show port changes
+
+**Testing:** Pushed to GitHub for collaborator testing on macOS with Ableton
+
+### Phase 2: Diagnostic Logging
+**Commit:** `dd8710c`
+**Changes:**
+- Added always-visible raw message logging (not behind debug flag)
+- Added port details logging on connection
+- Added listener confirmation message
+- Console now clearly shows if messages arrive or not
+
+**Testing Results:**
+```
+Console Output:
+✓ Connected to MIDI device: ipMIDI Port 1
+📋 MIDI Port Details: { ... }
+👂 MIDI message listener attached and waiting for messages...
+
+When triggering MIDI from Ableton:
+❌ NO "🎹 RAW MIDI RECEIVED" logs appear
+```
+
+**Conclusion from console:** Messages never reach the app's MIDI handler
+
+### Phase 3: External Verification
+**Test:** Used macOS "MIDI Monitor" app to independently verify ipMIDI
+**Result:** MIDI Monitor also sees **NO messages** from ipMIDI
+
+**Critical Finding:** If external MIDI monitoring tools can't see messages either, the problem is definitively NOT in our app.
+
+### Phase 4: Configuration Review
+**Audio MIDI Setup:**
+- Network MIDI session visible in MIDI Studio
+- ipMIDI device shows NO red error badge (connected state)
+
+**Ableton MIDI Preferences:**
+- ipMIDI Port 1 appears in MIDI Ports list
+- Track checkbox is enabled (yellow/lit)
+
+**Despite correct-looking configuration:** No MIDI data flows from Ableton → ipMIDI
+
+### Likely Issues (To Investigate Later)
+1. **Network MIDI requires two endpoints:**
+   - Sender (Ableton's Mac) ✓
+   - Receiver (another device?) ❓
+   - If no receiver configured, sender won't transmit
+
+2. **ipMIDI may not support loopback on same Mac:**
+   - Network MIDI designed for computer-to-computer
+   - Same-Mac routing should use **IAC Driver** instead
+
+3. **Ableton may not be routing internally:**
+   - Even with Track enabled, MIDI may not leave Ableton
+   - Need to verify with Ableton's internal MIDI monitor
+
+### Recommended Solution: Use IAC Driver for Same-Mac Routing
+If the goal is: **Ableton → MIDI → App (on same Mac)**
+
+**Use IAC Driver instead of ipMIDI:**
+1. Audio MIDI Setup → MIDI Studio
+2. Double-click "IAC Driver"
+3. Enable "Device is online"
+4. Use "IAC Bus 1" in both Ableton and app
+5. Test: Should work for same-computer MIDI routing
+
+---
+
+**Last Updated**: 2025-11-07
+**Status**: App code working correctly. Issue is Ableton/macOS/ipMIDI configuration.
+**Next Session**: Clarify ipMIDI use case (loopback vs network), test IAC Driver alternative
