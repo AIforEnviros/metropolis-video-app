@@ -2350,6 +2350,9 @@ document.addEventListener('DOMContentLoaded', function() {
         totalDurationDisplay.textContent = formatTimeShort(videoDuration);
     }
 
+    // Frame counter for periodic output window sync
+    let outputSyncFrameCounter = 0;
+
     // Smooth timeline update using requestAnimationFrame for 60fps updates
     function smoothUpdateTimeline() {
         updateTimeline();
@@ -2386,8 +2389,21 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // [OUTPUT WINDOW SYNC] Periodic position sync to correct drift
+        // Sync every 30 frames (~500ms at 60fps) during playback
+        if (outputWindowOpen && (isForwardPlaying || isReversePlaying)) {
+            outputSyncFrameCounter++;
+            if (outputSyncFrameCounter >= 30) {
+                outputSyncFrameCounter = 0;
+                syncOutputWindowPosition();
+            }
+        }
+
         if (isForwardPlaying || isReversePlaying) {
             timelineAnimationFrame = requestAnimationFrame(smoothUpdateTimeline);
+        } else {
+            // Reset frame counter when not playing
+            outputSyncFrameCounter = 0;
         }
     }
 
@@ -4214,32 +4230,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('[bounce-ended] Error playing reversed video:', e);
                 });
 
-                // Update output window to show reversed video
+                // [OUTPUT WINDOW SYNC] Update output window to show reversed video
                 if (outputWindowOpen) {
-                    // Disable looping for bounce mode
-                    window.electronAPI.sendToOutputWindow({
-                        type: 'setLoop',
-                        loop: false
-                    });
-                    // Load reversed video
-                    window.electronAPI.sendToOutputWindow({
-                        type: 'loadVideo',
-                        src: videoReverse.src
-                    });
-                    // Wait for video to load, then sync position and play
+                    // Use syncToOutputWindow for reliable sync
+                    syncToOutputWindow();
+
+                    // Verify position after brief delay for video load
                     setTimeout(() => {
-                        window.electronAPI.sendToOutputWindow({
-                            type: 'seek',
-                            time: reversedStartPosition
-                        });
-                        window.electronAPI.sendToOutputWindow({
-                            type: 'setPlaybackRate',
-                            rate: currentSpeed
-                        });
-                        window.electronAPI.sendToOutputWindow({
-                            type: 'play'
-                        });
-                    }, 100);
+                        if (outputWindowOpen && videoReverse.style.display !== 'none') {
+                            window.electronAPI.sendToOutputWindow({
+                                type: 'seek',
+                                time: videoReverse.currentTime
+                            });
+                        }
+                    }, 200);
                 }
                 break;
 
@@ -4378,32 +4382,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('[bounce-reverse-timeupdate] Error playing forward video after reverse bounce:', e);
                 });
 
-                // Update output window to show forward video
+                // [OUTPUT WINDOW SYNC] Update output window to show forward video
                 if (outputWindowOpen) {
-                    // Disable looping for bounce mode
-                    window.electronAPI.sendToOutputWindow({
-                        type: 'setLoop',
-                        loop: false
-                    });
-                    // Load forward video
-                    window.electronAPI.sendToOutputWindow({
-                        type: 'loadVideo',
-                        src: video.src
-                    });
-                    // Wait for video to load, then sync position and play
+                    // Use syncToOutputWindow for reliable sync
+                    syncToOutputWindow();
+
+                    // Verify position after brief delay for video load
                     setTimeout(() => {
-                        window.electronAPI.sendToOutputWindow({
-                            type: 'seek',
-                            time: inPoint
-                        });
-                        window.electronAPI.sendToOutputWindow({
-                            type: 'setPlaybackRate',
-                            rate: currentSpeed
-                        });
-                        window.electronAPI.sendToOutputWindow({
-                            type: 'play'
-                        });
-                    }, 100);
+                        if (outputWindowOpen && video.style.display !== 'none') {
+                            window.electronAPI.sendToOutputWindow({
+                                type: 'seek',
+                                time: video.currentTime
+                            });
+                        }
+                    }, 200);
                 }
             }
         }
@@ -4541,33 +4533,20 @@ document.addEventListener('DOMContentLoaded', function() {
                             console.error('[bounce] Error playing reversed video:', e);
                         });
 
-                        // Update output window to show reversed video
+                        // [OUTPUT WINDOW SYNC] Update output window to show reversed video
                         if (outputWindowOpen) {
-                            const currentSpeed = clipSpeeds[clipNumber] || 1.0;
-                            // Disable looping for bounce mode
-                            window.electronAPI.sendToOutputWindow({
-                                type: 'setLoop',
-                                loop: false
-                            });
-                            // Load reversed video
-                            window.electronAPI.sendToOutputWindow({
-                                type: 'loadVideo',
-                                src: videoReverse.src
-                            });
-                            // Wait for video to load, then sync position and play
+                            // Use syncToOutputWindow for reliable sync
+                            syncToOutputWindow();
+
+                            // Verify position after brief delay for video load
                             setTimeout(() => {
-                                window.electronAPI.sendToOutputWindow({
-                                    type: 'seek',
-                                    time: reversedStartPosition
-                                });
-                                window.electronAPI.sendToOutputWindow({
-                                    type: 'setPlaybackRate',
-                                    rate: currentSpeed
-                                });
-                                window.electronAPI.sendToOutputWindow({
-                                    type: 'play'
-                                });
-                            }, 100);
+                                if (outputWindowOpen && videoReverse.style.display !== 'none') {
+                                    window.electronAPI.sendToOutputWindow({
+                                        type: 'seek',
+                                        time: videoReverse.currentTime
+                                    });
+                                }
+                            }, 200);
                         }
                     }
                     break;
@@ -4635,6 +4614,32 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Error closing output window:', error);
         }
+    }
+
+    // [OUTPUT WINDOW SYNC] Position-only sync (no video reload)
+    // Used for periodic drift correction during playback
+    function syncOutputWindowPosition() {
+        if (!outputWindowOpen) {
+            return;
+        }
+
+        // Detect which video element is currently active (visible)
+        const activeVideo = (videoReverse.style.display !== 'none') ? videoReverse : video;
+
+        if (!activeVideo.src || activeVideo.paused) {
+            return;
+        }
+
+        // Only sync position and playback rate (don't reload video)
+        window.electronAPI.sendToOutputWindow({
+            type: 'seek',
+            time: activeVideo.currentTime
+        });
+
+        window.electronAPI.sendToOutputWindow({
+            type: 'setPlaybackRate',
+            rate: activeVideo.playbackRate
+        });
     }
 
     function syncToOutputWindow() {
