@@ -945,6 +945,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Set playback mode for a clip
     function setClipMode(clipNumber, mode) {
+        const previousMode = clipModes[clipNumber];
         clipModes[clipNumber] = mode;
         markSessionModified();
         console.log(`Set clip ${clipNumber} to mode: ${mode}`);
@@ -954,6 +955,18 @@ document.addEventListener('DOMContentLoaded', function() {
             const filePath = clipVideos[clipNumber].filePath;
             if (filePath) {
                 loadReversedVideoForBounceMode(clipNumber, filePath);
+            }
+        }
+
+        // [BOUNCE MODE PRE-BUFFER] Clean up reverse video when switching away from bounce mode
+        if (previousMode === 'bounce' && mode !== 'bounce') {
+            // Clear reverse video element if this is the currently selected clip
+            if (selectedClipSlot && selectedClipSlot.dataset.clipNumber == clipNumber) {
+                videoReverse.src = '';
+                videoReverse.load();
+                videoReverse.style.display = 'none';
+                video.style.display = 'block';
+                console.log('[BOUNCE CLEANUP] Cleared reverse video element');
             }
         }
 
@@ -1121,6 +1134,21 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Slot element:', clipSlot);
         console.log('Current tab:', currentTab);
 
+        // [BOUNCE MODE PRE-BUFFER] Clean up reverse video when switching clips
+        if (selectedClipSlot) {
+            const prevClipNumber = selectedClipSlot.dataset.clipNumber;
+            const prevMode = clipModes[prevClipNumber] || 'loop';
+
+            if (prevMode === 'bounce') {
+                // Clear reverse video element to free memory
+                videoReverse.src = '';
+                videoReverse.load();
+                videoReverse.style.display = 'none';
+                video.style.display = 'block';
+                console.log('[BOUNCE CLEANUP] Cleared reverse video when switching clips');
+            }
+        }
+
         // Remove selected class from previously selected slot
         if (selectedClipSlot) {
             console.log('Removing selection from previous slot:', selectedClipSlot.dataset.clipNumber);
@@ -1156,14 +1184,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 video.load();
                 console.log('Loaded video for selected slot:', videoData.name, 'Mode:', clipMode);
 
-                // If bounce mode, also load reversed video
+                // [BOUNCE MODE PRE-BUFFER] If bounce mode, pre-load reversed video for seamless transitions
                 if (clipMode === 'bounce' && clipReversedVideos[clipNumber]) {
                     videoReverse.src = clipReversedVideos[clipNumber].url;
                     videoReverse.muted = true;
                     videoReverse.volume = 0;
                     videoReverse.loop = false; // Never loop reversed video
+                    videoReverse.preload = 'auto'; // Ensure aggressive buffering
                     videoReverse.load();
-                    console.log('Loaded reversed video for bounce mode');
+
+                    // Pre-buffer reverse video by seeking to middle position once loaded
+                    videoReverse.addEventListener('loadeddata', function() {
+                        // Seek to middle to trigger buffering throughout the video
+                        const middlePosition = videoReverse.duration / 2;
+                        videoReverse.currentTime = middlePosition;
+                        console.log('[BOUNCE PRE-BUFFER] Reverse video loaded and pre-buffered');
+                    }, { once: true });
+
+                    console.log('Loaded reversed video for bounce mode with pre-buffering');
                 }
             } else {
                 // Video data exists but no valid URL - this is from a loaded session
@@ -2319,6 +2357,34 @@ document.addEventListener('DOMContentLoaded', function() {
         // Continue updating at 60fps while EITHER video is playing (forward or reverse for bounce mode)
         const isForwardPlaying = !video.paused && !video.ended;
         const isReversePlaying = videoReverse.style.display === 'block' && !videoReverse.paused && !videoReverse.ended;
+
+        // [BOUNCE MODE PRE-BUFFER] Synchronized position tracking
+        // When forward video is playing in bounce mode, keep reverse video synchronized
+        if (isForwardPlaying && selectedClipSlot) {
+            const clipNumber = selectedClipSlot.dataset.clipNumber;
+            const clipMode = clipModes[clipNumber] || 'loop';
+
+            if (clipMode === 'bounce' && clipReversedVideos[clipNumber] && videoReverse.src) {
+                // Calculate where reverse video should be (inverse of forward position)
+                const forwardTime = video.currentTime;
+                const videoDuration = video.duration;
+                const reversedPosition = videoDuration - forwardTime;
+
+                // Only update if difference is significant (avoid unnecessary seeks)
+                if (Math.abs(videoReverse.currentTime - reversedPosition) > 0.1) {
+                    videoReverse.currentTime = reversedPosition;
+                    // Ensure reverse video is paused and buffered at this position
+                    if (!videoReverse.paused) {
+                        videoReverse.pause();
+                    }
+                }
+
+                // Match playback rate
+                if (videoReverse.playbackRate !== video.playbackRate) {
+                    videoReverse.playbackRate = video.playbackRate;
+                }
+            }
+        }
 
         if (isForwardPlaying || isReversePlaying) {
             timelineAnimationFrame = requestAnimationFrame(smoothUpdateTimeline);
@@ -4289,9 +4355,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const videoDuration = video.duration;
             const reversedEndPosition = videoDuration - inPoint;
 
-            // Check if we've reached or passed the In point position (with small tolerance)
-            if (videoReverse.currentTime >= reversedEndPosition - 0.05) {
-                console.log(`[bounce-reverse-timeupdate] Reached In point (reversed pos: ${videoReverse.currentTime.toFixed(2)}s = forward pos: ${inPoint.toFixed(2)}s), bouncing to forward`);
+            // [BOUNCE MODE PRE-BUFFER] Trigger at 98% of reverse duration for pre-emptive transition
+            const bounceReverseTrigger = reversedEndPosition * 0.98;
+            if (videoReverse.currentTime >= bounceReverseTrigger) {
+                console.log(`[bounce-reverse-timeupdate] Reached 98% to In point (reversed pos: ${videoReverse.currentTime.toFixed(2)}s = forward pos: ${inPoint.toFixed(2)}s), bouncing to forward (pre-emptive transition)`);
 
                 // Pause reversed video
                 videoReverse.pause();
@@ -4436,9 +4503,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
 
                 case 'bounce':
-                    // Bounce mode - trigger bounce when reaching Out point
-                    if (currentTime >= validOutPoint - 0.05) {
-                        console.log(`[bounce] Reached Out point at ${formatTime(currentTime)}, switching to reverse`);
+                    // Bounce mode - trigger bounce when reaching 98% of Out point (pre-emptive transition)
+                    // [BOUNCE MODE PRE-BUFFER] Trigger at 98% instead of 100% for smoother transition
+                    const bounceForwardTrigger = validOutPoint * 0.98;
+                    if (currentTime >= bounceForwardTrigger) {
+                        console.log(`[bounce] Reached 98% of Out point at ${formatTime(currentTime)}, switching to reverse (pre-emptive transition)`);
 
                         // Check if reversed video exists
                         if (!clipReversedVideos[clipNumber]) {
