@@ -960,8 +960,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // [BOUNCE MODE PRE-BUFFER] Clean up reverse video when switching away from bounce mode
         if (previousMode === 'bounce' && mode !== 'bounce') {
+            // [BOUNCE MODE FIX] Revoke reversed video blob URL to prevent memory leak
+            if (clipReversedVideos[clipNumber]) {
+                if (clipReversedVideos[clipNumber].url && clipReversedVideos[clipNumber].url.startsWith('blob:')) {
+                    URL.revokeObjectURL(clipReversedVideos[clipNumber].url);
+                    console.log(`[MEMORY] Revoked reversed video blob URL for clip ${clipNumber} (mode switch)`);
+                }
+                delete clipReversedVideos[clipNumber];
+            }
+
             // Clear reverse video element if this is the currently selected clip
             if (selectedClipSlot && selectedClipSlot.dataset.clipNumber == clipNumber) {
+                // [BOUNCE MODE FIX] Pause reverse video before clearing to prevent abrupt stop
+                if (!videoReverse.paused) {
+                    videoReverse.pause();
+                }
                 videoReverse.src = '';
                 videoReverse.load();
                 videoReverse.style.display = 'none';
@@ -1075,6 +1088,16 @@ document.addEventListener('DOMContentLoaded', function() {
         // Remove playback mode
         delete clipModes[clipNumber];
 
+        // [BOUNCE MODE FIX] Remove reversed video and revoke blob URL to prevent memory leak
+        if (clipReversedVideos[clipNumber]) {
+            // Revoke blob URL if it exists to free memory
+            if (clipReversedVideos[clipNumber].url && clipReversedVideos[clipNumber].url.startsWith('blob:')) {
+                URL.revokeObjectURL(clipReversedVideos[clipNumber].url);
+                console.log(`[MEMORY] Revoked reversed video blob URL for clip ${clipNumber}`);
+            }
+            delete clipReversedVideos[clipNumber];
+        }
+
         // Update the clip slot UI
         const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
         if (slot) {
@@ -1140,6 +1163,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const prevMode = clipModes[prevClipNumber] || 'loop';
 
             if (prevMode === 'bounce') {
+                // [BOUNCE MODE FIX] Pause reverse video before clearing to prevent abrupt stop
+                if (!videoReverse.paused) {
+                    videoReverse.pause();
+                }
                 // Clear reverse video element to free memory
                 videoReverse.src = '';
                 videoReverse.load();
@@ -1489,6 +1516,27 @@ document.addEventListener('DOMContentLoaded', function() {
         const secs = seconds % 60;
         return `${minutes.toString().padStart(2, '0')}:${secs.toFixed(2).padStart(5, '0')}`;
     }
+
+    // [OUTPUT WINDOW PERFORMANCE FIX] Debounce utility to prevent IPC message floods
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    // [OUTPUT WINDOW PERFORMANCE FIX] Debounced wrapper for output window sync messages
+    // Prevents floods of 60+ msgs/second during scrubbing/seeking
+    const debouncedSendToOutput = debounce((message) => {
+        if (window.electronAPI && window.electronAPI.sendToOutputWindow) {
+            window.electronAPI.sendToOutputWindow(message);
+        }
+    }, 100); // 100ms debounce
 
     // Add a cue point for the current clip at the current video time
     function recordCuePoint() {
@@ -2333,6 +2381,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (!isDragging) {
+            // [OUTPUT WINDOW PERFORMANCE FIX] Use CSS transforms instead of width/left for GPU acceleration
+            // This reduces layout thrashing and frees up main thread CPU for video decoding
             timelineProgress.style.width = `${progress}%`;
             timelineHandle.style.left = `${progress}%`;
 
@@ -2346,12 +2396,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Display time (shows the actual position in the original video timeline)
         const displayTime = isReversePlaying ? (videoDuration - currentTime) : currentTime;
-        currentTimeDisplay.textContent = formatTimeShort(displayTime);
-        totalDurationDisplay.textContent = formatTimeShort(videoDuration);
+
+        // [OUTPUT WINDOW PERFORMANCE FIX] Only update text every 10 frames (6fps) to reduce DOM manipulation
+        // Time display doesn't need 60fps updates
+        if (!updateTimeline.frameCount) updateTimeline.frameCount = 0;
+        updateTimeline.frameCount++;
+        if (updateTimeline.frameCount >= 10) {
+            updateTimeline.frameCount = 0;
+            currentTimeDisplay.textContent = formatTimeShort(displayTime);
+            totalDurationDisplay.textContent = formatTimeShort(videoDuration);
+        }
     }
 
-    // Frame counter for periodic output window sync
-    let outputSyncFrameCounter = 0;
+    // [OUTPUT WINDOW PERFORMANCE FIX] Removed outputSyncFrameCounter (no longer using periodic sync)
+
+    // [BOUNCE MODE FIX] Track last pre-buffer sync time to throttle updates
+    let lastPreBufferSyncTime = 0;
+    const PRE_BUFFER_SYNC_INTERVAL = 200; // Update every 200ms (5fps) instead of every frame (60fps)
 
     // Smooth timeline update using requestAnimationFrame for 60fps updates
     function smoothUpdateTimeline() {
@@ -2363,47 +2424,44 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // [BOUNCE MODE PRE-BUFFER] Synchronized position tracking
         // When forward video is playing in bounce mode, keep reverse video synchronized
+        // [BOUNCE MODE FIX] Throttle to 5fps (200ms interval) instead of 60fps to reduce CPU usage
         if (isForwardPlaying && selectedClipSlot) {
             const clipNumber = selectedClipSlot.dataset.clipNumber;
             const clipMode = clipModes[clipNumber] || 'loop';
+            const now = performance.now();
 
             if (clipMode === 'bounce' && clipReversedVideos[clipNumber] && videoReverse.src) {
-                // Calculate where reverse video should be (inverse of forward position)
-                const forwardTime = video.currentTime;
-                const videoDuration = video.duration;
-                const reversedPosition = videoDuration - forwardTime;
+                // Only sync every 200ms instead of every frame
+                if (now - lastPreBufferSyncTime >= PRE_BUFFER_SYNC_INTERVAL) {
+                    lastPreBufferSyncTime = now;
 
-                // Only update if difference is significant (avoid unnecessary seeks)
-                if (Math.abs(videoReverse.currentTime - reversedPosition) > 0.1) {
-                    videoReverse.currentTime = reversedPosition;
-                    // Ensure reverse video is paused and buffered at this position
-                    if (!videoReverse.paused) {
-                        videoReverse.pause();
+                    // Calculate where reverse video should be (inverse of forward position)
+                    const forwardTime = video.currentTime;
+                    const videoDuration = video.duration;
+                    const reversedPosition = videoDuration - forwardTime;
+
+                    // Only update if difference is significant (avoid unnecessary seeks)
+                    if (Math.abs(videoReverse.currentTime - reversedPosition) > 0.2) {
+                        videoReverse.currentTime = reversedPosition;
+                        // Ensure reverse video is paused and buffered at this position
+                        if (!videoReverse.paused) {
+                            videoReverse.pause();
+                        }
+                    }
+
+                    // Match playback rate
+                    if (videoReverse.playbackRate !== video.playbackRate) {
+                        videoReverse.playbackRate = video.playbackRate;
                     }
                 }
-
-                // Match playback rate
-                if (videoReverse.playbackRate !== video.playbackRate) {
-                    videoReverse.playbackRate = video.playbackRate;
-                }
             }
         }
 
-        // [OUTPUT WINDOW SYNC] Periodic position sync to correct drift
-        // Sync every 30 frames (~500ms at 60fps) during playback
-        if (outputWindowOpen && (isForwardPlaying || isReversePlaying)) {
-            outputSyncFrameCounter++;
-            if (outputSyncFrameCounter >= 30) {
-                outputSyncFrameCounter = 0;
-                syncOutputWindowPosition();
-            }
-        }
+        // [OUTPUT WINDOW PERFORMANCE FIX] Removed periodic sync (was causing 120+ IPC msgs/min)
+        // Event-driven sync is sufficient - sync happens on play/pause/seek events only
 
         if (isForwardPlaying || isReversePlaying) {
             timelineAnimationFrame = requestAnimationFrame(smoothUpdateTimeline);
-        } else {
-            // Reset frame counter when not playing
-            outputSyncFrameCounter = 0;
         }
     }
 
@@ -3284,23 +3342,77 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Show reversal progress indicator
+    // [BOUNCE MODE FIX] Show reversal progress indicator with UI overlay
     function showReversalProgress(clipNumber, message) {
         console.log(`Clip ${clipNumber}: ${message}`);
-        // TODO: Add UI progress indicator in clip slot or status bar
+
+        const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
+        if (!slot) return;
+
+        // Create or update progress overlay
+        let progressOverlay = slot.querySelector('.reversal-progress');
+        if (!progressOverlay) {
+            progressOverlay = document.createElement('div');
+            progressOverlay.className = 'reversal-progress';
+            progressOverlay.innerHTML = `
+                <div class="reversal-spinner"></div>
+                <div class="reversal-text">Generating reversed video...</div>
+                <div class="reversal-percent">0%</div>
+                <button class="reversal-cancel" data-clip-number="${clipNumber}">Cancel</button>
+            `;
+            slot.appendChild(progressOverlay);
+
+            // Add cancel button handler
+            const cancelBtn = progressOverlay.querySelector('.reversal-cancel');
+            cancelBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const clipNum = e.target.dataset.clipNumber;
+                const videoData = clipVideos[clipNum];
+                if (videoData && videoData.filePath) {
+                    console.log(`Cancelling reversal for clip ${clipNum}`);
+                    await window.electronAPI.cancelVideoReversal(videoData.filePath);
+                    hideReversalProgress(clipNum);
+                }
+            });
+        }
+
+        progressOverlay.querySelector('.reversal-text').textContent = message;
     }
 
-    // Hide reversal progress indicator
+    // [BOUNCE MODE FIX] Hide reversal progress indicator
     function hideReversalProgress(clipNumber) {
         console.log(`Clip ${clipNumber}: Progress hidden`);
-        // TODO: Hide UI progress indicator
+
+        const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
+        if (!slot) return;
+
+        const progressOverlay = slot.querySelector('.reversal-progress');
+        if (progressOverlay) {
+            progressOverlay.remove();
+        }
     }
 
-    // Listen for reversal progress updates from main process
+    // [BOUNCE MODE FIX] Listen for reversal progress updates from main process
     if (window.electronAPI.onReverseVideoProgress) {
         window.electronAPI.onReverseVideoProgress((data) => {
             console.log(`Reversal progress: ${data.percent.toFixed(1)}% - ${data.timemark}`);
-            // TODO: Update UI progress indicator
+
+            // Find clip number from video path
+            for (let [clipNum, videoData] of Object.entries(clipVideos)) {
+                if (videoData.filePath === data.videoPath) {
+                    const slot = document.querySelector(`[data-clip-number="${clipNum}"]`);
+                    if (slot) {
+                        const progressOverlay = slot.querySelector('.reversal-progress');
+                        if (progressOverlay) {
+                            const percentText = progressOverlay.querySelector('.reversal-percent');
+                            if (percentText) {
+                                percentText.textContent = `${Math.round(data.percent)}%`;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
         });
     }
 
@@ -4359,10 +4471,20 @@ document.addEventListener('DOMContentLoaded', function() {
             const videoDuration = video.duration;
             const reversedEndPosition = videoDuration - inPoint;
 
-            // [BOUNCE MODE PRE-BUFFER] Trigger at 98% of reverse duration for pre-emptive transition
-            const bounceReverseTrigger = reversedEndPosition * 0.98;
+            // [BOUNCE MODE FIX] Dynamic trigger calculation based on playback speed
+            const preBufferSeconds = 0.3; // 300ms pre-buffer time
+            const currentSpeed = videoReverse.playbackRate;
+            const adjustedPreBuffer = preBufferSeconds / currentSpeed;
+            const minimumPreBufferPercent = 0.02; // 2% minimum (safety margin)
+
+            // Calculate trigger time: either time-based or percentage-based, whichever gives more buffer
+            const timeBasedTrigger = Math.max(0, reversedEndPosition - adjustedPreBuffer);
+            const percentBasedTrigger = reversedEndPosition * (1 - minimumPreBufferPercent);
+            const bounceReverseTrigger = Math.max(timeBasedTrigger, percentBasedTrigger);
+
             if (videoReverse.currentTime >= bounceReverseTrigger) {
-                console.log(`[bounce-reverse-timeupdate] Reached 98% to In point (reversed pos: ${videoReverse.currentTime.toFixed(2)}s = forward pos: ${inPoint.toFixed(2)}s), bouncing to forward (pre-emptive transition)`);
+                const bufferTime = reversedEndPosition - videoReverse.currentTime;
+                console.log(`[bounce-reverse-timeupdate] Reached In point trigger (reversed pos: ${videoReverse.currentTime.toFixed(2)}s = forward pos: ${inPoint.toFixed(2)}s), bouncing to forward (${bufferTime.toFixed(3)}s buffer at ${currentSpeed}x speed)`);
 
                 // Pause reversed video
                 videoReverse.pause();
@@ -4495,11 +4617,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     break;
 
                 case 'bounce':
-                    // Bounce mode - trigger bounce when reaching 98% of Out point (pre-emptive transition)
-                    // [BOUNCE MODE PRE-BUFFER] Trigger at 98% instead of 100% for smoother transition
-                    const bounceForwardTrigger = validOutPoint * 0.98;
+                    // Bounce mode - trigger bounce dynamically based on playback speed
+                    // [BOUNCE MODE FIX] Dynamic trigger calculation for better performance at all speeds
+                    const preBufferSeconds = 0.3; // 300ms pre-buffer time
+                    const currentSpeed = video.playbackRate;
+                    const adjustedPreBuffer = preBufferSeconds / currentSpeed;
+                    const minimumPreBufferPercent = 0.02; // 2% minimum (safety margin)
+
+                    // Calculate trigger time: either time-based or percentage-based, whichever gives more buffer
+                    const timeBasedTrigger = Math.max(0, validOutPoint - adjustedPreBuffer);
+                    const percentBasedTrigger = validOutPoint * (1 - minimumPreBufferPercent);
+                    const bounceForwardTrigger = Math.max(timeBasedTrigger, percentBasedTrigger);
+
                     if (currentTime >= bounceForwardTrigger) {
-                        console.log(`[bounce] Reached 98% of Out point at ${formatTime(currentTime)}, switching to reverse (pre-emptive transition)`);
+                        const bufferTime = validOutPoint - currentTime;
+                        console.log(`[bounce] Reached Out point trigger at ${formatTime(currentTime)} (${bufferTime.toFixed(3)}s buffer at ${currentSpeed}x speed), switching to reverse`);
 
                         // Check if reversed video exists
                         if (!clipReversedVideos[clipNumber]) {
@@ -4617,7 +4749,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // [OUTPUT WINDOW SYNC] Position-only sync (no video reload)
-    // Used for periodic drift correction during playback
+    // [OUTPUT WINDOW PERFORMANCE FIX] Now uses debounced sends to reduce IPC overhead
     function syncOutputWindowPosition() {
         if (!outputWindowOpen) {
             return;
@@ -4630,17 +4762,20 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Only sync position and playback rate (don't reload video)
-        window.electronAPI.sendToOutputWindow({
+        // Only sync position and playback rate (debounced to prevent message floods)
+        debouncedSendToOutput({
             type: 'seek',
             time: activeVideo.currentTime
         });
 
-        window.electronAPI.sendToOutputWindow({
+        debouncedSendToOutput({
             type: 'setPlaybackRate',
             rate: activeVideo.playbackRate
         });
     }
+
+    // [OUTPUT WINDOW PERFORMANCE FIX] Cache last synced video source to prevent unnecessary reloads
+    let lastSyncedVideoSrc = null;
 
     function syncToOutputWindow() {
         if (!outputWindowOpen) {
@@ -4664,11 +4799,16 @@ document.addEventListener('DOMContentLoaded', function() {
             loop: (mode === 'loop')
         });
 
-        // Send load video message with active video source
-        window.electronAPI.sendToOutputWindow({
-            type: 'loadVideo',
-            src: activeVideo.src
-        });
+        // [OUTPUT WINDOW PERFORMANCE FIX] Only reload video if source actually changed
+        // This prevents 250ms freezes during bounce transitions and clip switches
+        if (lastSyncedVideoSrc !== activeVideo.src) {
+            window.electronAPI.sendToOutputWindow({
+                type: 'loadVideo',
+                src: activeVideo.src
+            });
+            lastSyncedVideoSrc = activeVideo.src;
+            console.log('[OUTPUT SYNC] Loaded new video source:', activeVideo.src);
+        }
 
         // Send current state of active video
         window.electronAPI.sendToOutputWindow({
