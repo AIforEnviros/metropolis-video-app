@@ -231,6 +231,9 @@ ipcMain.handle('get-file-path', async (event, filePath) => {
 // FFMPEG VIDEO REVERSAL FUNCTIONALITY
 // ==============================================================
 
+// [BOUNCE MODE FIX] Track active FFmpeg processes for timeout and cancellation
+let activeFFmpegProcesses = new Map(); // videoPath -> ffmpegCommand
+
 // IPC: Generate reversed video for bounce mode
 ipcMain.handle('generate-reversed-video', async (event, videoPath) => {
   try {
@@ -252,13 +255,22 @@ ipcMain.handle('generate-reversed-video', async (event, videoPath) => {
     return new Promise((resolve, reject) => {
       // Track progress
       let duration = 0;
+      let timeoutId = null;
 
-      ffmpeg(videoPath)
+      // [BOUNCE MODE FIX] Create FFmpeg process and store reference
+      const ffmpegCommand = ffmpeg(videoPath)
         .videoFilters('reverse')
         .audioFilters('areverse') // Also reverse audio if present
         .output(outputPath)
         .on('start', (commandLine) => {
           console.log('FFmpeg command:', commandLine);
+          // [BOUNCE MODE FIX] Set 10-minute timeout
+          timeoutId = setTimeout(() => {
+            console.error(`[TIMEOUT] Video reversal timed out after 10 minutes: ${videoPath}`);
+            ffmpegCommand.kill('SIGTERM');
+            activeFFmpegProcesses.delete(videoPath);
+            reject(new Error('Video reversal timed out after 10 minutes. Try splitting the video into smaller segments.'));
+          }, 600000); // 10 minutes in milliseconds
         })
         .on('codecData', (data) => {
           duration = parseInt(data.duration.replace(/:/g, ''));
@@ -277,6 +289,9 @@ ipcMain.handle('generate-reversed-video', async (event, videoPath) => {
           }
         })
         .on('end', () => {
+          // [BOUNCE MODE FIX] Clear timeout and remove from active processes
+          if (timeoutId) clearTimeout(timeoutId);
+          activeFFmpegProcesses.delete(videoPath);
           console.log(`Video reversal complete: ${outputPath}`);
           resolve({
             success: true,
@@ -285,14 +300,38 @@ ipcMain.handle('generate-reversed-video', async (event, videoPath) => {
           });
         })
         .on('error', (err, stdout, stderr) => {
+          // [BOUNCE MODE FIX] Clear timeout and remove from active processes
+          if (timeoutId) clearTimeout(timeoutId);
+          activeFFmpegProcesses.delete(videoPath);
           console.error('FFmpeg error:', err.message);
           console.error('FFmpeg stderr:', stderr);
           reject(new Error(`Failed to reverse video: ${err.message}`));
-        })
-        .run();
+        });
+
+      // [BOUNCE MODE FIX] Store reference and start processing
+      activeFFmpegProcesses.set(videoPath, ffmpegCommand);
+      ffmpegCommand.run();
     });
   } catch (error) {
     console.error('Video reversal error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// [BOUNCE MODE FIX] IPC: Cancel video reversal
+ipcMain.handle('cancel-video-reversal', async (event, videoPath) => {
+  try {
+    const ffmpegCommand = activeFFmpegProcesses.get(videoPath);
+    if (ffmpegCommand) {
+      console.log(`Cancelling video reversal for: ${videoPath}`);
+      ffmpegCommand.kill('SIGTERM');
+      activeFFmpegProcesses.delete(videoPath);
+      return { success: true, message: 'Video reversal cancelled' };
+    } else {
+      return { success: false, message: 'No active reversal process found for this video' };
+    }
+  } catch (error) {
+    console.error('Error cancelling video reversal:', error);
     return { success: false, error: error.message };
   }
 });

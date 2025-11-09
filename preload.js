@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Video reversal for bounce mode
   generateReversedVideo: (videoPath) => ipcRenderer.invoke('generate-reversed-video', videoPath),
   checkReversedVideo: (videoPath) => ipcRenderer.invoke('check-reversed-video', videoPath),
+  cancelVideoReversal: (videoPath) => ipcRenderer.invoke('cancel-video-reversal', videoPath),
 
   // Listen for video reversal progress updates
   onReverseVideoProgress: (callback) => {
