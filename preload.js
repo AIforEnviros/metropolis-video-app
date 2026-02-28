@@ -3,20 +3,26 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Output window management
-  openOutputWindow: () => ipcRenderer.invoke('open-output-window'),
-  closeOutputWindow: () => ipcRenderer.invoke('close-output-window'),
-  isOutputWindowOpen: () => ipcRenderer.invoke('is-output-window-open'),
-  sendToOutputWindow: (message) => ipcRenderer.send('output-window-message', message),
+  // Preview pop-out window management
+  createPreviewPopout: () => ipcRenderer.invoke('create-preview-popout'),
+  closePreviewPopout: () => ipcRenderer.invoke('close-preview-popout'),
+  isPreviewPopoutOpen: () => ipcRenderer.invoke('is-preview-popout-open'),
+  sendPreviewCommand: (command) => ipcRenderer.send('preview-popout-command', command),
+  sendPreviewUpdate: (update) => ipcRenderer.send('preview-popout-update', update),
 
-  // Listen for output window messages (for output.html)
-  onOutputMessage: (callback) => {
-    ipcRenderer.on('output-message', (event, message) => callback(message));
+  // Listen for preview commands (for preview-popout.html)
+  onPreviewCommand: (callback) => {
+    ipcRenderer.on('preview-command', (event, command) => callback(command));
   },
 
-  // Listen for output window closed event
-  onOutputWindowClosed: (callback) => {
-    ipcRenderer.on('output-window-closed', () => callback());
+  // Listen for preview updates (for main window)
+  onPreviewUpdate: (callback) => {
+    ipcRenderer.on('preview-update', (event, update) => callback(update));
+  },
+
+  // Listen for preview pop-out closed event
+  onPreviewPopoutClosed: (callback) => {
+    ipcRenderer.on('preview-popout-closed', () => callback());
   },
 
   // File system operations

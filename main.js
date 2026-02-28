@@ -10,7 +10,7 @@ ffmpeg.setFfmpegPath(ffmpegStatic);
 
 // Keep track of windows
 let mainWindow = null;
-let outputWindow = null;
+let popoutWindow = null;
 
 // MIDI state
 let midiInput = null;
@@ -54,87 +54,88 @@ function createMainWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
-    // Close output window if main window closes
-    if (outputWindow) {
-      outputWindow.close();
+    // Close pop-out window if main window closes
+    if (popoutWindow && !popoutWindow.isDestroyed()) {
+      popoutWindow.close();
     }
   });
 }
 
-// IPC: Open output window
-ipcMain.handle('open-output-window', async () => {
-  if (outputWindow && !outputWindow.isDestroyed()) {
-    outputWindow.focus();
-    return { success: true, windowId: outputWindow.id };
+// IPC: Create preview pop-out window
+ipcMain.handle('create-preview-popout', async () => {
+  if (popoutWindow && !popoutWindow.isDestroyed()) {
+    popoutWindow.focus();
+    return { success: true };
   }
 
-  // Detect external display for output window
+  // Detect external display for pop-out
   const displays = screen.getAllDisplays();
   const externalDisplay = displays.find((display) => {
     return display.bounds.x !== 0 || display.bounds.y !== 0;
   });
 
-  // Configure window options based on display detection
   let windowOptions = {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true
     },
-    title: 'Metropolis Output',
+    title: 'Metropolis Preview',
     backgroundColor: '#000000'
   };
 
   if (externalDisplay) {
-    // External display detected - position output window there in fullscreen
     windowOptions.x = externalDisplay.bounds.x;
     windowOptions.y = externalDisplay.bounds.y;
     windowOptions.width = externalDisplay.bounds.width;
     windowOptions.height = externalDisplay.bounds.height;
     windowOptions.fullscreen = true;
     windowOptions.frame = false;
-    console.log(`Output window positioned on external display at ${externalDisplay.bounds.x},${externalDisplay.bounds.y} (${externalDisplay.bounds.width}x${externalDisplay.bounds.height})`);
+    console.log(`Pop-out positioned on external display at ${externalDisplay.bounds.x},${externalDisplay.bounds.y} (${externalDisplay.bounds.width}x${externalDisplay.bounds.height})`);
   } else {
-    // No external display - use default size on primary display
-    windowOptions.width = 1920;
-    windowOptions.height = 1080;
-    console.log('No external display detected, using default output window size');
+    windowOptions.width = 1280;
+    windowOptions.height = 720;
+    console.log('No external display detected, using 1280x720 pop-out window');
   }
 
-  outputWindow = new BrowserWindow(windowOptions);
+  popoutWindow = new BrowserWindow(windowOptions);
+  popoutWindow.loadFile('preview-popout.html');
 
-  // Load a simple output HTML or communicate with main window
-  outputWindow.loadFile('output.html');
-
-  outputWindow.on('closed', () => {
-    outputWindow = null;
-    // Notify main window that output closed
+  popoutWindow.on('closed', () => {
+    popoutWindow = null;
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('output-window-closed');
+      mainWindow.webContents.send('preview-popout-closed');
     }
   });
 
-  return { success: true, windowId: outputWindow.id };
+  return { success: true };
 });
 
-// IPC: Close output window
-ipcMain.handle('close-output-window', async () => {
-  if (outputWindow && !outputWindow.isDestroyed()) {
-    outputWindow.close();
-    outputWindow = null;
+// IPC: Close preview pop-out
+ipcMain.handle('close-preview-popout', async () => {
+  if (popoutWindow && !popoutWindow.isDestroyed()) {
+    popoutWindow.close();
+    popoutWindow = null;
   }
   return { success: true };
 });
 
-// IPC: Check if output window is open
-ipcMain.handle('is-output-window-open', async () => {
-  return { isOpen: outputWindow && !outputWindow.isDestroyed() };
+// IPC: Check if preview pop-out is open
+ipcMain.handle('is-preview-popout-open', async () => {
+  return { isOpen: popoutWindow && !popoutWindow.isDestroyed() };
 });
 
-// IPC: Send message to output window
-ipcMain.on('output-window-message', (event, message) => {
-  if (outputWindow && !outputWindow.isDestroyed()) {
-    outputWindow.webContents.send('output-message', message);
+// IPC: Forward commands from main window to pop-out
+ipcMain.on('preview-popout-command', (event, command) => {
+  if (popoutWindow && !popoutWindow.isDestroyed()) {
+    popoutWindow.webContents.send('preview-command', command);
+  }
+});
+
+// IPC: Forward updates from pop-out to main window
+ipcMain.on('preview-popout-update', (event, update) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('preview-update', update);
   }
 });
 

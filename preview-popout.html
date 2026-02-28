@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metropolis Preview</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #000;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: none;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background-color: #000;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #previewVideoReverse {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <video id="previewVideo" muted></video>
+    <video id="previewVideoReverse" muted></video>
+
+    <script>
+        const video = document.getElementById('previewVideo');
+        const videoReverse = document.getElementById('previewVideoReverse');
+
+        // Ensure both are muted
+        video.muted = true;
+        video.volume = 0;
+        videoReverse.muted = true;
+        videoReverse.volume = 0;
+
+        // Send time updates back to main window for timeline scrubber (throttled to ~10fps)
+        let lastReportedTime = -1;
+        let lastReportTimestamp = 0;
+        function reportTimeUpdate() {
+            const now = performance.now();
+            if (now - lastReportTimestamp > 100) { // ~10fps throttle
+                const activeVideo = (videoReverse.style.display !== 'none') ? videoReverse : video;
+                if (!activeVideo.paused && activeVideo.currentTime !== lastReportedTime) {
+                    lastReportedTime = activeVideo.currentTime;
+                    lastReportTimestamp = now;
+                    window.electronAPI.sendPreviewUpdate({
+                        type: 'timeupdate',
+                        currentTime: activeVideo.currentTime,
+                        duration: activeVideo.duration
+                    });
+                }
+            }
+            requestAnimationFrame(reportTimeUpdate);
+        }
+        requestAnimationFrame(reportTimeUpdate);
+
+        // Report ended events for bounce mode
+        video.addEventListener('ended', () => {
+            window.electronAPI.sendPreviewUpdate({
+                type: 'ended',
+                element: 'forward'
+            });
+        });
+
+        videoReverse.addEventListener('ended', () => {
+            window.electronAPI.sendPreviewUpdate({
+                type: 'ended',
+                element: 'reverse'
+            });
+        });
+
+        // Listen for commands from main window
+        if (window.electronAPI) {
+            window.electronAPI.onPreviewCommand((command) => {
+                switch (command.type) {
+                    case 'loadClip':
+                        video.src = command.src;
+                        video.style.display = 'block';
+                        videoReverse.style.display = 'none';
+                        if (command.reverseSrc) {
+                            videoReverse.src = command.reverseSrc;
+                        }
+                        if (command.currentTime !== undefined) {
+                            video.addEventListener('loadeddata', function onLoad() {
+                                video.currentTime = command.currentTime;
+                                video.removeEventListener('loadeddata', onLoad);
+                            });
+                        }
+                        break;
+
+                    case 'loadReverse':
+                        videoReverse.src = command.src;
+                        break;
+
+                    case 'play':
+                        const activePlay = (videoReverse.style.display !== 'none') ? videoReverse : video;
+                        activePlay.play().catch(e => console.error('Play error:', e));
+                        break;
+
+                    case 'pause':
+                        video.pause();
+                        videoReverse.pause();
+                        break;
+
+                    case 'seek':
+                        const activeSeek = (videoReverse.style.display !== 'none') ? videoReverse : video;
+                        activeSeek.currentTime = command.time;
+                        break;
+
+                    case 'setSpeed':
+                        video.playbackRate = command.rate;
+                        videoReverse.playbackRate = command.rate;
+                        break;
+
+                    case 'switchToForward':
+                        videoReverse.pause();
+                        videoReverse.style.display = 'none';
+                        video.style.display = 'block';
+                        if (command.currentTime !== undefined) {
+                            video.currentTime = command.currentTime;
+                        }
+                        if (command.rate) {
+                            video.playbackRate = command.rate;
+                        }
+                        video.play().catch(e => console.error('Play error:', e));
+                        break;
+
+                    case 'switchToReverse':
+                        video.pause();
+                        video.style.display = 'none';
+                        videoReverse.style.display = 'block';
+                        if (command.currentTime !== undefined) {
+                            videoReverse.currentTime = command.currentTime;
+                        }
+                        if (command.rate) {
+                            videoReverse.playbackRate = command.rate;
+                        }
+                        videoReverse.play().catch(e => console.error('Play error:', e));
+                        break;
+
+                    case 'setLoop':
+                        video.loop = command.loop;
+                        break;
+
+                    case 'setState':
+                        // Full state restore (used when pop-out first opens)
+                        if (command.src) {
+                            video.src = command.src;
+                        }
+                        if (command.reverseSrc) {
+                            videoReverse.src = command.reverseSrc;
+                        }
+                        if (command.activeElement === 'reverse') {
+                            video.style.display = 'none';
+                            videoReverse.style.display = 'block';
+                        } else {
+                            video.style.display = 'block';
+                            videoReverse.style.display = 'none';
+                        }
+                        const target = (command.activeElement === 'reverse') ? videoReverse : video;
+                        target.addEventListener('loadeddata', function onLoad() {
+                            if (command.currentTime !== undefined) {
+                                target.currentTime = command.currentTime;
+                            }
+                            if (command.rate) {
+                                target.playbackRate = command.rate;
+                            }
+                            if (command.loop !== undefined) {
+                                video.loop = command.loop;
+                            }
+                            if (command.playing) {
+                                target.play().catch(e => console.error('Play error:', e));
+                            }
+                            target.removeEventListener('loadeddata', onLoad);
+                        });
+                        break;
+                }
+            });
+        }
+
+        // Show cursor on mouse move, hide after 3 seconds of inactivity
+        let cursorTimeout;
+        document.addEventListener('mousemove', () => {
+            document.body.style.cursor = 'default';
+            clearTimeout(cursorTimeout);
+            cursorTimeout = setTimeout(() => {
+                document.body.style.cursor = 'none';
+            }, 3000);
+        });
+
+        // Toggle fullscreen on double-click
+        document.addEventListener('dblclick', () => {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                document.documentElement.requestFullscreen();
+            }
+        });
+
+        console.log('Metropolis Preview Pop-Out Ready');
+    </script>
+</body>
+</html>

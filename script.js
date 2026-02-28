@@ -45,12 +45,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const shortcutsGrid = document.getElementById('shortcutsGrid');
     const resetShortcutsBtn = document.getElementById('resetShortcutsBtn');
     const saveShortcutsBtn = document.getElementById('saveShortcutsBtn');
-    const outputWindowBtn = document.getElementById('outputWindowBtn');
+    const popoutBtn = document.getElementById('outputWindowBtn');
     const addTabBtn = document.getElementById('addTabBtn');
     const autoPlayToggle = document.getElementById('autoPlayToggle');
     const clipContextMenu = document.getElementById('clipContextMenu');
 
-    // Output window reference - state tracked by outputWindowOpen variable below
+    // Pop-out preview state
+    let previewPopoutOpen = false;
+    let popoutCurrentTime = 0;
 
     // Performance optimizations - disable audio globally
     video.muted = true;
@@ -1262,13 +1264,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Auto-play when clip is selected - only if global auto-play is enabled
                 if (globalAutoPlayEnabled) {
                     globalPlayIntent = true;
-                    video.play().then(() => {
-                        console.log('Auto-playing clip on selection');
-                    }).catch(e => {
-                        console.error('Error auto-playing video:', e);
-                    });
+                    if (previewPopoutOpen) {
+                        // Route to pop-out - load clip there and play
+                        sendToPopout({
+                            type: 'loadClip',
+                            src: video.src,
+                            reverseSrc: videoReverse.src || '',
+                            currentTime: startTime
+                        });
+                        setTimeout(() => sendToPopout({ type: 'play' }), 200);
+                        console.log('Auto-playing clip on selection (sent to pop-out)');
+                    } else {
+                        video.play().then(() => {
+                            console.log('Auto-playing clip on selection');
+                        }).catch(e => {
+                            console.error('Error auto-playing video:', e);
+                        });
+                    }
                 } else {
                     globalPlayIntent = false;
+                    if (previewPopoutOpen) {
+                        sendToPopout({
+                            type: 'loadClip',
+                            src: video.src,
+                            reverseSrc: videoReverse.src || '',
+                            currentTime: startTime
+                        });
+                    }
                     console.log('Clip loaded but not playing (auto-play disabled)');
                 }
             }, { once: true });
@@ -1530,14 +1552,6 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
-    // [OUTPUT WINDOW PERFORMANCE FIX] Debounced wrapper for output window sync messages
-    // Prevents floods of 60+ msgs/second during scrubbing/seeking
-    const debouncedSendToOutput = debounce((message) => {
-        if (window.electronAPI && window.electronAPI.sendToOutputWindow) {
-            window.electronAPI.sendToOutputWindow(message);
-        }
-    }, 100); // 100ms debounce
-
     // Add a cue point for the current clip at the current video time
     function recordCuePoint() {
         if (!selectedClipSlot) {
@@ -1557,7 +1571,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const currentTime = video.currentTime;
+        const currentTime = previewPopoutOpen ? popoutCurrentTime : video.currentTime;
 
         // Initialize cue points array for this clip if it doesn't exist
         if (!clipCuePoints[clipNumber]) {
@@ -1607,7 +1621,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const currentTime = video.currentTime;
+        const currentTime = previewPopoutOpen ? popoutCurrentTime : video.currentTime;
 
         // Initialize In/Out points for this clip if it doesn't exist
         if (!clipInOutPoints[clipNumber]) {
@@ -1644,7 +1658,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const currentTime = video.currentTime;
+        const currentTime = previewPopoutOpen ? popoutCurrentTime : video.currentTime;
 
         // Initialize In/Out points for this clip if it doesn't exist
         if (!clipInOutPoints[clipNumber]) {
@@ -1757,7 +1771,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     wasPlayingBeforeDrag = !video.paused;
                     if (wasPlayingBeforeDrag) {
                         video.pause();
-                        if (outputVideo) outputVideo.pause();
+                        sendToPopout({ type: 'pause' });
                     }
 
                     dragTooltip = document.createElement('div');
@@ -1792,9 +1806,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (video && video.duration > 0) {
                     try {
                         video.currentTime = newTime;
-                        if (outputVideo && outputVideo.duration > 0) {
-                            outputVideo.currentTime = newTime;
-                        }
+                        sendToPopout({ type: 'seek', time: newTime });
                     } catch (e) {
                         console.error('Error scrubbing video:', e);
                     }
@@ -1813,9 +1825,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     if (wasPlayingBeforeDrag) {
                         video.play().catch(e => console.error('Error resuming playback:', e));
-                        if (outputVideo) {
-                            outputVideo.play().catch(e => console.error('Error resuming output playback:', e));
-                        }
+                        sendToPopout({ type: 'play' });
                     }
 
                     markSessionModified();
@@ -1863,6 +1873,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Speed control functions
     function setVideoSpeed(speed) {
+        // Route to pop-out if open
+        sendToPopout({ type: 'setSpeed', rate: speed });
+
         if (video.src) {
             try {
                 video.playbackRate = speed;
@@ -1976,7 +1989,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
 
         // Jump to In Point
-        video.currentTime = inPoint;
+        if (previewPopoutOpen) {
+            popoutCurrentTime = inPoint;
+            sendToPopout({ type: 'seek', time: inPoint });
+        } else {
+            video.currentTime = inPoint;
+        }
         updateTimeline();
 
         // Find the cue index at or after In Point
@@ -1999,16 +2017,24 @@ document.addEventListener('DOMContentLoaded', function() {
         // Restart - only auto-play if global auto-play is enabled
         if (globalAutoPlayEnabled) {
             globalPlayIntent = true;
-            video.play().then(() => {
-                // updatePlayButtonState() removed
+            if (previewPopoutOpen) {
+                sendToPopout({ type: 'play' });
                 if (inPoint > 0) {
-                    console.log(`R key: Restarted at In Point: ${formatTime(inPoint)}`);
+                    console.log(`R key: Restarted at In Point: ${formatTime(inPoint)} (popout)`);
                 } else {
-                    console.log('R key: Restarted at beginning (no In Point set)');
+                    console.log('R key: Restarted at beginning (no In Point set) (popout)');
                 }
-            }).catch(e => {
-                console.error('Error playing from In Point:', e);
-            });
+            } else {
+                video.play().then(() => {
+                    if (inPoint > 0) {
+                        console.log(`R key: Restarted at In Point: ${formatTime(inPoint)}`);
+                    } else {
+                        console.log('R key: Restarted at beginning (no In Point set)');
+                    }
+                }).catch(e => {
+                    console.error('Error playing from In Point:', e);
+                });
+            }
         } else {
             globalPlayIntent = false;
             console.log(`R key: Jumped to In Point but not playing (auto-play disabled)`);
@@ -2049,7 +2075,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (prevIndex < 0) {
             // Go to beginning if we're before first cue
-            video.currentTime = 0;
+            if (previewPopoutOpen) {
+                popoutCurrentTime = 0;
+                sendToPopout({ type: 'seek', time: 0 });
+            } else {
+                video.currentTime = 0;
+            }
             // Update timeline immediately to move scrubber
             updateTimeline();
             clipCurrentCueIndex[clipNumber] = -1;
@@ -2062,12 +2093,16 @@ document.addEventListener('DOMContentLoaded', function() {
             // Auto-play only if enabled
             if (globalAutoPlayEnabled) {
                 globalPlayIntent = true;
-                video.play().then(() => {
-                    // updatePlayButtonState() removed
-                    console.log('Q key: Jumped to beginning before first cue');
-                }).catch(e => {
-                    console.error('Error playing from beginning:', e);
-                });
+                if (previewPopoutOpen) {
+                    sendToPopout({ type: 'play' });
+                    console.log('Q key: Jumped to beginning before first cue (popout)');
+                } else {
+                    video.play().then(() => {
+                        console.log('Q key: Jumped to beginning before first cue');
+                    }).catch(e => {
+                        console.error('Error playing from beginning:', e);
+                    });
+                }
             } else {
                 globalPlayIntent = false;
                 console.log('Q key: Jumped to beginning but not playing (auto-play disabled)');
@@ -2081,7 +2116,12 @@ document.addEventListener('DOMContentLoaded', function() {
         clipCurrentCueIndex[clipNumber] = prevIndex;
 
         // Jump backwards to the previous cue point
-        video.currentTime = targetCuePoint.time;
+        if (previewPopoutOpen) {
+            popoutCurrentTime = targetCuePoint.time;
+            sendToPopout({ type: 'seek', time: targetCuePoint.time });
+        } else {
+            video.currentTime = targetCuePoint.time;
+        }
         // Update timeline immediately to move scrubber
         updateTimeline();
 
@@ -2093,12 +2133,16 @@ document.addEventListener('DOMContentLoaded', function() {
         // Pressing Q means "go back and play from previous cue" - only if auto-play enabled
         if (globalAutoPlayEnabled) {
             globalPlayIntent = true;
-            video.play().then(() => {
-                // updatePlayButtonState() removed
-                console.log(`Q key: Sequential navigation to cue ${prevIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
-            }).catch(e => {
-                console.error('Error playing from previous cue:', e);
-            });
+            if (previewPopoutOpen) {
+                sendToPopout({ type: 'play' });
+                console.log(`Q key: Sequential navigation to cue ${prevIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)} (popout)`);
+            } else {
+                video.play().then(() => {
+                    console.log(`Q key: Sequential navigation to cue ${prevIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
+                }).catch(e => {
+                    console.error('Error playing from previous cue:', e);
+                });
+            }
         } else {
             globalPlayIntent = false;
             console.log(`Q key: Navigated to cue ${prevIndex + 1} but not playing (auto-play disabled)`);
@@ -2127,23 +2171,32 @@ document.addEventListener('DOMContentLoaded', function() {
         const clipMode = clipModes[clipNumber] || 'loop';
         const cuePoints = clipCuePoints[clipNumber] || [];
         const inOut = clipInOutPoints[clipNumber];
-        const currentTime = video.currentTime;
+        const currentTime = previewPopoutOpen ? popoutCurrentTime : video.currentTime;
 
         // Get In/Out points (default to video bounds)
         const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
-        const outPoint = (inOut && inOut.outPoint !== undefined && inOut.outPoint !== null) ? inOut.outPoint : (video.duration || 0);
+        const outPoint = (inOut && inOut.outPoint !== undefined && inOut.outPoint !== null) ? inOut.outPoint : (previewPopoutOpen ? videoDuration : video.duration) || 0;
 
         // Special handling for modes with no cue points
         if (cuePoints.length === 0) {
             if (clipMode === 'forward-stop') {
                 // No cue points: loop back to In Point
-                video.currentTime = inPoint;
+                if (previewPopoutOpen) {
+                    popoutCurrentTime = inPoint;
+                    sendToPopout({ type: 'seek', time: inPoint });
+                } else {
+                    video.currentTime = inPoint;
+                }
                 updateTimeline();
                 console.log(`[forward-stop] No cue points, looping to In Point: ${formatTime(inPoint)}`);
 
                 if (globalAutoPlayEnabled) {
                     globalPlayIntent = true;
-                    video.play().catch(e => console.error('Error playing:', e));
+                    if (previewPopoutOpen) {
+                        sendToPopout({ type: 'play' });
+                    } else {
+                        video.play().catch(e => console.error('Error playing:', e));
+                    }
                 }
                 return;
             } else if (clipMode === 'forward-next') {
@@ -2181,13 +2234,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 } else if (clipMode === 'forward-stop' || clipMode === 'loop') {
                     // Loop back to In Point
-                    video.currentTime = inPoint;
+                    if (previewPopoutOpen) {
+                        popoutCurrentTime = inPoint;
+                        sendToPopout({ type: 'seek', time: inPoint });
+                    } else {
+                        video.currentTime = inPoint;
+                    }
                     updateTimeline();
                     clipCurrentCueIndex[clipNumber] = -1;
                     console.log(`W key: At last cue, looping to In Point: ${formatTime(inPoint)}`);
 
                     globalPlayIntent = true;
-                    video.play().catch(e => console.error('Error playing:', e));
+                    if (previewPopoutOpen) {
+                        sendToPopout({ type: 'play' });
+                    } else {
+                        video.play().catch(e => console.error('Error playing:', e));
+                    }
                     return;
                 }
             }
@@ -2197,7 +2259,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const nextCuePoint = cuePoints[nextCueIndex];
 
             // Jump to next cue point
-            video.currentTime = nextCuePoint.time;
+            if (previewPopoutOpen) {
+                popoutCurrentTime = nextCuePoint.time;
+                sendToPopout({ type: 'seek', time: nextCuePoint.time });
+            } else {
+                video.currentTime = nextCuePoint.time;
+            }
             updateTimeline();
 
             clipCurrentCueIndex[clipNumber] = nextCueIndex;
@@ -2208,11 +2275,15 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log(`W key: Jumped to next cue ${nextCueIndex + 1}/${cuePoints.length} at ${formatTime(nextCuePoint.time)}`);
 
             globalPlayIntent = true;
-            video.play().then(() => {
-                // Video will play forward and stop at next cue (forward-stop mode)
-            }).catch(e => {
-                console.error('Error playing from next cue:', e);
-            });
+            if (previewPopoutOpen) {
+                sendToPopout({ type: 'play' });
+            } else {
+                video.play().then(() => {
+                    // Video will play forward and stop at next cue (forward-stop mode)
+                }).catch(e => {
+                    console.error('Error playing from next cue:', e);
+                });
+            }
             return;
         }
         // If at cue point but auto-play disabled: continue below to find next cue and jump to it
@@ -2234,14 +2305,23 @@ document.addEventListener('DOMContentLoaded', function() {
             if (clipMode === 'forward-stop') {
                 // At or past last cue/Out Point: loop back to In Point
                 if (currentTime >= outPoint - 0.1) {
-                    video.currentTime = inPoint;
+                    if (previewPopoutOpen) {
+                        popoutCurrentTime = inPoint;
+                        sendToPopout({ type: 'seek', time: inPoint });
+                    } else {
+                        video.currentTime = inPoint;
+                    }
                     updateTimeline();
                     clipCurrentCueIndex[clipNumber] = -1;
                     console.log(`[forward-stop] At Out Point, looping to In Point: ${formatTime(inPoint)}`);
 
                     if (globalAutoPlayEnabled) {
                         globalPlayIntent = true;
-                        video.play().catch(e => console.error('Error playing:', e));
+                        if (previewPopoutOpen) {
+                            sendToPopout({ type: 'play' });
+                        } else {
+                            video.play().catch(e => console.error('Error playing:', e));
+                        }
                     }
                     return;
                 } else {
@@ -2254,14 +2334,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             } else if (clipMode === 'loop') {
                 // Loop mode: loop back to In Point when no cue ahead
-                video.currentTime = inPoint;
+                if (previewPopoutOpen) {
+                    popoutCurrentTime = inPoint;
+                    sendToPopout({ type: 'seek', time: inPoint });
+                } else {
+                    video.currentTime = inPoint;
+                }
                 updateTimeline();
                 clipCurrentCueIndex[clipNumber] = -1;
                 console.log(`[loop] At last cue, looping to In Point: ${formatTime(inPoint)}`);
 
                 if (globalAutoPlayEnabled) {
                     globalPlayIntent = true;
-                    video.play().catch(e => console.error('Error playing:', e));
+                    if (previewPopoutOpen) {
+                        sendToPopout({ type: 'play' });
+                    } else {
+                        video.play().catch(e => console.error('Error playing:', e));
+                    }
                 }
                 return;
             } else {
@@ -2275,7 +2364,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (distanceToCue > 0.1) {
             // NOT at the cue - JUMP to it
-            video.currentTime = targetCuePoint.time;
+            if (previewPopoutOpen) {
+                popoutCurrentTime = targetCuePoint.time;
+                sendToPopout({ type: 'seek', time: targetCuePoint.time });
+            } else {
+                video.currentTime = targetCuePoint.time;
+            }
             updateTimeline();
             console.log(`W key: Jumped to cue ${targetIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
         } else {
@@ -2294,11 +2388,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // Start playing - only if global auto-play is enabled
         if (globalAutoPlayEnabled) {
             globalPlayIntent = true;
-            video.play().then(() => {
-                // updatePlayButtonState() removed
-            }).catch(e => {
-                console.error('Error playing to next cue:', e);
-            });
+            if (previewPopoutOpen) {
+                sendToPopout({ type: 'play' });
+            } else {
+                video.play().then(() => {
+                    // updatePlayButtonState() removed
+                }).catch(e => {
+                    console.error('Error playing to next cue:', e);
+                });
+            }
         } else {
             globalPlayIntent = false;
             console.log('Navigated to cue point but not playing (auto-play disabled)');
@@ -2369,7 +2467,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Check which video is currently playing (forward or reverse for bounce mode)
         const isReversePlaying = videoReverse.style.display === 'block' && !videoReverse.paused;
-        const currentTime = isReversePlaying ? videoReverse.currentTime : video.currentTime;
+        // When pop-out is open, use the pop-out's reported time instead of the paused main video
+        const currentTime = previewPopoutOpen ? popoutCurrentTime
+            : (isReversePlaying ? videoReverse.currentTime : video.currentTime);
 
         // Calculate progress (reverse video plays 0→end, but timeline should show end→0)
         let progress;
@@ -2521,14 +2621,26 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // When pop-out is open, route commands there
+        if (previewPopoutOpen) {
+            if (globalPlayIntent) {
+                globalPlayIntent = false;
+                sendToPopout({ type: 'pause' });
+                console.log('Video paused (spacebar) - sent to pop-out');
+            } else {
+                globalPlayIntent = true;
+                sendToPopout({ type: 'play' });
+                console.log('Video playing (spacebar) - sent to pop-out');
+            }
+            updatePlayingIndicator();
+            return;
+        }
+
         if (video.paused) {
             // Video is paused, play it
             globalPlayIntent = true;
             video.play().then(() => {
                 console.log('Video playing (spacebar)');
-                if (outputVideo) {
-                    outputVideo.play().catch(e => console.error('Error playing output video:', e));
-                }
             }).catch(e => {
                 console.error('Error playing video:', e);
             });
@@ -2537,9 +2649,6 @@ document.addEventListener('DOMContentLoaded', function() {
             globalPlayIntent = false;
             video.pause();
             console.log('Video paused (spacebar)');
-            if (outputVideo) {
-                outputVideo.pause();
-            }
         }
     }
 
@@ -2577,7 +2686,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     wasPlayingBeforeDrag = !video.paused;
                     if (wasPlayingBeforeDrag) {
                         video.pause();
-                        if (outputVideo) outputVideo.pause();
+                        sendToPopout({ type: 'pause' });
                     }
 
                     // Create tooltip
@@ -2609,9 +2718,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     try {
                         video.currentTime = newTime;
                         // Also update output window if open
-                        if (outputVideo && outputVideo.duration > 0) {
-                            outputVideo.currentTime = newTime;
-                        }
+                        sendToPopout({ type: 'seek', time: newTime });
                         console.log(`Scrubbing to: ${formatTime(newTime)}`);
                     } catch (e) {
                         console.error('Error scrubbing video:', e);
@@ -2637,9 +2744,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Restore playing state if it was playing before drag
                     if (wasPlayingBeforeDrag) {
                         video.play().catch(e => console.error('Error resuming playback:', e));
-                        if (outputVideo) {
-                            outputVideo.play().catch(e => console.error('Error resuming output playback:', e));
-                        }
+                        sendToPopout({ type: 'play' });
                     }
 
                     // Sort cue points by time after dragging
@@ -4342,21 +4447,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('[bounce-ended] Error playing reversed video:', e);
                 });
 
-                // [OUTPUT WINDOW SYNC] Update output window to show reversed video
-                if (outputWindowOpen) {
-                    // Use syncToOutputWindow for reliable sync
-                    syncToOutputWindow();
-
-                    // Verify position after brief delay for video load
-                    setTimeout(() => {
-                        if (outputWindowOpen && videoReverse.style.display !== 'none') {
-                            window.electronAPI.sendToOutputWindow({
-                                type: 'seek',
-                                time: videoReverse.currentTime
-                            });
-                        }
-                    }, 200);
-                }
+                // Send bounce transition to pop-out if open
+                sendToPopout({ type: 'switchToReverse', currentTime: videoReverse.currentTime, rate: videoReverse.playbackRate });
                 break;
 
             case 'forward':
@@ -4443,13 +4535,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('[bounce-reverse-ended] Error playing forward video after bounce:', e);
             });
 
-            // Update output window to show forward video
-            if (outputVideo && outputWindow) {
-                window.electronAPI.sendToOutputWindow({
-                    action: 'updateVideoSource',
-                    videoSrc: video.src
-                });
-            }
+            // Send bounce transition to pop-out if open
+            sendToPopout({ type: 'switchToForward', currentTime: video.currentTime, rate: video.playbackRate });
         }
     });
 
@@ -4504,21 +4591,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('[bounce-reverse-timeupdate] Error playing forward video after reverse bounce:', e);
                 });
 
-                // [OUTPUT WINDOW SYNC] Update output window to show forward video
-                if (outputWindowOpen) {
-                    // Use syncToOutputWindow for reliable sync
-                    syncToOutputWindow();
-
-                    // Verify position after brief delay for video load
-                    setTimeout(() => {
-                        if (outputWindowOpen && video.style.display !== 'none') {
-                            window.electronAPI.sendToOutputWindow({
-                                type: 'seek',
-                                time: video.currentTime
-                            });
-                        }
-                    }, 200);
-                }
+                // Send bounce transition to pop-out if open
+                sendToPopout({ type: 'switchToForward', currentTime: video.currentTime, rate: video.playbackRate });
             }
         }
     });
@@ -4665,21 +4739,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             console.error('[bounce] Error playing reversed video:', e);
                         });
 
-                        // [OUTPUT WINDOW SYNC] Update output window to show reversed video
-                        if (outputWindowOpen) {
-                            // Use syncToOutputWindow for reliable sync
-                            syncToOutputWindow();
-
-                            // Verify position after brief delay for video load
-                            setTimeout(() => {
-                                if (outputWindowOpen && videoReverse.style.display !== 'none') {
-                                    window.electronAPI.sendToOutputWindow({
-                                        type: 'seek',
-                                        time: videoReverse.currentTime
-                                    });
-                                }
-                            }, 200);
-                        }
+                        // Send bounce transition to pop-out if open
+                        sendToPopout({ type: 'switchToReverse', currentTime: videoReverse.currentTime, rate: videoReverse.playbackRate });
                     }
                     break;
 
@@ -4713,204 +4774,213 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Video duration changed:', videoDuration);
     });
 
-    // Output Window Functions (Electron version)
-    let outputWindowOpen = false;
-
-    async function createOutputWindow() {
-        try {
-            const result = await window.electronAPI.openOutputWindow();
-
-            if (result.success) {
-                outputWindowOpen = true;
-                outputWindowBtn.textContent = 'Close Output Window';
-
-                // Sync current video to output
-                syncToOutputWindow();
-
-                console.log('Output window created');
-            } else {
-                alert('Failed to open output window.');
-            }
-        } catch (error) {
-            console.error('Error opening output window:', error);
-            alert('Error opening output window: ' + error.message);
-        }
-    }
-
-    async function closeOutputWindow() {
-        try {
-            await window.electronAPI.closeOutputWindow();
-            outputWindowOpen = false;
-            outputWindowBtn.textContent = 'Open Output Window';
-            console.log('Output window closed');
-        } catch (error) {
-            console.error('Error closing output window:', error);
-        }
-    }
-
-    // [OUTPUT WINDOW SYNC] Position-only sync (no video reload)
-    // [OUTPUT WINDOW PERFORMANCE FIX] Now uses debounced sends to reduce IPC overhead
-    function syncOutputWindowPosition() {
-        if (!outputWindowOpen) {
-            return;
-        }
-
-        // Detect which video element is currently active (visible)
-        const activeVideo = (videoReverse.style.display !== 'none') ? videoReverse : video;
-
-        if (!activeVideo.src || activeVideo.paused) {
-            return;
-        }
-
-        // Only sync position and playback rate (debounced to prevent message floods)
-        debouncedSendToOutput({
-            type: 'seek',
-            time: activeVideo.currentTime
-        });
-
-        debouncedSendToOutput({
-            type: 'setPlaybackRate',
-            rate: activeVideo.playbackRate
-        });
-    }
-
-    // [OUTPUT WINDOW PERFORMANCE FIX] Cache last synced video source to prevent unnecessary reloads
-    let lastSyncedVideoSrc = null;
-
-    function syncToOutputWindow() {
-        if (!outputWindowOpen) {
-            return;
-        }
-
-        // Detect which video element is currently active (visible)
-        const activeVideo = (videoReverse.style.display !== 'none') ? videoReverse : video;
-
-        if (!activeVideo.src) {
-            return;
-        }
-
-        // Get current clip mode to set loop state
-        const clipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
-        const mode = clipNumber ? (clipModes[clipNumber] || 'loop') : 'loop';
-
-        // Send loop state based on current mode
-        window.electronAPI.sendToOutputWindow({
-            type: 'setLoop',
-            loop: (mode === 'loop')
-        });
-
-        // [OUTPUT WINDOW PERFORMANCE FIX] Only reload video if source actually changed
-        // This prevents 250ms freezes during bounce transitions and clip switches
-        if (lastSyncedVideoSrc !== activeVideo.src) {
-            window.electronAPI.sendToOutputWindow({
-                type: 'loadVideo',
-                src: activeVideo.src
-            });
-            lastSyncedVideoSrc = activeVideo.src;
-            console.log('[OUTPUT SYNC] Loaded new video source:', activeVideo.src);
-        }
-
-        // Send current state of active video
-        window.electronAPI.sendToOutputWindow({
-            type: 'seek',
-            time: activeVideo.currentTime
-        });
-
-        window.electronAPI.sendToOutputWindow({
-            type: 'setPlaybackRate',
-            rate: activeVideo.playbackRate
-        });
-
-        if (!activeVideo.paused) {
-            window.electronAPI.sendToOutputWindow({ type: 'play' });
-        } else {
-            window.electronAPI.sendToOutputWindow({ type: 'pause' });
-        }
-    }
-
-    // Listen for output window closed event from main process
-    if (window.electronAPI && window.electronAPI.onOutputWindowClosed) {
-        window.electronAPI.onOutputWindowClosed(() => {
-            outputWindowOpen = false;
-            outputWindowBtn.textContent = 'Open Output Window';
-            console.log('Output window was closed');
-        });
-    }
-
-    // Add event listeners to sync output window with main video (Electron IPC version)
-    video.addEventListener('loadeddata', function() {
-        if (outputWindowOpen) {
-            syncToOutputWindow();
-        }
-    });
-
-    video.addEventListener('play', function() {
-        if (outputWindowOpen && video.style.display !== 'none') {
-            window.electronAPI.sendToOutputWindow({ type: 'play' });
-        }
-    });
-
-    video.addEventListener('pause', function() {
-        if (outputWindowOpen && video.style.display !== 'none') {
-            window.electronAPI.sendToOutputWindow({ type: 'pause' });
-        }
-    });
-
+    // Forward video seek events to pop-out (catches cue point navigation, scrubbing, etc.)
+    // Note: the IPC feedback loop was fixed by removing activeVideo.currentTime assignment
+    // from the onPreviewUpdate handler, so seeked only fires from genuine user actions now.
     video.addEventListener('seeked', function() {
-        if (outputWindowOpen && video.style.display !== 'none') {
-            window.electronAPI.sendToOutputWindow({
-                type: 'seek',
-                time: video.currentTime
-            });
-        }
-    });
-
-    video.addEventListener('ratechange', function() {
-        if (outputWindowOpen && video.style.display !== 'none') {
-            window.electronAPI.sendToOutputWindow({
-                type: 'setPlaybackRate',
-                rate: video.playbackRate
-            });
-        }
-    });
-
-    // Add event listeners for reversed video element (for bounce mode sync)
-    videoReverse.addEventListener('play', function() {
-        if (outputWindowOpen && videoReverse.style.display !== 'none') {
-            window.electronAPI.sendToOutputWindow({ type: 'play' });
-        }
-    });
-
-    videoReverse.addEventListener('pause', function() {
-        if (outputWindowOpen && videoReverse.style.display !== 'none') {
-            window.electronAPI.sendToOutputWindow({ type: 'pause' });
+        if (previewPopoutOpen && video.style.display !== 'none') {
+            sendToPopout({ type: 'seek', time: video.currentTime });
         }
     });
 
     videoReverse.addEventListener('seeked', function() {
-        if (outputWindowOpen && videoReverse.style.display !== 'none') {
-            window.electronAPI.sendToOutputWindow({
-                type: 'seek',
-                time: videoReverse.currentTime
-            });
+        if (previewPopoutOpen && videoReverse.style.display !== 'none') {
+            sendToPopout({ type: 'seek', time: videoReverse.currentTime });
         }
     });
 
-    videoReverse.addEventListener('ratechange', function() {
-        if (outputWindowOpen && videoReverse.style.display !== 'none') {
-            window.electronAPI.sendToOutputWindow({
-                type: 'setPlaybackRate',
-                rate: videoReverse.playbackRate
-            });
+    // Preview Pop-Out Functions
+    function sendToPopout(command) {
+        if (previewPopoutOpen && window.electronAPI) {
+            window.electronAPI.sendPreviewCommand(command);
         }
-    });
+    }
 
-    // Output window button click handler
-    outputWindowBtn.addEventListener('click', async function() {
-        if (!outputWindowOpen) {
-            await createOutputWindow();
+    function getActiveVideoElement() {
+        return (videoReverse.style.display !== 'none') ? videoReverse : video;
+    }
+
+    async function openPreviewPopout() {
+        try {
+            const result = await window.electronAPI.createPreviewPopout();
+
+            if (result.success) {
+                previewPopoutOpen = true;
+                popoutBtn.textContent = 'Close Pop-Out Preview';
+
+                // Get current playback state and send to pop-out
+                const activeVideo = getActiveVideoElement();
+                const activeElement = (videoReverse.style.display !== 'none') ? 'reverse' : 'forward';
+                const clipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
+                const mode = clipNumber ? (clipModes[clipNumber] || 'loop') : 'loop';
+
+                if (activeVideo.src) {
+                    const wasPlaying = !activeVideo.paused;
+
+                    // Pause main window videos - pop-out owns playback now
+                    video.pause();
+                    videoReverse.pause();
+
+                    // Dim main video to indicate pop-out is active
+                    video.style.opacity = '0.3';
+                    videoReverse.style.opacity = '0.3';
+
+                    // Send full state to pop-out (delay briefly for window to load)
+                    setTimeout(() => {
+                        sendToPopout({
+                            type: 'setState',
+                            src: video.src || '',
+                            reverseSrc: videoReverse.src || '',
+                            activeElement: activeElement,
+                            currentTime: activeVideo.currentTime,
+                            rate: activeVideo.playbackRate,
+                            loop: (mode === 'loop'),
+                            playing: wasPlaying
+                        });
+                    }, 500);
+                }
+
+                console.log('Preview pop-out opened');
+            } else {
+                alert('Failed to open preview pop-out.');
+            }
+        } catch (error) {
+            console.error('Error opening preview pop-out:', error);
+            alert('Error opening preview pop-out: ' + error.message);
+        }
+    }
+
+    async function closePreviewPopout() {
+        try {
+            // Get current pop-out state before closing (from last known time update)
+            const activeVideo = getActiveVideoElement();
+
+            await window.electronAPI.closePreviewPopout();
+            previewPopoutOpen = false;
+            popoutBtn.textContent = 'Pop Out Preview';
+
+            // Restore main window video opacity
+            video.style.opacity = '1';
+            videoReverse.style.opacity = '1';
+
+            console.log('Preview pop-out closed');
+        } catch (error) {
+            console.error('Error closing preview pop-out:', error);
+        }
+    }
+
+    // Listen for pop-out closed event (user closed via window controls)
+    if (window.electronAPI && window.electronAPI.onPreviewPopoutClosed) {
+        window.electronAPI.onPreviewPopoutClosed(() => {
+            previewPopoutOpen = false;
+            popoutBtn.textContent = 'Pop Out Preview';
+
+            // Restore main window video opacity
+            video.style.opacity = '1';
+            videoReverse.style.opacity = '1';
+
+            console.log('Preview pop-out was closed by user');
+        });
+    }
+
+    // Listen for time updates from pop-out to update timeline scrubber
+    if (window.electronAPI && window.electronAPI.onPreviewUpdate) {
+        window.electronAPI.onPreviewUpdate((update) => {
+            if (update.type === 'timeupdate') {
+                // Update timeline display with pop-out's current time
+                if (update.duration && update.duration > 0) {
+                    videoDuration = update.duration;
+                }
+                // Store pop-out time for timeline display without seeking the main video
+                // (Setting activeVideo.currentTime caused an IPC feedback loop via seeked events)
+                if (update.currentTime !== undefined) {
+                    popoutCurrentTime = update.currentTime;
+                }
+                updateTimeline();
+
+                // Mode-aware playback behavior for pop-out
+                // (mirrors the main video's timeupdate handler but uses popoutCurrentTime
+                // and sends commands to pop-out instead of controlling main video directly)
+                if (previewPopoutOpen && selectedClipSlot) {
+                    const clipNumber = selectedClipSlot.dataset.clipNumber;
+                    const clipMode = clipModes[clipNumber] || 'loop';
+                    const inOut = clipInOutPoints[clipNumber];
+                    const cuePoints = clipCuePoints[clipNumber] || [];
+                    const ct = popoutCurrentTime;
+                    const dur = videoDuration || 1;
+
+                    const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
+                    const outPoint = (inOut && inOut.outPoint !== undefined && inOut.outPoint !== null) ? inOut.outPoint : dur;
+                    const validInPoint = (inPoint < outPoint) ? inPoint : 0;
+                    const validOutPoint = (inPoint < outPoint) ? outPoint : dur;
+
+                    // Wider tolerance for pop-out (updates arrive ~10fps vs 60fps for main video)
+                    const tolerance = 0.15;
+
+                    switch (clipMode) {
+                        case 'forward':
+                            if (ct >= validOutPoint) {
+                                sendToPopout({ type: 'pause' });
+                                globalPlayIntent = false;
+                                console.log(`[popout][forward] Reached Out point, stopped`);
+                            }
+                            break;
+
+                        case 'loop':
+                            if (ct >= validOutPoint) {
+                                sendToPopout({ type: 'seek', time: validInPoint });
+                                console.log(`[popout][loop] Reached Out point, looping to ${formatTime(validInPoint)}`);
+                            }
+                            break;
+
+                        case 'forward-stop':
+                            if (ct >= validOutPoint) {
+                                sendToPopout({ type: 'pause' });
+                                globalPlayIntent = false;
+                                console.log(`[popout][forward-stop] Reached Out point, stopped`);
+                                break;
+                            }
+                            if (cuePoints.length > 0) {
+                                for (let i = 0; i < cuePoints.length; i++) {
+                                    if (Math.abs(ct - cuePoints[i].time) < tolerance) {
+                                        if (justNavigatedToCue && i === lastNavigatedCueIndex) {
+                                            if (Math.abs(ct - cuePoints[i].time) >= tolerance) {
+                                                justNavigatedToCue = false;
+                                                lastNavigatedCueIndex = -1;
+                                            }
+                                            continue;
+                                        }
+                                        sendToPopout({ type: 'pause' });
+                                        globalPlayIntent = false;
+                                        clipCurrentCueIndex[clipNumber] = i;
+                                        console.log(`[popout][forward-stop] Stopped at cue ${i + 1}/${cuePoints.length}: ${formatTime(cuePoints[i].time)}`);
+                                        break;
+                                    }
+                                }
+                            }
+                            break;
+
+                        case 'forward-next':
+                            if (ct >= validOutPoint) {
+                                sendToPopout({ type: 'pause' });
+                                globalPlayIntent = false;
+                                console.log(`[popout][forward-next] Reached Out point, waiting for next clip trigger`);
+                            }
+                            break;
+
+                        // bounce mode handled via ended events from pop-out, no action needed here
+                    }
+                }
+            }
+        });
+    }
+
+    // Pop-out button click handler
+    popoutBtn.addEventListener('click', async function() {
+        if (!previewPopoutOpen) {
+            await openPreviewPopout();
         } else {
-            await closeOutputWindow();
+            await closePreviewPopout();
         }
     });
 
@@ -4918,10 +4988,9 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('beforeunload', function() {
         console.log('Cleaning up resources before window closes...');
 
-        // In Electron, we use file:// URLs so no blob cleanup needed
-        // Close output window if open
-        if (outputWindowOpen) {
-            window.electronAPI.closeOutputWindow();
+        // Close pop-out window if open
+        if (previewPopoutOpen) {
+            window.electronAPI.closePreviewPopout();
         }
 
         console.log('Resource cleanup complete');
