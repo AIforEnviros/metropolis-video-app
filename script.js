@@ -1995,6 +1995,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             video.currentTime = inPoint;
         }
+        lastTimeupdateTime = inPoint; // Reset so we don't falsely detect cues between old position and In Point
         updateTimeline();
 
         // Find the cue index at or after In Point
@@ -2009,10 +2010,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         clipCurrentCueIndex[clipNumber] = cueIndex;
 
-        // Set flag to allow playing through cue points
-        justNavigatedToCue = true;
-        lastNavigatedCueTime = inPoint;
-        lastNavigatedCueIndex = cueIndex; // Allow playing through first cue at In Point
+        // Clear navigation flag — restart should stop at the first cue point it reaches
+        justNavigatedToCue = false;
+        lastNavigatedCueIndex = -1;
 
         // Restart - only auto-play if global auto-play is enabled
         if (globalAutoPlayEnabled) {
@@ -2081,6 +2081,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 video.currentTime = 0;
             }
+            lastTimeupdateTime = 0; // Reset so we don't falsely detect cues between old position and beginning
             // Update timeline immediately to move scrubber
             updateTimeline();
             clipCurrentCueIndex[clipNumber] = -1;
@@ -2122,6 +2123,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             video.currentTime = targetCuePoint.time;
         }
+        lastTimeupdateTime = targetCuePoint.time; // Reset so we don't falsely detect cues between old position and target
         // Update timeline immediately to move scrubber
         updateTimeline();
 
@@ -2187,6 +2189,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     video.currentTime = inPoint;
                 }
+                lastTimeupdateTime = inPoint;
                 updateTimeline();
                 console.log(`[forward-stop] No cue points, looping to In Point: ${formatTime(inPoint)}`);
 
@@ -2254,7 +2257,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // Not at last cue - JUMP to next cue immediately (for instant progression)
+            // Forward-stop: just resume playing from current cue, will stop at next cue
+            if (clipMode === 'forward-stop') {
+                justNavigatedToCue = true;
+                lastNavigatedCueTime = cuePoints[currentCueIndex].time;
+                lastNavigatedCueIndex = currentCueIndex;
+                lastTimeupdateTime = cuePoints[currentCueIndex].time; // Reset so current cue isn't re-detected
+
+                globalPlayIntent = true;
+                if (previewPopoutOpen) {
+                    sendToPopout({ type: 'play' });
+                } else {
+                    video.play().catch(e => console.error('Error resuming:', e));
+                }
+                console.log(`W key: Resuming from cue ${currentCueIndex + 1}/${cuePoints.length} in forward-stop mode`);
+                return;
+            }
+
+            // Other modes: JUMP to next cue immediately (for instant progression)
             const nextCueIndex = currentCueIndex + 1;
             const nextCuePoint = cuePoints[nextCueIndex];
 
@@ -2265,6 +2285,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 video.currentTime = nextCuePoint.time;
             }
+            lastTimeupdateTime = nextCuePoint.time; // Reset so cues between old position and target aren't falsely detected
             updateTimeline();
 
             clipCurrentCueIndex[clipNumber] = nextCueIndex;
@@ -2279,7 +2300,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 sendToPopout({ type: 'play' });
             } else {
                 video.play().then(() => {
-                    // Video will play forward and stop at next cue (forward-stop mode)
+                    // Video will play forward and stop at next cue
                 }).catch(e => {
                     console.error('Error playing from next cue:', e);
                 });
@@ -2311,6 +2332,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     } else {
                         video.currentTime = inPoint;
                     }
+                    lastTimeupdateTime = inPoint;
                     updateTimeline();
                     clipCurrentCueIndex[clipNumber] = -1;
                     console.log(`[forward-stop] At Out Point, looping to In Point: ${formatTime(inPoint)}`);
@@ -2379,6 +2401,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Update current cue index for state tracking
         clipCurrentCueIndex[clipNumber] = targetIndex;
+        lastTimeupdateTime = targetCuePoint.time; // Reset so target cue isn't re-detected
 
         // Set flag to allow playing through this cue point
         justNavigatedToCue = true;
@@ -2447,6 +2470,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let justNavigatedToCue = false;
     let lastNavigatedCueTime = 0;
     let lastNavigatedCueIndex = -1; // Track which cue point we just navigated to
+
+    // Track last timeupdate position for crossed-past cue detection in forward-stop mode
+    let lastTimeupdateTime = 0;
 
     // Format time for timeline display (MM:SS)
     function formatTimeShort(seconds) {
@@ -4655,22 +4681,22 @@ document.addEventListener('DOMContentLoaded', function() {
                         break;
                     }
 
-                    // Check cue points (only in forward direction, not during bounce)
+                    // Check cue points - stop at first cue we've crossed past
                     if (bounceDirection === 1 && cuePoints.length > 0) {
                         for (let i = 0; i < cuePoints.length; i++) {
                             const cuePoint = cuePoints[i];
-                            // If within 0.1 seconds of a cue point, pause
-                            if (Math.abs(currentTime - cuePoint.time) < 0.1) {
+
+                            // Check if we've crossed past this cue point since last timeupdate
+                            const crossedPast = cuePoint.time > lastTimeupdateTime && cuePoint.time <= currentTime;
+                            const atCuePoint = Math.abs(currentTime - cuePoint.time) < 0.15;
+
+                            if (crossedPast || atCuePoint) {
                                 // Don't stop if we just navigated to THIS SPECIFIC cue point
                                 if (justNavigatedToCue && i === lastNavigatedCueIndex) {
-                                    // Clear the flag once we've moved away from this cue point
-                                    if (Math.abs(currentTime - cuePoint.time) >= 0.1) {
-                                        justNavigatedToCue = false;
-                                        lastNavigatedCueIndex = -1;
-                                    }
-                                    continue; // Skip stopping
+                                    continue; // Skip stopping — flag clears on next navigation or different cue
                                 }
 
+                                video.currentTime = cuePoint.time; // Snap to exact cue position
                                 video.pause();
                                 globalPlayIntent = false;
                                 clipCurrentCueIndex[clipNumber] = i;
@@ -4678,6 +4704,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 break;
                             }
                         }
+                        lastTimeupdateTime = currentTime;
                     }
                     break;
 
@@ -4942,14 +4969,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
                             if (cuePoints.length > 0) {
                                 for (let i = 0; i < cuePoints.length; i++) {
-                                    if (Math.abs(ct - cuePoints[i].time) < tolerance) {
+                                    const crossedPast = cuePoints[i].time > lastTimeupdateTime && cuePoints[i].time <= ct;
+                                    const atCuePoint = Math.abs(ct - cuePoints[i].time) < tolerance;
+
+                                    if (crossedPast || atCuePoint) {
                                         if (justNavigatedToCue && i === lastNavigatedCueIndex) {
-                                            if (Math.abs(ct - cuePoints[i].time) >= tolerance) {
-                                                justNavigatedToCue = false;
-                                                lastNavigatedCueIndex = -1;
-                                            }
                                             continue;
                                         }
+                                        sendToPopout({ type: 'seek', time: cuePoints[i].time }); // Snap to exact cue
                                         sendToPopout({ type: 'pause' });
                                         globalPlayIntent = false;
                                         clipCurrentCueIndex[clipNumber] = i;
@@ -4957,6 +4984,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                         break;
                                     }
                                 }
+                                lastTimeupdateTime = ct;
                             }
                             break;
 
