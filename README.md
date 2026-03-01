@@ -138,6 +138,9 @@ git checkout feature/midi-mapping
 # Install all the stuff the app needs (this takes a minute)
 npm install
 
+#any error
+npm audit fix --force
+
 # Build the MIDI stuff for Mac (important!)
 npx @electron/rebuild
 
