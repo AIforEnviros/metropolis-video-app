@@ -461,7 +461,7 @@
             margin: 15px 0;
             overflow-x: auto;
             overflow-y: visible;
-            padding: 15px 10px 20px 10px;
+            padding: 5px 10px 20px 10px;
         }
 
         /* Custom scrollbar styling */
@@ -488,7 +488,7 @@
 
         .timeline-track {
             position: relative;
-            height: 8px;
+            height: 28px;
             background-color: #404040;
             border-radius: 4px;
             margin-bottom: 8px;
@@ -511,7 +511,7 @@
 
         .timeline-handle {
             position: absolute;
-            top: -4px;
+            top: 6px;
             left: 0%;
             width: 16px;
             height: 16px;
@@ -589,9 +589,9 @@
 
         .cue-marker {
             position: absolute;
-            top: -2px;
+            top: 0;
             width: 3px;
-            height: 12px;
+            height: 100%;
             background-color: #ff6b35;
             border-radius: 1px;
             transform: translateX(-50%);
@@ -615,12 +615,49 @@
             box-shadow: 0 2px 6px rgba(0,0,0,0.5);
         }
 
+        .cue-marker.selected {
+            background: #fabd2f;
+            box-shadow: 0 0 4px #fabd2f;
+            z-index: 5;
+        }
+
+        .cue-marker.selected:hover {
+            background: #d79921;
+        }
+
+        #cueSelectionRange {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(250, 189, 47, 0.25);
+            border: 1px solid #fabd2f;
+            pointer-events: none;
+            display: none;
+            z-index: 3;
+        }
+
+        .cue-btn-selected {
+            background-color: #d79921;
+            margin-top: 4px;
+        }
+
+        .cue-btn-selected:hover {
+            background-color: #fabd2f;
+            color: #1d2021;
+        }
+
+        .cue-btn-selected:disabled {
+            background-color: #504945;
+            color: #7c6f64;
+            cursor: not-allowed;
+        }
+
         /* In/Out point markers on timeline */
         .in-marker {
             position: absolute;
-            top: -2px;
+            top: 0;
             width: 4px;
-            height: 12px;
+            height: 100%;
             background-color: #90ee90;
             border-radius: 1px;
             transform: translateX(-50%);
@@ -647,9 +684,9 @@
 
         .out-marker {
             position: absolute;
-            top: -2px;
+            top: 0;
             width: 4px;
-            height: 12px;
+            height: 100%;
             background-color: #ff0000;
             border-radius: 1px;
             transform: translateX(-50%);
@@ -1384,6 +1421,7 @@
                     <div class="timeline-handle" id="timelineHandle"></div>
                     <div class="cue-markers" id="cueMarkers"></div>
                     <div class="inout-markers" id="inOutMarkers"></div>
+                    <div id="cueSelectionRange"></div>
                 </div>
                 <div class="timeline-time">
                     <span id="currentTime">00:00</span> / <span id="totalDuration">00:00</span>
@@ -1408,6 +1446,7 @@
             <div class="cue-point-controls">
                 <button id="recordCuePointBtn" class="cue-btn">Record Cue Point</button>
                 <button id="deleteAllCuesBtn" class="cue-btn cue-btn-danger" title="Delete all cue points for this clip">Delete All Cues</button>
+                <button id="deleteSelectedCuesBtn" class="cue-btn cue-btn-selected" disabled title="Delete selected cue points (Ctrl+click or Ctrl+drag to select)">Delete Selected (0)</button>
             </div>
 
             <div class="cue-point-navigation">
@@ -1417,7 +1456,7 @@
             </div>
 
             <div style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px; color: #888;">
-                💡 <strong>Tip:</strong> Double-click cue markers on timeline to delete
+                💡 <strong>Tip:</strong> Double-click a cue marker to delete it. Ctrl+drag timeline to range-select; Ctrl+click a marker to toggle selection.
             </div>
 
             <!-- Hidden In/Out Point controls (functionality via hotkeys only) -->

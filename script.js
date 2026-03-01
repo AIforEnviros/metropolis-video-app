@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const clipsMatrix = document.getElementById('clipsMatrix');
     const recordCuePointBtn = document.getElementById('recordCuePointBtn');
     const deleteAllCuesBtn = document.getElementById('deleteAllCuesBtn');
+    const deleteSelectedCuesBtn = document.getElementById('deleteSelectedCuesBtn');
     // const cuePointsList = document.getElementById('cuePointsList'); // REMOVED - list UI removed, cue points visible on timeline
     const restartClipBtn = document.getElementById('restartClipBtn');
     const prevCuePointBtn = document.getElementById('prevCuePointBtn');
@@ -139,6 +140,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let clipModes = tabClipModes[currentTab];
     let clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
     let clipInOutPoints = tabClipInOutPoints[currentTab];
+
+    // Cue point selection state (for Ctrl+drag range select and Ctrl+click toggle)
+    let selectedCuePointIds = new Set();
 
     // File browser state
     let currentFolderPath = '';
@@ -1159,6 +1163,10 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('=== SELECTING CLIP SLOT ===');
         console.log('Slot element:', clipSlot);
         console.log('Current tab:', currentTab);
+
+        // Clear cue point selection when switching clips
+        selectedCuePointIds.clear();
+        updateDeleteSelectedButton();
 
         // [BOUNCE MODE PRE-BUFFER] Clean up reverse video when switching clips
         if (selectedClipSlot) {
@@ -2693,6 +2701,23 @@ document.addEventListener('DOMContentLoaded', function() {
             // Only left click for dragging
             if (e.button !== 0) return;
 
+            // Ctrl+click: toggle this cue point's selection instead of dragging
+            if (e.ctrlKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                const cuePoint = clipCuePoints[clipNumber][cueIndex];
+                if (cuePoint) {
+                    if (selectedCuePointIds.has(cuePoint.id)) {
+                        selectedCuePointIds.delete(cuePoint.id);
+                    } else {
+                        selectedCuePointIds.add(cuePoint.id);
+                    }
+                    updateCueMarkersOnTimeline();
+                    updateDeleteSelectedButton();
+                }
+                return;
+            }
+
             e.preventDefault();
             e.stopPropagation(); // Prevent timeline click
 
@@ -2831,6 +2856,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Update cue point markers on timeline
     function updateCueMarkersOnTimeline() {
         if (!selectedClipSlot) {
+            selectedCuePointIds.clear();
+            updateDeleteSelectedButton();
             cueMarkers.innerHTML = '';
             return;
         }
@@ -2849,6 +2876,9 @@ document.addEventListener('DOMContentLoaded', function() {
         cuePoints.forEach((cuePoint, index) => {
             const marker = document.createElement('div');
             marker.className = 'cue-marker';
+            if (selectedCuePointIds.has(cuePoint.id)) {
+                marker.classList.add('selected');
+            }
             const position = (cuePoint.time / videoDuration) * 100;
             marker.style.left = `${position}%`;
             marker.title = `Cue ${index + 1}: ${formatTime(cuePoint.time)}`;
@@ -2865,8 +2895,78 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Update the "Delete Selected" button text and enabled state
+    function updateDeleteSelectedButton() {
+        if (!deleteSelectedCuesBtn) return;
+        const count = selectedCuePointIds.size;
+        deleteSelectedCuesBtn.textContent = `Delete Selected (${count})`;
+        deleteSelectedCuesBtn.disabled = count === 0;
+    }
+
+    // Handle Ctrl+drag on the timeline to range-select cue points
+    function startCueDragSelect(e) {
+        if (!selectedClipSlot || videoDuration === 0) return;
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const cuePoints = clipCuePoints[clipNumber] || [];
+        if (cuePoints.length === 0) return;
+
+        const selectionRange = document.getElementById('cueSelectionRange');
+        const trackRect = timelineTrack.getBoundingClientRect();
+        const startX = e.clientX - trackRect.left;
+        const startPct = Math.max(0, Math.min(1, startX / trackRect.width));
+
+        selectionRange.style.display = 'block';
+        selectionRange.style.left = `${startPct * 100}%`;
+        selectionRange.style.width = '0';
+
+        function onMouseMove(ev) {
+            const currentX = ev.clientX - trackRect.left;
+            const currentPct = Math.max(0, Math.min(1, currentX / trackRect.width));
+            const left = Math.min(startPct, currentPct);
+            const width = Math.abs(currentPct - startPct);
+            selectionRange.style.left = `${left * 100}%`;
+            selectionRange.style.width = `${width * 100}%`;
+        }
+
+        function onMouseUp(ev) {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            selectionRange.style.display = 'none';
+
+            const endX = ev.clientX - trackRect.left;
+            const endPct = Math.max(0, Math.min(1, endX / trackRect.width));
+
+            if (Math.abs(endPct - startPct) < 0.005) {
+                // Tiny drag treated as a click — clear all selections
+                selectedCuePointIds.clear();
+            } else {
+                // Select all cue points within the dragged time range (additive)
+                const startTime = Math.min(startPct, endPct) * videoDuration;
+                const endTime = Math.max(startPct, endPct) * videoDuration;
+                cuePoints.forEach(cp => {
+                    if (cp.time >= startTime && cp.time <= endTime) {
+                        selectedCuePointIds.add(cp.id);
+                    }
+                });
+            }
+
+            updateCueMarkersOnTimeline();
+            updateDeleteSelectedButton();
+        }
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    }
+
     // Handle timeline click to scrub
     function handleTimelineClick(event) {
+        // A plain (non-Ctrl) click clears any cue point selection
+        if (selectedCuePointIds.size > 0) {
+            selectedCuePointIds.clear();
+            updateCueMarkersOnTimeline();
+            updateDeleteSelectedButton();
+        }
+
         if (!video.src || videoDuration === 0) {
             return;
         }
@@ -3589,6 +3689,14 @@ document.addEventListener('DOMContentLoaded', function() {
             event.target.tagName === 'TEXTAREA' ||
             event.target.isContentEditable === true ||
             event.target.getAttribute('contenteditable') === 'true') {
+            return;
+        }
+
+        // Escape clears cue point selection
+        if (event.key === 'Escape' && selectedCuePointIds.size > 0) {
+            selectedCuePointIds.clear();
+            updateCueMarkersOnTimeline();
+            updateDeleteSelectedButton();
             return;
         }
 
@@ -4339,6 +4447,29 @@ document.addEventListener('DOMContentLoaded', function() {
     // Timeline event listeners
     timelineTrack.addEventListener('click', handleTimelineClick);
     timelineHandle.addEventListener('mousedown', handleTimelineDrag);
+
+    // Ctrl+mousedown on timeline: start cue range selection instead of scrubbing
+    timelineTrack.addEventListener('mousedown', function(e) {
+        if (!e.ctrlKey || e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        startCueDragSelect(e);
+    });
+
+    // Delete Selected Cues button
+    deleteSelectedCuesBtn.addEventListener('click', function() {
+        if (!selectedClipSlot || selectedCuePointIds.size === 0) return;
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const count = selectedCuePointIds.size;
+        if (confirm(`Delete ${count} selected cue point${count !== 1 ? 's' : ''}?`)) {
+            clipCuePoints[clipNumber] = (clipCuePoints[clipNumber] || [])
+                .filter(cp => !selectedCuePointIds.has(cp.id));
+            selectedCuePointIds.clear();
+            markSessionModified();
+            updateCueMarkersOnTimeline();
+            updateDeleteSelectedButton();
+        }
+    });
 
     // Speed control event listeners
     speedSlider.addEventListener('input', function() {
