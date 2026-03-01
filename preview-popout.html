@@ -30,11 +30,13 @@
             position: absolute;
             top: 0;
             left: 0;
+            will-change: transform;
+            transform: translateZ(0);
+            backface-visibility: hidden;
         }
 
-        #previewVideoReverse {
-            display: none;
-        }
+        #previewVideo        { opacity: 1; }
+        #previewVideoReverse { opacity: 0; }
     </style>
 </head>
 <body>
@@ -51,13 +53,18 @@
         videoReverse.muted = true;
         videoReverse.volume = 0;
 
+        let activeElement = 'forward'; // 'forward' | 'reverse'
+        function getActiveVideo() {
+            return activeElement === 'reverse' ? videoReverse : video;
+        }
+
         // Send time updates back to main window for timeline scrubber (throttled to ~10fps)
         let lastReportedTime = -1;
         let lastReportTimestamp = 0;
         function reportTimeUpdate() {
             const now = performance.now();
             if (now - lastReportTimestamp > 100) { // ~10fps throttle
-                const activeVideo = (videoReverse.style.display !== 'none') ? videoReverse : video;
+                const activeVideo = getActiveVideo();
                 if (!activeVideo.paused && activeVideo.currentTime !== lastReportedTime) {
                     lastReportedTime = activeVideo.currentTime;
                     lastReportTimestamp = now;
@@ -93,8 +100,9 @@
                 switch (command.type) {
                     case 'loadClip':
                         video.src = command.src;
-                        video.style.display = 'block';
-                        videoReverse.style.display = 'none';
+                        video.style.opacity = '1';
+                        videoReverse.style.opacity = '0';
+                        activeElement = 'forward';
                         if (command.reverseSrc) {
                             videoReverse.src = command.reverseSrc;
                         }
@@ -111,7 +119,7 @@
                         break;
 
                     case 'play':
-                        const activePlay = (videoReverse.style.display !== 'none') ? videoReverse : video;
+                        const activePlay = getActiveVideo();
                         activePlay.play().catch(e => console.error('Play error:', e));
                         break;
 
@@ -121,7 +129,7 @@
                         break;
 
                     case 'seek':
-                        const activeSeek = (videoReverse.style.display !== 'none') ? videoReverse : video;
+                        const activeSeek = getActiveVideo();
                         activeSeek.currentTime = command.time;
                         break;
 
@@ -132,8 +140,9 @@
 
                     case 'switchToForward':
                         videoReverse.pause();
-                        videoReverse.style.display = 'none';
-                        video.style.display = 'block';
+                        videoReverse.style.opacity = '0';
+                        video.style.opacity = '1';
+                        activeElement = 'forward';
                         if (command.currentTime !== undefined) {
                             video.currentTime = command.currentTime;
                         }
@@ -145,8 +154,9 @@
 
                     case 'switchToReverse':
                         video.pause();
-                        video.style.display = 'none';
-                        videoReverse.style.display = 'block';
+                        video.style.opacity = '0';
+                        videoReverse.style.opacity = '1';
+                        activeElement = 'reverse';
                         if (command.currentTime !== undefined) {
                             videoReverse.currentTime = command.currentTime;
                         }
@@ -169,11 +179,13 @@
                             videoReverse.src = command.reverseSrc;
                         }
                         if (command.activeElement === 'reverse') {
-                            video.style.display = 'none';
-                            videoReverse.style.display = 'block';
+                            video.style.opacity = '0';
+                            videoReverse.style.opacity = '1';
+                            activeElement = 'reverse';
                         } else {
-                            video.style.display = 'block';
-                            videoReverse.style.display = 'none';
+                            video.style.opacity = '1';
+                            videoReverse.style.opacity = '0';
+                            activeElement = 'forward';
                         }
                         const target = (command.activeElement === 'reverse') ? videoReverse : video;
                         target.addEventListener('loadeddata', function onLoad() {

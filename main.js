@@ -527,10 +527,9 @@ ipcMain.handle('get-current-midi-device', async () => {
 // ==============================================================
 
 // Enable hardware acceleration and GPU optimizations for smooth video playback
-app.commandLine.appendSwitch('disable-frame-rate-limit');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('enable-accelerated-video-decode');
 
 // ==============================================================
 // END HARDWARE ACCELERATION
