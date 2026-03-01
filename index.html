@@ -370,6 +370,15 @@
             cursor: not-allowed;
         }
 
+        .cue-btn-danger {
+            background-color: #cc241d;
+            margin-top: 6px;
+        }
+
+        .cue-btn-danger:hover {
+            background-color: #fb4934;
+        }
+
         /* In/Out point controls */
         .inout-point-controls {
             display: flex;
@@ -1397,6 +1406,7 @@
             <h3>Cue Point Controls</h3>
             <div class="cue-point-controls">
                 <button id="recordCuePointBtn" class="cue-btn">Record Cue Point</button>
+                <button id="deleteAllCuesBtn" class="cue-btn cue-btn-danger" title="Delete all cue points for this clip">Delete All Cues</button>
             </div>
 
             <div class="cue-point-navigation">

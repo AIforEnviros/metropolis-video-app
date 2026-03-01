@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const clipsMatrix = document.getElementById('clipsMatrix');
     const recordCuePointBtn = document.getElementById('recordCuePointBtn');
+    const deleteAllCuesBtn = document.getElementById('deleteAllCuesBtn');
     // const cuePointsList = document.getElementById('cuePointsList'); // REMOVED - list UI removed, cue points visible on timeline
     const restartClipBtn = document.getElementById('restartClipBtn');
     const prevCuePointBtn = document.getElementById('prevCuePointBtn');
@@ -4279,6 +4280,20 @@ document.addEventListener('DOMContentLoaded', function() {
     recordCuePointBtn.addEventListener('click', function() {
         console.log('Record cue point button clicked');
         recordCuePoint();
+    });
+
+    // Delete All Cues button
+    deleteAllCuesBtn.addEventListener('click', function() {
+        if (!selectedClipSlot) return;
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const count = (clipCuePoints[clipNumber] || []).length;
+        if (count === 0) return;
+        if (confirm(`Delete all ${count} cue point${count !== 1 ? 's' : ''} for this clip?`)) {
+            clipCuePoints[clipNumber] = [];
+            markSessionModified();
+            updateCueMarkersOnTimeline();
+            console.log(`Deleted all ${count} cue points for clip ${clipNumber}`);
+        }
     });
 
     // Restart Clip button
