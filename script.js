@@ -5166,6 +5166,7 @@ document.addEventListener('DOMContentLoaded', function() {
     expandPanelBtn.addEventListener('click', () => {
         rightPanelExpanded = !rightPanelExpanded;
         rightPanel.classList.toggle('fullscreen-expanded', rightPanelExpanded);
+        document.body.style.overflow = rightPanelExpanded ? 'hidden' : '';
         expandPanelBtn.textContent = rightPanelExpanded ? '\u27E9\u27E8 Collapse' : '\u27E8\u27E9 Expand';
         expandPanelBtn.classList.toggle('active', rightPanelExpanded);
     });

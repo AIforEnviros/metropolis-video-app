@@ -267,7 +267,7 @@
         /* Video: fixed height, doesn't shrink */
         .right-panel.fullscreen-expanded .video-container {
             flex: 0 0 auto;
-            height: 55vh;
+            height: 45vh;
             overflow: hidden;
         }
 
@@ -277,10 +277,11 @@
             object-fit: contain;
         }
 
-        /* Controls: take remaining space and scroll */
+        /* Controls: take remaining space and scroll, no x-overflow */
         .right-panel.fullscreen-expanded .right-panel-controls {
             flex: 1 1 0;
             overflow-y: auto;
+            overflow-x: hidden;
             display: flex;
             flex-direction: column;
             gap: 16px;
@@ -290,7 +291,13 @@
 
         /* Taller timeline track for easier cue editing */
         .right-panel.fullscreen-expanded .timeline-track {
-            height: 50px;
+            height: 40px;
+        }
+
+        /* Keep timeline x-scroll contained within its own box */
+        .right-panel.fullscreen-expanded .timeline-container {
+            overflow-x: auto;
+            overflow-y: hidden;
         }
 
         /* Normal mode: controls wrapper is transparent to flex layout */
