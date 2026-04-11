@@ -266,10 +266,15 @@
             box-sizing: border-box;
         }
 
+        /* Hide "Video Preview" heading in fullscreen — Collapse button makes context clear */
+        .right-panel.fullscreen-expanded > div:first-child > h3 {
+            display: none;
+        }
+
         /* Video: takes up most of the screen */
         .right-panel.fullscreen-expanded .video-container {
             flex: 0 0 auto;
-            height: 55vh;
+            height: 48vh;
             overflow: hidden;
         }
 
@@ -306,11 +311,25 @@
         }
 
         /* Hide non-essential sections in fullscreen cue-editing mode */
-        .right-panel.fullscreen-expanded .transport-controls,
-        .right-panel.fullscreen-expanded .right-panel-controls > h3:first-of-type,
         .right-panel.fullscreen-expanded .right-panel-controls > h3:last-of-type,
         .right-panel.fullscreen-expanded .speed-control,
         .right-panel.fullscreen-expanded .cue-tip-box {
+            display: none;
+        }
+
+        /* Slim timeline scrollbar without protruding end-cap buttons */
+        .right-panel.fullscreen-expanded .timeline-container::-webkit-scrollbar {
+            height: 6px;
+        }
+        .right-panel.fullscreen-expanded .timeline-container::-webkit-scrollbar-track {
+            background: #333;
+            border-radius: 3px;
+        }
+        .right-panel.fullscreen-expanded .timeline-container::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 3px;
+        }
+        .right-panel.fullscreen-expanded .timeline-container::-webkit-scrollbar-button {
             display: none;
         }
 
