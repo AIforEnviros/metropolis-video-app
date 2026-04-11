@@ -277,25 +277,37 @@
             object-fit: contain;
         }
 
-        /* Controls: take remaining space and scroll */
+        /* Controls: take remaining space, scrollable but no visible scrollbars */
         .right-panel.fullscreen-expanded .right-panel-controls {
             flex: 1 1 0;
-            overflow-y: auto;
+            overflow-y: scroll;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 12px;
             min-height: 0;
             padding-bottom: 16px;
+            scrollbar-width: none; /* Firefox */
+        }
+        .right-panel.fullscreen-expanded .right-panel-controls::-webkit-scrollbar {
+            display: none; /* Chrome/Electron */
         }
 
         /* Taller timeline track for easier cue editing */
         .right-panel.fullscreen-expanded .timeline-track {
             height: 40px;
+            overflow: visible;
         }
 
-        /* Give the timeline-container extra bottom padding so the handle isn't clipped */
+        /* Override the overflow-x:auto forcing overflow-y:auto — use clip instead */
         .right-panel.fullscreen-expanded .timeline-container {
-            padding-bottom: 30px;
+            overflow-x: auto;
+            overflow-y: clip;
+            padding-bottom: 24px;
+        }
+
+        /* Center the handle within the taller track */
+        .right-panel.fullscreen-expanded .timeline-handle {
+            top: calc(50% - 8px);
         }
 
         /* Normal mode: controls wrapper is transparent to flex layout */
