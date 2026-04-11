@@ -67,9 +67,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track current video playing state (actual video state)
     let currentVideoPlaying = false;
 
-    // Per-clip auto-play: reference pointer to current tab's auto-play map
-    let clipAutoPlay = tabClipAutoPlay[0];
-
     // Helper: returns true if a clip should auto-play (default true when not explicitly set)
     function isClipAutoPlay(clipNumber) {
         return tabClipAutoPlay[currentTab][clipNumber] !== false;
@@ -138,6 +135,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let clipSpeeds = tabClipSpeeds[currentTab];
     let clipNames = tabClipNames[currentTab];
     let clipModes = tabClipModes[currentTab];
+    let clipAutoPlay = tabClipAutoPlay[currentTab];
     let clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
     let clipInOutPoints = tabClipInOutPoints[currentTab];
 
