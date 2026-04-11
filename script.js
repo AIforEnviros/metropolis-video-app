@@ -48,7 +48,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveShortcutsBtn = document.getElementById('saveShortcutsBtn');
     const popoutBtn = document.getElementById('outputWindowBtn');
     const addTabBtn = document.getElementById('addTabBtn');
-    const autoPlayToggle = document.getElementById('autoPlayToggle');
     const clipContextMenu = document.getElementById('clipContextMenu');
 
     // Pop-out preview state
@@ -68,8 +67,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track current video playing state (actual video state)
     let currentVideoPlaying = false;
 
-    // Global auto-play enabled (affects all clips)
-    let globalAutoPlayEnabled = true; // true = clips auto-play, false = clips stay paused
+    // Per-clip auto-play: reference pointer to current tab's auto-play map
+    let clipAutoPlay = tabClipAutoPlay[0];
+
+    // Helper: returns true if a clip should auto-play (default true when not explicitly set)
+    function isClipAutoPlay(clipNumber) {
+        return tabClipAutoPlay[currentTab][clipNumber] !== false;
+    }
 
     // Track the currently selected clip
     let selectedClipSlot = null;
@@ -106,6 +110,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Modes: 'forward', 'loop', 'forward-stop', 'forward-next'
     const tabClipModes = {};
 
+    // Track per-clip auto-play setting (tabIndex -> { clipNumber -> bool })
+    // true (default) = clip plays immediately when selected; false = loads but stays paused
+    const tabClipAutoPlay = {};
+
     // Track current cue index for sequential navigation (tabIndex -> { clipNumber -> index })
     const tabClipCurrentCueIndex = {};
 
@@ -119,6 +127,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipSpeeds[i] = {};
         tabClipNames[i] = {};
         tabClipModes[i] = {};
+        tabClipAutoPlay[i] = {};
         tabClipCurrentCueIndex[i] = {};
         tabClipInOutPoints[i] = {};
     }
@@ -225,14 +234,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.6',
+            version: '1.7',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
             selectedClipSlot: selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null,
             currentFolderPath: currentFolderPath,
             globalPlayIntent: globalPlayIntent,
-            globalAutoPlayEnabled: globalAutoPlayEnabled,
             keyboardShortcuts: keyboardShortcuts,
             midiMappings: midiMappings,
             allTabs: allTabs,
@@ -244,6 +252,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 speeds: tabClipSpeeds,
                 clipNames: tabClipNames,
                 clipModes: tabClipModes,
+                clipAutoPlay: tabClipAutoPlay,
                 currentCueIndex: tabClipCurrentCueIndex,
                 inOutPoints: tabClipInOutPoints
             }
@@ -345,6 +354,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Restoring clip modes:', sessionData.tabs.clipModes);
                 Object.assign(tabClipModes, sessionData.tabs.clipModes);
             }
+            if (sessionData.tabs.clipAutoPlay) {
+                console.log('Restoring clip auto-play settings:', sessionData.tabs.clipAutoPlay);
+                Object.assign(tabClipAutoPlay, sessionData.tabs.clipAutoPlay);
+            }
             if (sessionData.tabs.currentCueIndex) {
                 console.log('Restoring current cue indices:', sessionData.tabs.currentCueIndex);
                 Object.assign(tabClipCurrentCueIndex, sessionData.tabs.currentCueIndex);
@@ -368,6 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clipSpeeds = tabClipSpeeds[currentTab];
             clipNames = tabClipNames[currentTab];
             clipModes = tabClipModes[currentTab];
+            clipAutoPlay = tabClipAutoPlay[currentTab];
             clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
             clipInOutPoints = tabClipInOutPoints[currentTab];
             console.log('Current tab video data:', clipVideos);
@@ -384,13 +398,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (sessionData.globalPlayIntent !== undefined) {
                 globalPlayIntent = sessionData.globalPlayIntent;
                 // updatePlayButtonState() removed - no global play/pause button
-            }
-
-            // Restore global auto-play setting
-            if (sessionData.globalAutoPlayEnabled !== undefined) {
-                globalAutoPlayEnabled = sessionData.globalAutoPlayEnabled;
-                autoPlayToggle.checked = globalAutoPlayEnabled;
-                console.log('Restored auto-play setting:', globalAutoPlayEnabled);
             }
 
             // Restore keyboard shortcuts
@@ -485,6 +492,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tabClipSpeeds[i] = {};
             tabClipNames[i] = {};
             tabClipModes[i] = {};
+            tabClipAutoPlay[i] = {};
             tabClipCurrentCueIndex[i] = {};
         }
 
@@ -494,6 +502,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipSpeeds = tabClipSpeeds[currentTab];
         clipNames = tabClipNames[currentTab];
         clipModes = tabClipModes[currentTab];
+        clipAutoPlay = tabClipAutoPlay[currentTab];
         clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
 
         // Clear UI
@@ -882,15 +891,20 @@ document.addEventListener('DOMContentLoaded', function() {
         clipContextMenu.style.left = left + 'px';
         clipContextMenu.style.top = top + 'px';
 
-        // Get current mode for this clip (default is 'forward-stop')
+        // Get current mode and auto-play state for this clip
         const currentMode = clipModes[clipNumber] || 'loop';
+        const autoPlayOn = isClipAutoPlay(clipNumber);
 
-        // Update active state for menu items
+        // Update active state for mode items and checked state for auto-play toggle
         const menuItems = clipContextMenu.querySelectorAll('.context-menu-item');
         menuItems.forEach(item => {
             const mode = item.dataset.mode;
+            const action = item.dataset.action;
             if (mode === currentMode) {
                 item.classList.add('active');
+            } else if (action === 'toggle-autoplay') {
+                // Show checkmark when auto-play is ON
+                item.classList.toggle('active', autoPlayOn);
             } else {
                 item.classList.remove('active');
             }
@@ -901,6 +915,18 @@ document.addEventListener('DOMContentLoaded', function() {
     function hideClipContextMenu() {
         clipContextMenu.style.display = 'none';
         contextMenuClipNumber = null;
+    }
+
+    // Toggle per-clip auto-play setting
+    function toggleClipAutoPlay(clipNumber) {
+        const current = isClipAutoPlay(clipNumber);
+        tabClipAutoPlay[currentTab][clipNumber] = !current;
+        markSessionModified();
+        console.log(`Clip ${clipNumber} auto-play: ${!current}`);
+
+        // Update visual indicator on the slot
+        const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
+        if (slot) updateSlotAppearance(slot, clipVideos[clipNumber]);
     }
 
     // Set playback mode for a clip
@@ -933,6 +959,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const sourceSpeed = clipSpeeds[sourceClipNumber] || 1.0;
         const sourceName = clipNames[sourceClipNumber];
         const sourceMode = clipModes[sourceClipNumber] || 'loop';
+        const sourceAutoPlay = tabClipAutoPlay[currentTab][sourceClipNumber];
 
         // Save target clip data (for swap)
         const targetVideo = clipVideos[targetClipNumber];
@@ -940,6 +967,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const targetSpeed = clipSpeeds[targetClipNumber] || 1.0;
         const targetName = clipNames[targetClipNumber];
         const targetMode = clipModes[targetClipNumber] || 'loop';
+        const targetAutoPlay = tabClipAutoPlay[currentTab][targetClipNumber];
 
         // Move source to target
         if (sourceVideo) {
@@ -948,12 +976,15 @@ document.addEventListener('DOMContentLoaded', function() {
             clipSpeeds[targetClipNumber] = sourceSpeed;
             if (sourceName) clipNames[targetClipNumber] = sourceName;
             clipModes[targetClipNumber] = sourceMode;
+            if (sourceAutoPlay !== undefined) tabClipAutoPlay[currentTab][targetClipNumber] = sourceAutoPlay;
+            else delete tabClipAutoPlay[currentTab][targetClipNumber];
         } else {
             delete clipVideos[targetClipNumber];
             delete clipCuePoints[targetClipNumber];
             delete clipSpeeds[targetClipNumber];
             delete clipNames[targetClipNumber];
             delete clipModes[targetClipNumber];
+            delete tabClipAutoPlay[currentTab][targetClipNumber];
         }
 
         // Move target to source (swap)
@@ -963,12 +994,15 @@ document.addEventListener('DOMContentLoaded', function() {
             clipSpeeds[sourceClipNumber] = targetSpeed;
             if (targetName) clipNames[sourceClipNumber] = targetName;
             clipModes[sourceClipNumber] = targetMode;
+            if (targetAutoPlay !== undefined) tabClipAutoPlay[currentTab][sourceClipNumber] = targetAutoPlay;
+            else delete tabClipAutoPlay[currentTab][sourceClipNumber];
         } else {
             delete clipVideos[sourceClipNumber];
             delete clipCuePoints[sourceClipNumber];
             delete clipSpeeds[sourceClipNumber];
             delete clipNames[sourceClipNumber];
             delete clipModes[sourceClipNumber];
+            delete tabClipAutoPlay[currentTab][sourceClipNumber];
         }
 
         // Update UI for both slots
@@ -1020,6 +1054,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Remove playback mode
         delete clipModes[clipNumber];
+
+        // Remove auto-play setting
+        delete tabClipAutoPlay[currentTab][clipNumber];
 
         // Update the clip slot UI
         const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
@@ -1150,8 +1187,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateTimeline();
                 console.log(`Starting from ${startTime > 0 ? 'In point' : 'beginning'}: ${formatTime(startTime)}`);
 
-                // Auto-play when clip is selected - only if global auto-play is enabled
-                if (globalAutoPlayEnabled) {
+                // Auto-play when clip is selected - only if per-clip auto-play is enabled
+                if (isClipAutoPlay(clipNumber)) {
                     globalPlayIntent = true;
                     if (previewPopoutOpen) {
                         // Route to pop-out - load clip there and play
@@ -1253,8 +1290,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const clipNumber = slot.dataset.clipNumber;
         const customName = clipNames[clipNumber] || `Clip ${clipNumber}`;
 
-        // Get mode setting
+        // Get mode and auto-play settings
         const clipMode = clipModes[clipNumber] || 'loop';
+        const autoPlayEnabled = isClipAutoPlay(clipNumber);
 
         // Mode icon mapping
         const modeIcons = {
@@ -1265,6 +1303,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         const modeIcon = modeIcons[clipMode] || '⏸';
+        const autoPlayBadge = autoPlayEnabled ? '' : '<span class="no-autoplay-badge" title="Auto-play off">⊘</span>';
 
         if (hasVideo) {
             slot.classList.add('has-video');
@@ -1285,7 +1324,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             slot.innerHTML = `
                 ${thumbnailHtml}
-                <div class="clip-mode-indicator" title="Playback Mode: ${clipMode}">${modeIcon}</div>
+                <div class="clip-mode-indicator" title="Playback Mode: ${clipMode}${autoPlayEnabled ? '' : ' | Auto-play: off'}">${modeIcon}${autoPlayBadge}</div>
                 <div class="clip-slot-content">
                     <div class="clip-slot-label" data-clip-number="${clipNumber}">${customName}</div>
                     <div class="clip-slot-filename">${videoData.name}</div>
@@ -1892,8 +1931,8 @@ document.addEventListener('DOMContentLoaded', function() {
         justNavigatedToCue = false;
         lastNavigatedCueIndex = -1;
 
-        // Restart - only auto-play if global auto-play is enabled
-        if (globalAutoPlayEnabled) {
+        // Restart - only auto-play if per-clip auto-play is enabled
+        if (isClipAutoPlay(clipNumber)) {
             globalPlayIntent = true;
             if (previewPopoutOpen) {
                 sendToPopout({ type: 'play' });
@@ -1969,8 +2008,8 @@ document.addEventListener('DOMContentLoaded', function() {
             lastNavigatedCueTime = 0;
             lastNavigatedCueIndex = -1;
 
-            // Auto-play only if enabled
-            if (globalAutoPlayEnabled) {
+            // Auto-play only if per-clip auto-play is enabled
+            if (isClipAutoPlay(clipNumber)) {
                 globalPlayIntent = true;
                 if (previewPopoutOpen) {
                     sendToPopout({ type: 'play' });
@@ -2010,8 +2049,8 @@ document.addEventListener('DOMContentLoaded', function() {
         lastNavigatedCueTime = targetCuePoint.time;
         lastNavigatedCueIndex = prevIndex;
 
-        // Pressing Q means "go back and play from previous cue" - only if auto-play enabled
-        if (globalAutoPlayEnabled) {
+        // Pressing Q means "go back and play from previous cue" - only if per-clip auto-play enabled
+        if (isClipAutoPlay(clipNumber)) {
             globalPlayIntent = true;
             if (previewPopoutOpen) {
                 sendToPopout({ type: 'play' });
@@ -2071,7 +2110,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateTimeline();
                 console.log(`[forward-stop] No cue points, looping to In Point: ${formatTime(inPoint)}`);
 
-                if (globalAutoPlayEnabled) {
+                if (isClipAutoPlay(clipNumber)) {
                     globalPlayIntent = true;
                     if (previewPopoutOpen) {
                         sendToPopout({ type: 'play' });
@@ -2102,7 +2141,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        if (currentCueIndex !== -1 && globalAutoPlayEnabled) {
+        if (currentCueIndex !== -1 && isClipAutoPlay(clipNumber)) {
             // We're AT a cue point AND auto-play is enabled
             // Check if this is the LAST cue point - if so, handle mode-specific behavior
             const isLastCuePoint = (currentCueIndex === cuePoints.length - 1);
@@ -2215,7 +2254,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     clipCurrentCueIndex[clipNumber] = -1;
                     console.log(`[forward-stop] At Out Point, looping to In Point: ${formatTime(inPoint)}`);
 
-                    if (globalAutoPlayEnabled) {
+                    if (isClipAutoPlay(clipNumber)) {
                         globalPlayIntent = true;
                         if (previewPopoutOpen) {
                             sendToPopout({ type: 'play' });
@@ -2244,7 +2283,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 clipCurrentCueIndex[clipNumber] = -1;
                 console.log(`[loop] At last cue, looping to In Point: ${formatTime(inPoint)}`);
 
-                if (globalAutoPlayEnabled) {
+                if (isClipAutoPlay(clipNumber)) {
                     globalPlayIntent = true;
                     if (previewPopoutOpen) {
                         sendToPopout({ type: 'play' });
@@ -2286,8 +2325,8 @@ document.addEventListener('DOMContentLoaded', function() {
         lastNavigatedCueTime = targetCuePoint.time;
         lastNavigatedCueIndex = targetIndex;
 
-        // Start playing - only if global auto-play is enabled
-        if (globalAutoPlayEnabled) {
+        // Start playing - only if per-clip auto-play is enabled
+        if (isClipAutoPlay(clipNumber)) {
             globalPlayIntent = true;
             if (previewPopoutOpen) {
                 sendToPopout({ type: 'play' });
@@ -2448,14 +2487,6 @@ document.addEventListener('DOMContentLoaded', function() {
         container.scrollLeft = Math.max(0, scrollPosition);
 
         console.log(`Timeline zoom set to ${zoomLevel}x`);
-    }
-
-    // Toggle global auto-play
-    function toggleGlobalAutoPlay() {
-        globalAutoPlayEnabled = !globalAutoPlayEnabled;
-        autoPlayToggle.checked = globalAutoPlayEnabled;
-        markSessionModified();
-        console.log(`Global auto-play ${globalAutoPlayEnabled ? 'enabled' : 'disabled'}`);
     }
 
     // Pause/Play video toggle
@@ -2869,6 +2900,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipSpeeds = tabClipSpeeds[currentTab];
         clipNames = tabClipNames[currentTab];
         clipModes = tabClipModes[currentTab];
+        clipAutoPlay = tabClipAutoPlay[currentTab];
         clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
         clipInOutPoints = tabClipInOutPoints[currentTab];
 
@@ -2904,6 +2936,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipSpeeds[newTabIndex] = {};
         tabClipNames[newTabIndex] = {};
         tabClipModes[newTabIndex] = {};
+        tabClipAutoPlay[newTabIndex] = {};
         tabClipCurrentCueIndex[newTabIndex] = {};
         tabClipInOutPoints[newTabIndex] = {};
 
@@ -4017,6 +4050,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (action === 'clear') {
                     clearClip(contextMenuClipNumber);
+                } else if (action === 'toggle-autoplay') {
+                    toggleClipAutoPlay(contextMenuClipNumber);
+                    // Don't close the menu — let user see the state change
+                    // Re-show to refresh the checkmark
+                    const currentMode = clipModes[contextMenuClipNumber] || 'loop';
+                    const autoPlayOn = isClipAutoPlay(contextMenuClipNumber);
+                    clipContextMenu.querySelectorAll('.context-menu-item').forEach(i => {
+                        if (i.dataset.action === 'toggle-autoplay') {
+                            i.classList.toggle('active', autoPlayOn);
+                        }
+                    });
+                    return; // Keep menu open
                 } else if (mode) {
                     setClipMode(contextMenuClipNumber, mode);
                 }
@@ -4107,12 +4152,6 @@ document.addEventListener('DOMContentLoaded', function() {
     clearInOutBtn.addEventListener('click', function() {
         console.log('Clear In/Out button clicked');
         clearInOutPoints();
-    });
-
-    // Auto-Play Toggle
-    autoPlayToggle.addEventListener('change', function() {
-        console.log('Auto-play toggle clicked');
-        toggleGlobalAutoPlay();
     });
 
     // Timeline event listeners

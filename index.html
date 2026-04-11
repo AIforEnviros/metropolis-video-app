@@ -1426,6 +1426,14 @@
             user-select: none;
         }
 
+        /* No-autoplay badge inside the mode indicator */
+        .no-autoplay-badge {
+            font-size: 11px;
+            margin-left: 2px;
+            opacity: 0.85;
+            color: #ff9944;
+        }
+
         /* Active Playback Indicator */
         .clip-slot.playing {
             animation: playingPulse 2s ease-in-out infinite;
@@ -1499,13 +1507,6 @@
                 <button class="tab-btn" data-tab="3"><span class="tab-btn-text">Tab 4</span><button class="remove-tab-btn" title="Remove tab">×</button></button>
                 <button class="tab-btn" data-tab="4"><span class="tab-btn-text">Tab 5</span><button class="remove-tab-btn" title="Remove tab">×</button></button>
                 <button class="add-tab-btn" id="addTabBtn" title="Add new tab">+</button>
-            </div>
-            <div class="autoplay-toggle-container">
-                <span class="autoplay-label">Auto-Play</span>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="autoPlayToggle" checked>
-                    <span class="toggle-slider"></span>
-                </label>
             </div>
         </div>
 
@@ -1656,6 +1657,12 @@
         <div class="context-menu-item" data-mode="forward-next">
             <span class="context-menu-icon">⏭</span>
             <span class="context-menu-label">Play Forward then Next Clip</span>
+            <span class="context-menu-check">✓</span>
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" data-action="toggle-autoplay">
+            <span class="context-menu-icon">▷</span>
+            <span class="context-menu-label">Auto-play on select</span>
             <span class="context-menu-check">✓</span>
         </div>
         <div class="context-menu-separator"></div>
