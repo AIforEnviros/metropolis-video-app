@@ -954,6 +954,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function setClipMode(clipNumber, mode) {
         const previousMode = clipModes[clipNumber];
         clipModes[clipNumber] = mode;
+
+        // Keep the video element in sync if this clip is currently loaded
+        if (selectedClipSlot && selectedClipSlot.dataset.clipNumber == clipNumber) {
+            video.loop = (mode === 'loop');
+        }
+
         markSessionModified();
         console.log(`Set clip ${clipNumber} to mode: ${mode}`);
 
@@ -1266,6 +1272,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 const inOut = clipInOutPoints[clipNumber];
                 const startTime = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
                 video.currentTime = startTime;
+                // Reset cue-detection timestamp so cues at the start of this clip aren't missed
+                // (stale value from the previous clip would cause crossedPast checks to fail)
+                lastTimeupdateTime = startTime;
                 // Update timeline immediately to show position
                 updateTimeline();
                 console.log(`Starting from ${startTime > 0 ? 'In point' : 'beginning'}: ${formatTime(startTime)}`);
@@ -4566,8 +4575,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
         switch (mode) {
             case 'loop':
-                // Loop mode - native loop handles this
-                console.log('Loop mode: Video looping');
+                // Always restart manually — 'ended' can fire even when video.loop=true in some
+                // Electron/Chromium versions, and we want to respect the In Point regardless.
+                {
+                    const loopInOut = clipInOutPoints[clipNumber];
+                    const loopInPoint = (loopInOut && loopInOut.inPoint !== undefined && loopInOut.inPoint !== null)
+                        ? loopInOut.inPoint : 0;
+                    video.currentTime = loopInPoint;
+                    if (globalPlayIntent) {
+                        video.play().catch(e => console.error('[loop] Error restarting video:', e));
+                    }
+                    console.log(`[loop] Restarting at ${loopInPoint.toFixed(2)}s`);
+                }
                 break;
 
             case 'forward-next':
