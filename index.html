@@ -299,9 +299,12 @@
             height: 40px;
         }
 
-        /* Generous padding so the handle circle is never clipped */
+        /* Generous padding so the handle circle is never clipped.
+           flex-shrink:0 prevents compression that causes overflow-y:auto
+           to add a vertical scrollbar at the right edge. */
         .right-panel.fullscreen-expanded .timeline-container {
             padding: 16px 10px 28px 10px;
+            flex-shrink: 0;
         }
 
 
