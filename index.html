@@ -280,7 +280,7 @@
         /* Controls: take remaining space, scrollable but no visible scrollbars */
         .right-panel.fullscreen-expanded .right-panel-controls {
             flex: 1 1 0;
-            overflow-y: scroll;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 12px;
@@ -289,7 +289,9 @@
             scrollbar-width: none; /* Firefox */
         }
         .right-panel.fullscreen-expanded .right-panel-controls::-webkit-scrollbar {
-            display: none; /* Chrome/Electron */
+            width: 0;
+            height: 0;
+            background: transparent;
         }
 
         /* Taller timeline track for easier cue editing */
