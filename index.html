@@ -16,6 +16,7 @@
         .main-container {
             display: grid;
             grid-template-columns: 1fr 360px;
+            transition: grid-template-columns 0.25s ease;
             grid-template-rows: auto auto 1fr;
             gap: 20px;
             max-width: 1600px;
@@ -251,6 +252,31 @@
             display: flex;
             flex-direction: column;
             gap: 20px;
+        }
+
+        .main-container.right-panel-expanded {
+            grid-template-columns: 1fr 650px;
+        }
+
+        .expand-panel-btn {
+            background: none;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #aaa;
+            font-size: 11px;
+            padding: 3px 8px;
+            cursor: pointer;
+            margin-left: auto;
+            transition: all 0.2s ease;
+        }
+        .expand-panel-btn:hover {
+            border-color: #0088ff;
+            color: #0088ff;
+        }
+        .expand-panel-btn.active {
+            border-color: #0088ff;
+            color: #0088ff;
+            background: rgba(0, 136, 255, 0.1);
         }
 
         .video-container {
@@ -1404,7 +1430,10 @@
         </div>
 
         <div class="right-panel">
-            <h3>Video Preview</h3>
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <h3 style="margin:0">Video Preview</h3>
+                <button id="expandPanelBtn" class="expand-panel-btn" title="Expand panel for cue editing">&#x27E8;&#x27E9; Expand</button>
+            </div>
             <div class="video-container">
                 <video id="videoPlayer" controls muted>
                     Your browser does not support the video tag.
