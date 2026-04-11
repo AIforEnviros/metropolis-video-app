@@ -295,17 +295,16 @@
         /* Taller timeline track for easier cue editing */
         .right-panel.fullscreen-expanded .timeline-track {
             height: 40px;
-            overflow: visible;
         }
 
-        /* Override the overflow-x:auto forcing overflow-y:auto — use clip instead */
+        /* Large padding so the handle circle never gets clipped by the container edges.
+           No overflow override — let the base overflow-x:auto / overflow-y:auto
+           auto-size the container to its content, which contains the handle. */
         .right-panel.fullscreen-expanded .timeline-container {
-            overflow-x: auto;
-            overflow-y: clip;
-            padding-bottom: 24px;
+            padding: 20px 10px 36px 10px;
         }
 
-        /* Center the handle within the taller track */
+        /* Center the handle vertically in the taller track */
         .right-panel.fullscreen-expanded .timeline-handle {
             top: calc(50% - 8px);
         }
