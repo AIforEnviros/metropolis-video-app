@@ -16,7 +16,6 @@
         .main-container {
             display: grid;
             grid-template-columns: 1fr 360px;
-            transition: grid-template-columns 0.25s ease;
             grid-template-rows: auto auto 1fr;
             gap: 20px;
             max-width: 1600px;
@@ -254,8 +253,19 @@
             gap: 20px;
         }
 
-        .main-container.right-panel-expanded {
-            grid-template-columns: 1fr 650px;
+        .right-panel.fullscreen-expanded {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1000;
+            border-radius: 0;
+            overflow-y: auto;
+        }
+
+        .right-panel.fullscreen-expanded .video-container video {
+            max-height: 70vh;
         }
 
         .expand-panel-btn {

@@ -5161,11 +5161,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Right panel expand toggle
     let rightPanelExpanded = false;
     const expandPanelBtn = document.getElementById('expandPanelBtn');
-    const mainContainer = document.querySelector('.main-container');
+    const rightPanel = document.querySelector('.right-panel');
 
     expandPanelBtn.addEventListener('click', () => {
         rightPanelExpanded = !rightPanelExpanded;
-        mainContainer.classList.toggle('right-panel-expanded', rightPanelExpanded);
+        rightPanel.classList.toggle('fullscreen-expanded', rightPanelExpanded);
         expandPanelBtn.textContent = rightPanelExpanded ? '\u27E9\u27E8 Collapse' : '\u27E8\u27E9 Expand';
         expandPanelBtn.classList.toggle('active', rightPanelExpanded);
     });
