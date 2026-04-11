@@ -1978,7 +1978,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const cuePoints = clipCuePoints[clipNumber] || [];
 
         if (cuePoints.length === 0) {
-            alert('No cue points to navigate to');
             return;
         }
 
