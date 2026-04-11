@@ -284,14 +284,18 @@
             object-fit: contain;
         }
 
-        /* Controls: fill remaining space, no scrollbar */
+        /* Controls: fill remaining space, mouse-wheel scrollable but no visible scrollbar */
         .right-panel.fullscreen-expanded .right-panel-controls {
             flex: 1 1 0;
-            overflow: hidden;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 8px;
             min-height: 0;
+            scrollbar-width: none;
+        }
+        .right-panel.fullscreen-expanded .right-panel-controls::-webkit-scrollbar {
+            width: 0;
         }
 
         /* Taller timeline track for easier cue editing */
@@ -320,9 +324,9 @@
             display: none;
         }
 
-        /* Slim timeline scrollbar without protruding end-cap buttons */
+        /* Taller timeline scrollbar — easier to grab with the mouse */
         .right-panel.fullscreen-expanded .timeline-container::-webkit-scrollbar {
-            height: 6px;
+            height: 14px;
         }
         .right-panel.fullscreen-expanded .timeline-container::-webkit-scrollbar-track {
             background: #333;
