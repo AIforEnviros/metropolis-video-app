@@ -277,11 +277,10 @@
             object-fit: contain;
         }
 
-        /* Controls: take remaining space and scroll, no x-overflow */
+        /* Controls: take remaining space and scroll */
         .right-panel.fullscreen-expanded .right-panel-controls {
             flex: 1 1 0;
             overflow-y: auto;
-            overflow-x: hidden;
             display: flex;
             flex-direction: column;
             gap: 16px;
@@ -294,10 +293,9 @@
             height: 40px;
         }
 
-        /* Keep timeline x-scroll contained within its own box */
+        /* Give the timeline-container extra bottom padding so the handle isn't clipped */
         .right-panel.fullscreen-expanded .timeline-container {
-            overflow-x: auto;
-            overflow-y: hidden;
+            padding-bottom: 30px;
         }
 
         /* Normal mode: controls wrapper is transparent to flex layout */
