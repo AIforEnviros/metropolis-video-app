@@ -258,16 +258,18 @@
             inset: 0;
             z-index: 1000;
             border-radius: 0;
+            padding: 12px;
+            gap: 8px;
             display: flex;
             flex-direction: column;
             overflow: hidden;
             box-sizing: border-box;
         }
 
-        /* Video: fixed height, doesn't shrink */
+        /* Video: takes up most of the screen */
         .right-panel.fullscreen-expanded .video-container {
             flex: 0 0 auto;
-            height: 45vh;
+            height: 55vh;
             overflow: hidden;
         }
 
@@ -277,21 +279,14 @@
             object-fit: contain;
         }
 
-        /* Controls: take remaining space, scrollable but no visible scrollbars */
+        /* Controls: fill remaining space, no scrollbar */
         .right-panel.fullscreen-expanded .right-panel-controls {
             flex: 1 1 0;
-            overflow-y: auto;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 8px;
             min-height: 0;
-            padding-bottom: 16px;
-            scrollbar-width: none; /* Firefox */
-        }
-        .right-panel.fullscreen-expanded .right-panel-controls::-webkit-scrollbar {
-            width: 0;
-            height: 0;
-            background: transparent;
         }
 
         /* Taller timeline track for easier cue editing */
@@ -299,16 +294,23 @@
             height: 40px;
         }
 
-        /* Large padding so the handle circle never gets clipped by the container edges.
-           No overflow override — let the base overflow-x:auto / overflow-y:auto
-           auto-size the container to its content, which contains the handle. */
+        /* Generous padding so the handle circle is never clipped */
         .right-panel.fullscreen-expanded .timeline-container {
-            padding: 20px 10px 36px 10px;
+            padding: 16px 10px 28px 10px;
         }
 
         /* Center the handle vertically in the taller track */
         .right-panel.fullscreen-expanded .timeline-handle {
             top: calc(50% - 8px);
+        }
+
+        /* Hide non-essential sections in fullscreen cue-editing mode */
+        .right-panel.fullscreen-expanded .transport-controls,
+        .right-panel.fullscreen-expanded .right-panel-controls > h3:first-of-type,
+        .right-panel.fullscreen-expanded .right-panel-controls > h3:last-of-type,
+        .right-panel.fullscreen-expanded .speed-control,
+        .right-panel.fullscreen-expanded .cue-tip-box {
+            display: none;
         }
 
         /* Normal mode: controls wrapper is transparent to flex layout */
@@ -1543,7 +1545,7 @@
                 <button id="nextCuePointBtn" class="cue-nav-btn" title="Next Cue Point">⏭</button>
             </div>
 
-            <div style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px; color: #888;">
+            <div class="cue-tip-box" style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px; color: #888;">
                 💡 <strong>Tip:</strong> Double-click a cue marker to delete it. Ctrl+drag timeline to range-select; Ctrl+click a marker to toggle selection.
             </div>
 
