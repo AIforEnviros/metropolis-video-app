@@ -228,6 +228,46 @@ ipcMain.handle('get-file-path', async (event, filePath) => {
   return { path: `file:///${filePath.replace(/\\/g, '/')}` };
 });
 
+// IPC: Collect media files into a destination folder (deduped by source path)
+ipcMain.handle('collect-media-files', async (event, sourcePaths, destFolder) => {
+  try {
+    await fs.mkdir(destFolder, { recursive: true });
+    const seen = new Set();
+    let copiedCount = 0;
+    for (const src of sourcePaths) {
+      if (seen.has(src)) continue;
+      seen.add(src);
+      const filename = path.basename(src);
+      const dest = path.join(destFolder, filename);
+      await fs.copyFile(src, dest);
+      copiedCount++;
+    }
+    return { success: true, copiedCount };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC: Open folder picker dialog
+ipcMain.handle('select-media-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Media Folder',
+    properties: ['openDirectory']
+  });
+  if (result.canceled) return { success: false };
+  return { success: true, folderPath: result.filePaths[0] };
+});
+
+// IPC: Check if a folder path exists on disk
+ipcMain.handle('check-folder-exists', async (event, folderPath) => {
+  try {
+    await fs.access(folderPath);
+    return { exists: true };
+  } catch {
+    return { exists: false };
+  }
+});
+
 // ==============================================================
 // FFMPEG VIDEO REVERSAL FUNCTIONALITY
 // ==============================================================

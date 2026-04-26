@@ -50,6 +50,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCurrentMIDIDevice: () => ipcRenderer.invoke('get-current-midi-device'),
   refreshMIDI: () => ipcRenderer.invoke('reinitialize-midi'),
 
+  // Collect All and Save / portable sessions
+  collectMediaFiles: (sourcePaths, destFolder) => ipcRenderer.invoke('collect-media-files', sourcePaths, destFolder),
+  selectMediaFolder: () => ipcRenderer.invoke('select-media-folder'),
+  checkFolderExists: (folderPath) => ipcRenderer.invoke('check-folder-exists', folderPath),
+
   // Listen for MIDI messages
   onMIDIMessage: (callback) => {
     ipcRenderer.on('midi-message', (event, message) => callback(message));

@@ -149,6 +149,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Session management state
     let currentSessionName = null;
+    let currentMediaFolder = null;
     let sessionModified = false;
 
     // Keyboard shortcuts configuration
@@ -232,12 +233,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.7',
+            version: '1.8',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
             selectedClipSlot: selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null,
             currentFolderPath: currentFolderPath,
+            mediaFolder: currentMediaFolder,
             globalPlayIntent: globalPlayIntent,
             keyboardShortcuts: keyboardShortcuts,
             midiMappings: midiMappings,
@@ -292,6 +294,78 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error saving session:', error);
             alert('Error saving session: ' + error.message);
         }
+    }
+
+    async function collectAllAndSave() {
+        if (!window.electronAPI || !window.electronAPI.collectMediaFiles) {
+            alert('Collect All & Save requires the Electron app.');
+            return;
+        }
+
+        // Gather all unique absolute file paths across all tabs/clips
+        const uniquePaths = new Set();
+        for (let tabIndex = 0; tabIndex < allTabs.length; tabIndex++) {
+            const tabVideos = tabClipVideos[tabIndex] || {};
+            Object.values(tabVideos).forEach(v => {
+                if (v && v.filePath) {
+                    const isFilenameOnly = !v.filePath.includes('\\') && !v.filePath.includes('/');
+                    if (!isFilenameOnly) uniquePaths.add(v.filePath);
+                }
+            });
+        }
+
+        if (uniquePaths.size === 0) {
+            alert('No video clips are loaded. Load some clips first.');
+            return;
+        }
+
+        // Pick destination folder
+        const folderResult = await window.electronAPI.selectMediaFolder();
+        if (!folderResult.success) return;
+        const destFolder = folderResult.folderPath;
+
+        // Copy files
+        const copyResult = await window.electronAPI.collectMediaFiles([...uniquePaths], destFolder);
+        if (!copyResult.success) {
+            alert('Error collecting files: ' + copyResult.error);
+            return;
+        }
+
+        // Rewrite all filePaths to filename-only
+        for (let tabIndex = 0; tabIndex < allTabs.length; tabIndex++) {
+            const tabVideos = tabClipVideos[tabIndex] || {};
+            Object.values(tabVideos).forEach(v => {
+                if (v && v.filePath) {
+                    const isFilenameOnly = !v.filePath.includes('\\') && !v.filePath.includes('/');
+                    if (!isFilenameOnly) {
+                        v.filePath = v.name;
+                    }
+                }
+            });
+        }
+
+        currentMediaFolder = destFolder;
+        sessionModified = true;
+
+        // Save session so the new paths + mediaFolder are persisted
+        await saveSession();
+
+        alert(`✓ ${copyResult.copiedCount} file(s) collected to:\n${destFolder}\n\nSession saved with portable paths.`);
+    }
+
+    async function setMediaFolder() {
+        if (!window.electronAPI || !window.electronAPI.selectMediaFolder) return;
+        const result = await window.electronAPI.selectMediaFolder();
+        if (!result.success) return;
+        currentMediaFolder = result.folderPath;
+        await reconnectVideosFromPaths();
+        sessionModified = true;
+        await saveSession();
+    }
+
+    async function promptForMediaFolder(message) {
+        const yes = confirm(message);
+        if (yes) await setMediaFolder();
     }
 
     function loadSessionFromFile(file) {
@@ -387,6 +461,15 @@ document.addEventListener('DOMContentLoaded', function() {
             // Restore folder path (keep for backward compatibility)
             if (sessionData.currentFolderPath) {
                 currentFolderPath = sessionData.currentFolderPath;
+            }
+
+            // Restore media folder for portable sessions
+            currentMediaFolder = sessionData.mediaFolder || null;
+            if (currentMediaFolder && window.electronAPI && window.electronAPI.checkFolderExists) {
+                const check = await window.electronAPI.checkFolderExists(currentMediaFolder);
+                if (!check.exists) {
+                    await promptForMediaFolder(`Media folder not found:\n${currentMediaFolder}\n\nLocate it now?`);
+                }
             }
 
             // Auto-reconnect videos using saved file paths
@@ -590,14 +673,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log(`Attempting to reconnect: ${videoData.name} from ${videoData.filePath}`);
 
                     try {
-                        // Create file URL for Electron
-                        const url = `file:///${videoData.filePath.replace(/\\/g, '/')}`;
+                        // Resolve path: if filePath is filename-only (portable session), use mediaFolder
+                        const isFilenameOnly = !videoData.filePath.includes('\\') && !videoData.filePath.includes('/');
+                        const resolvedPath = (isFilenameOnly && currentMediaFolder)
+                            ? currentMediaFolder + '\\' + videoData.filePath
+                            : videoData.filePath;
+
+                        const url = `file:///${resolvedPath.replace(/\\/g, '/')}`;
 
                         // Update the video data with URL
                         videoData.url = url;
                         videoData.file = {
                             name: videoData.name,
-                            path: videoData.filePath
+                            path: resolvedPath
                         };
 
                         console.log(`✓ Reconnected: ${videoData.name}`);
@@ -4196,6 +4284,9 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Save session button clicked');
         saveSession();
     });
+
+    document.getElementById('collectAllBtn').addEventListener('click', collectAllAndSave);
+    document.getElementById('setMediaFolderBtn').addEventListener('click', setMediaFolder);
 
     loadSessionBtn.addEventListener('click', async function() {
         console.log('Load session button clicked');
