@@ -4241,6 +4241,18 @@ document.addEventListener('DOMContentLoaded', function() {
         midiDeviceSelect.addEventListener('change', handleMIDIDeviceChange);
     }
 
+    // MIDI refresh button on home page — re-enumerates and auto-connects
+    const refreshMIDIBtn = document.getElementById('refreshMIDIBtn');
+    if (refreshMIDIBtn && window.electronAPI && window.electronAPI.refreshMIDI) {
+        refreshMIDIBtn.addEventListener('click', async () => {
+            refreshMIDIBtn.textContent = '↻';
+            await window.electronAPI.refreshMIDI();
+            refreshMIDIBtn.textContent = '⟳';
+            // Also refresh the dropdown in the shortcuts modal if it's open
+            loadMIDIDevices();
+        });
+    }
+
     // Helper function to update visual playing indicator
     function updatePlayingIndicator() {
         // Remove 'playing' class from all clips

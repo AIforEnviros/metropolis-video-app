@@ -1462,8 +1462,21 @@
             border-radius: 8px;
             padding: 8px 14px;
             min-width: 140px;
-            pointer-events: none;
             user-select: none;
+        }
+        .midi-refresh-btn {
+            background: none;
+            border: 1px solid #666;
+            color: #ccc;
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 14px;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .midi-refresh-btn:hover {
+            border-color: #fff;
+            color: #fff;
         }
 
         .midi-activity-icon {
@@ -1485,6 +1498,7 @@
     <div id="midiActivityIndicator" class="midi-activity-indicator">
         <div class="midi-activity-icon">🎹</div>
         <div id="midiActivityText" class="midi-activity-text">MIDI Ready</div>
+        <button id="refreshMIDIBtn" class="midi-refresh-btn" title="Reconnect MIDI device">⟳</button>
     </div>
 
     <div class="main-container">

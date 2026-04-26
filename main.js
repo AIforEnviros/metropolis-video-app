@@ -504,6 +504,22 @@ ipcMain.handle('get-midi-devices', async () => {
   return { success: true, devices: midiDevices };
 });
 
+// IPC: Reinitialize MIDI (close current port, re-enumerate, auto-connect to first device)
+ipcMain.handle('reinitialize-midi', async () => {
+  try {
+    if (midiInput) {
+      if (currentMIDIPort !== null) {
+        midiInput.closePort();
+      }
+      midiInput.removeAllListeners('message');
+      currentMIDIPort = null;
+    }
+  } catch (e) {
+    console.warn('MIDI cleanup warning:', e.message);
+  }
+  return initializeMIDI();
+});
+
 // IPC: Select MIDI device
 ipcMain.handle('select-midi-device', async (event, portIndex) => {
   return connectMIDIDevice(portIndex);

@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMIDIDevices: () => ipcRenderer.invoke('get-midi-devices'),
   selectMIDIDevice: (portIndex) => ipcRenderer.invoke('select-midi-device', portIndex),
   getCurrentMIDIDevice: () => ipcRenderer.invoke('get-current-midi-device'),
+  refreshMIDI: () => ipcRenderer.invoke('reinitialize-midi'),
 
   // Listen for MIDI messages
   onMIDIMessage: (callback) => {
