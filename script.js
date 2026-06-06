@@ -2495,6 +2495,28 @@ document.addEventListener('DOMContentLoaded', function() {
     // SCRUB MODE FUNCTIONS
     // ==============================================================
 
+    // Flash the scrub panel header to confirm a drum hit was received
+    function flashScrubHit() {
+        const header = document.getElementById('scrubPanelToggle');
+        if (!header) return;
+        header.style.background = 'rgba(255, 120, 0, 0.5)';
+        setTimeout(() => { header.style.background = ''; }, 120);
+    }
+
+    // Update the status line inside the scrub panel
+    function updateScrubStatus() {
+        const statusEl = document.getElementById('scrubStatusLine');
+        if (!statusEl) return;
+        if (!scrubModeActive) {
+            statusEl.textContent = '';
+            return;
+        }
+        const halfRange  = scrubConfig.range / 2;
+        const rangeStart = Math.max(0, scrubCentreTime - halfRange);
+        const rangeEnd   = scrubCentreTime + halfRange;
+        statusEl.textContent = `${formatTimeShort(rangeStart)} ←→ ${formatTimeShort(rangeEnd)}  @${scrubConfig.speed}x`;
+    }
+
     // Update the scrub panel UI to reflect current state
     function updateScrubUI() {
         const badge = document.getElementById('scrubActiveBadge');
@@ -2614,27 +2636,71 @@ document.addEventListener('DOMContentLoaded', function() {
         scrubSavedPlaybackRate = video.playbackRate;
         scrubSavedPlayState    = !video.paused;
 
-        // Lock centre to last-navigated cue point (or current position if none)
+        // Lock centre to last-navigated cue point (or current playhead position)
         scrubCentreTime = (lastNavigatedCueTime > 0) ? lastNavigatedCueTime : (video.currentTime || 0);
 
-        scrubModeActive    = true;
-        scrubMode          = mode;
+        const halfRange  = scrubConfig.range / 2;
+        const rangeStart = Math.max(0, scrubCentreTime - halfRange);
+
+        scrubModeActive     = true;
+        scrubMode           = mode;
         scrubOscillationDir = 1;
+
+        // Mode-specific startup position
+        switch (mode) {
+            case 'back-forward':
+                // Seek to range start, pause — drum hit will start each stroke
+                video.pause();
+                seekScrubPosition(rangeStart);
+                if (previewPopoutOpen) sendToPopout({ type: 'pause' });
+                break;
+
+            case 'pendulum':
+            case 'stutter':
+                // Seek to range start, begin playing immediately
+                seekScrubPosition(rangeStart);
+                video.playbackRate = scrubConfig.speed;
+                video.play().catch(() => {});
+                if (previewPopoutOpen) {
+                    sendToPopout({ type: 'seek', time: rangeStart });
+                    sendToPopout({ type: 'setSpeed', rate: scrubConfig.speed });
+                    sendToPopout({ type: 'play' });
+                }
+                break;
+
+            case 'drift':
+                // Seek to centre, play very slowly forward
+                seekScrubPosition(scrubCentreTime);
+                const driftRate = Math.max(0.1, scrubConfig.speed * 0.25);
+                video.playbackRate = driftRate;
+                video.play().catch(() => {});
+                if (previewPopoutOpen) {
+                    sendToPopout({ type: 'seek', time: scrubCentreTime });
+                    sendToPopout({ type: 'setSpeed', rate: driftRate });
+                    sendToPopout({ type: 'play' });
+                }
+                break;
+
+            case 'hold':
+                // Freeze at centre
+                seekScrubPosition(scrubCentreTime);
+                video.pause();
+                if (previewPopoutOpen) sendToPopout({ type: 'pause' });
+                break;
+
+            case 'manual-cc':
+                // No startup action — fader drives position
+                break;
+        }
 
         // Start the rAF loop for automated modes
         if (mode !== 'manual-cc' && mode !== 'hold') {
             startScrubAnimationLoop();
         }
 
-        // Hold mode: freeze at centre
-        if (mode === 'hold') {
-            seekScrubPosition(scrubCentreTime);
-            if (!video.paused) video.pause();
-            if (previewPopoutOpen) sendToPopout({ type: 'pause' });
-        }
-
         updateScrubUI();
-        console.log(`Scrub mode activated: ${mode}, centre=${formatTimeShort(scrubCentreTime)}`);
+        updateScrubStatus();
+        console.log(`Scrub mode activated: ${mode}, centre=${formatTimeShort(scrubCentreTime)}, rangeStart=${formatTimeShort(rangeStart)}`);
     }
 
     // Deactivate scrub mode and restore previous playback state
@@ -2654,6 +2720,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         updateScrubUI();
+        updateScrubStatus();
         console.log('Scrub mode deactivated');
     }
 
@@ -2686,24 +2753,14 @@ document.addEventListener('DOMContentLoaded', function() {
         switch (scrubMode) {
 
             case 'back-forward': {
-                // Forward stroke: ensure video is playing forward at scrub speed
-                if (video.paused) {
-                    video.playbackRate = scrubConfig.speed;
-                    video.play().catch(() => {});
-                    if (previewPopoutOpen) {
-                        sendToPopout({ type: 'setSpeed', rate: scrubConfig.speed });
-                        sendToPopout({ type: 'play' });
-                    }
-                } else if (video.playbackRate !== scrubConfig.speed) {
-                    video.playbackRate = scrubConfig.speed;
-                    if (previewPopoutOpen) sendToPopout({ type: 'setSpeed', rate: scrubConfig.speed });
-                }
-                // When range end is reached, the drum hit will seek back — nothing to do here
-                // Clamp if overshot
-                if (currentPos >= rangeEnd) {
-                    seekScrubPosition(rangeEnd);
+                // The drum hit owns play/seek. The rAF only watches the range end.
+                // When the video reaches rangeEnd, pause — stroke is complete.
+                // Do NOT auto-start if paused; that's the drum hit's job.
+                if (!video.paused && currentPos >= rangeEnd) {
                     video.pause();
+                    seekScrubPosition(rangeEnd);
                     if (previewPopoutOpen) sendToPopout({ type: 'pause' });
+                    console.log('Scrub B/F: reached range end, paused — awaiting drum hit');
                 }
                 break;
             }
@@ -2761,17 +2818,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
         switch (scrubMode) {
             case 'back-forward':
-                // Each drum hit: seek to range start, then video plays forward naturally
+                // Every drum hit: jump to range start and play — regardless of current state
                 seekScrubPosition(rangeStart);
-                if (video.paused) {
-                    video.playbackRate = scrubConfig.speed;
-                    video.play().catch(() => {});
-                    if (previewPopoutOpen) {
-                        sendToPopout({ type: 'setSpeed', rate: scrubConfig.speed });
-                        sendToPopout({ type: 'play' });
-                    }
+                video.playbackRate = scrubConfig.speed;
+                video.play().catch(e => console.warn('Scrub B/F play error:', e));
+                if (previewPopoutOpen) {
+                    sendToPopout({ type: 'setSpeed', rate: scrubConfig.speed });
+                    sendToPopout({ type: 'play' });
                 }
-                console.log(`Scrub back-forward: drum hit — seek to ${formatTimeShort(rangeStart)}`);
+                console.log(`Scrub B/F: hit → seek to ${formatTimeShort(rangeStart)}, playing at ${scrubConfig.speed}x`);
                 break;
 
             case 'pendulum':
@@ -3796,30 +3851,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleKeyboardShortcuts(event) {
-        // Don't trigger shortcuts if typing in an input field or editing content
-        if (event.target.tagName === 'INPUT' ||
-            event.target.tagName === 'TEXTAREA' ||
-            event.target.isContentEditable === true ||
-            event.target.getAttribute('contenteditable') === 'true') {
-            return;
-        }
+        // === SCRUB DRUM KEY — checked FIRST, before all guards ===
+        // Must come before the INPUT guard so range sliders don't block it.
+        // Also before scrubKeyLearnActive so a learn capture isn't confused with a hit.
 
-        // Escape clears cue point selection
-        if (event.key === 'Escape' && selectedCuePointIds.size > 0) {
-            selectedCuePointIds.clear();
-            updateCueMarkersOnTimeline();
-            updateDeleteSelectedButton();
-            return;
-        }
-
-        // Capture key for scrub drum pad keyboard learn
+        // Key learn capture
         if (scrubKeyLearnActive) {
             event.preventDefault();
             event.stopPropagation();
             let key = event.key;
             if (key === ' ') key = 'Space';
-            // Ignore bare modifier presses
-            if (['Shift', 'Control', 'Alt', 'Meta'].includes(key)) return;
+            if (['Shift', 'Control', 'Alt', 'Meta'].includes(key)) return; // ignore bare modifiers
             let shortcut = '';
             if (event.shiftKey) shortcut += 'Shift+';
             if (event.ctrlKey)  shortcut += 'Ctrl+';
@@ -3829,22 +3871,74 @@ document.addEventListener('DOMContentLoaded', function() {
             scrubConfig.drumPadKey = shortcut;
             scrubKeyLearnActive = false;
             const learnBtn = document.getElementById('scrubDrumKeyLearnBtn');
-            if (learnBtn) {
-                learnBtn.classList.remove('learning');
-                learnBtn.textContent = 'Learn';
-            }
+            if (learnBtn) { learnBtn.classList.remove('learning'); learnBtn.textContent = 'Learn'; }
             updateScrubMIDIDisplays();
             markSessionModified();
             console.log(`Scrub drum pad key mapped to: ${shortcut}`);
             return;
         }
 
-        // Scrub drum pad keyboard trigger
-        if (scrubModeActive && scrubConfig.drumPadKey && matchesShortcut(event, scrubConfig.drumPadKey)) {
-            event.preventDefault();
-            event.stopPropagation();
-            handleScrubDrumHit();
+        // Drum key trigger — works even when a slider/button has focus
+        if (scrubConfig.drumPadKey) {
+            // Build the pressed combo the same way matchesShortcut does, but without the
+            // shortcutsModalOpen guard (scrub should always respond)
+            const parsed = parseKeyboardShortcut(scrubConfig.drumPadKey);
+            let eventKey = event.key;
+            if (eventKey === ' ') eventKey = 'Space';
+            const keyMatches = (
+                eventKey === parsed.key &&
+                event.shiftKey === parsed.shift &&
+                event.ctrlKey  === parsed.ctrl  &&
+                event.altKey   === parsed.alt   &&
+                event.metaKey  === parsed.meta
+            );
+            if (keyMatches) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (scrubModeActive) {
+                    // Already active — trigger the hit
+                    flashScrubHit();
+                    handleScrubDrumHit();
+                } else {
+                    // Not active — activate the currently-selected mode then fire first hit
+                    const selectedBtn = document.querySelector('.scrub-mode-btn.selected');
+                    if (selectedBtn) {
+                        activateScrubMode(selectedBtn.dataset.mode);
+                        // Fire first hit immediately for back-forward
+                        if (selectedBtn.dataset.mode === 'back-forward') {
+                            flashScrubHit();
+                            handleScrubDrumHit();
+                        }
+                    } else {
+                        console.log('Scrub drum key pressed but no mode selected — click a mode button first');
+                    }
+                }
+                return;
+            }
+        }
+
+        // === Standard keyboard guard — after scrub drum key ===
+        // Don't trigger shortcuts if typing in an input field or editing content
+        if (event.target.tagName === 'INPUT' ||
+            event.target.tagName === 'TEXTAREA' ||
+            event.target.isContentEditable === true ||
+            event.target.getAttribute('contenteditable') === 'true') {
             return;
+        }
+
+        // Escape: deactivate scrub mode if active, otherwise clear cue selection
+        if (event.key === 'Escape') {
+            if (scrubModeActive) {
+                event.preventDefault();
+                deactivateScrubMode();
+                return;
+            }
+            if (selectedCuePointIds.size > 0) {
+                selectedCuePointIds.clear();
+                updateCueMarkersOnTimeline();
+                updateDeleteSelectedButton();
+                return;
+            }
         }
 
         // Check each shortcut

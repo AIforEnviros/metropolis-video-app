@@ -1824,6 +1824,9 @@
                         <span class="scrub-centre-display" id="scrubCentreDisplay">Centre: --:--</span>
                     </div>
 
+                    <!-- Live status line -->
+                    <div id="scrubStatusLine" style="font-size:11px; color:#f90; font-family:monospace; min-height:14px;"></div>
+
                     <!-- Range -->
                     <div class="scrub-param-row">
                         <label class="scrub-label">Range: <span id="scrubRangeValue">2.0s</span></label>
@@ -1854,11 +1857,12 @@
 
                     <!-- Drum Pad keyboard assignment -->
                     <div class="scrub-midi-row">
-                        <span class="scrub-label">Drum (Key):</span>
+                        <span class="scrub-label" title="Also activates scrub on first press">Drum (Key):</span>
                         <span class="scrub-midi-display" id="scrubDrumKeyDisplay">Not mapped</span>
                         <button class="scrub-midi-learn-btn" id="scrubDrumKeyLearnBtn">Learn</button>
                         <button class="scrub-midi-clear-btn" id="scrubDrumKeyClearBtn">✕</button>
                     </div>
+                    <div style="font-size:10px; color:#666; padding-left:2px;">↑ first press also activates · Esc deactivates</div>
 
                 </div>
             </div>
