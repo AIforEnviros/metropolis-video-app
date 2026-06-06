@@ -1090,6 +1090,187 @@
             box-shadow: 0 2px 6px rgba(0, 102, 204, 0.3);
         }
 
+        /* ===== SCRUB MODES PANEL ===== */
+        .scrub-panel {
+            background: rgba(255,255,255,0.04);
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #444;
+        }
+        .scrub-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            user-select: none;
+            background: rgba(255,255,255,0.06);
+        }
+        .scrub-panel-header h3 {
+            margin: 0;
+            font-size: 14px;
+            color: #ccc;
+        }
+        .scrub-collapse-btn {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-size: 11px;
+            padding: 0;
+        }
+        .scrub-panel-body {
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .scrub-panel-body.collapsed {
+            display: none;
+        }
+        .scrub-active-badge {
+            background: #cc3333;
+            color: white;
+            font-size: 9px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 3px;
+            letter-spacing: 0.5px;
+            animation: scrubPulse 1.2s ease-in-out infinite;
+        }
+        @keyframes scrubPulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.45; }
+        }
+        .scrub-mode-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .scrub-mode-btns {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .scrub-mode-btn {
+            background: #333;
+            color: #bbb;
+            border: 1px solid #555;
+            padding: 4px 9px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .scrub-mode-btn:hover {
+            background: #444;
+            color: white;
+        }
+        .scrub-mode-btn.selected {
+            background: #0055aa;
+            border-color: #0088ff;
+            color: white;
+        }
+        .scrub-activate-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .scrub-activate-btn {
+            background: #3a3a3a;
+            color: white;
+            border: 1px solid #666;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.15s ease;
+        }
+        .scrub-activate-btn:hover:not(:disabled) {
+            background: #4a4a4a;
+        }
+        .scrub-activate-btn.active {
+            background: #aa2222;
+            border-color: #ee4444;
+        }
+        .scrub-activate-btn.active:hover {
+            background: #cc3333;
+        }
+        .scrub-activate-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .scrub-centre-display {
+            font-size: 11px;
+            color: #888;
+            font-family: monospace;
+        }
+        .scrub-param-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .scrub-param-row input[type="range"] {
+            flex: 1;
+            height: 4px;
+            accent-color: #0088ff;
+        }
+        .scrub-label {
+            font-size: 11px;
+            color: #aaa;
+            min-width: 80px;
+            white-space: nowrap;
+        }
+        .scrub-midi-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .scrub-midi-display {
+            flex: 1;
+            font-size: 11px;
+            color: #888;
+            font-family: monospace;
+            background: #2a2a2a;
+            padding: 3px 6px;
+            border-radius: 3px;
+            border: 1px solid #444;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .scrub-midi-learn-btn {
+            background: #333;
+            color: #ccc;
+            border: 1px solid #555;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .scrub-midi-learn-btn:hover { background: #444; color: white; }
+        .scrub-midi-learn-btn.learning {
+            background: #cc6600;
+            color: white;
+            border-color: #ff8800;
+            animation: scrubPulse 0.8s ease-in-out infinite;
+        }
+        .scrub-midi-clear-btn {
+            background: #2a1a1a;
+            color: #cc4444;
+            border: 1px solid #553333;
+            padding: 3px 7px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .scrub-midi-clear-btn:hover { background: #3a2222; color: #ff5555; }
+        /* ===== END SCRUB MODES PANEL ===== */
+
         .session-controls {
             display: flex;
             justify-content: center;
@@ -1616,7 +1797,65 @@
                 </div>
             </div>
 
-            <!-- Cue points list removed - visible on timeline instead -->
+            <!-- SCRUB MODES PANEL -->
+            <div class="scrub-panel" id="scrubPanel">
+                <div class="scrub-panel-header" id="scrubPanelToggle">
+                    <h3>Scrub Modes</h3>
+                    <span class="scrub-active-badge" id="scrubActiveBadge" style="display:none;">ACTIVE</span>
+                    <button class="scrub-collapse-btn" id="scrubCollapseChevron">▼</button>
+                </div>
+                <div class="scrub-panel-body" id="scrubPanelBody">
+
+                    <!-- Mode selector -->
+                    <div class="scrub-mode-row">
+                        <div class="scrub-mode-btns">
+                            <button class="scrub-mode-btn" data-mode="manual-cc" title="CC cross-fader controls playhead position within range">Fader</button>
+                            <button class="scrub-mode-btn" data-mode="back-forward" title="Each drum hit: seek to range start, plays forward">B/F</button>
+                            <button class="scrub-mode-btn" data-mode="pendulum" title="Auto-oscillates forward/back continuously">Pend.</button>
+                            <button class="scrub-mode-btn" data-mode="stutter" title="Rapid stutter effect — use short range + fast speed">Stutter</button>
+                            <button class="scrub-mode-btn" data-mode="drift" title="Slow drift forward from cue point">Drift</button>
+                            <button class="scrub-mode-btn" data-mode="hold" title="Freeze playhead at cue centre">Hold</button>
+                        </div>
+                    </div>
+
+                    <!-- Activate / Deactivate -->
+                    <div class="scrub-activate-row">
+                        <button class="scrub-activate-btn" id="scrubActivateBtn" disabled>Activate Scrub</button>
+                        <span class="scrub-centre-display" id="scrubCentreDisplay">Centre: --:--</span>
+                    </div>
+
+                    <!-- Range -->
+                    <div class="scrub-param-row">
+                        <label class="scrub-label">Range: <span id="scrubRangeValue">2.0s</span></label>
+                        <input type="range" id="scrubRangeSlider" min="0.5" max="10" step="0.1" value="2.0">
+                    </div>
+
+                    <!-- Speed -->
+                    <div class="scrub-param-row">
+                        <label class="scrub-label">Speed: <span id="scrubSpeedValue">1.0x</span></label>
+                        <input type="range" id="scrubSpeedSlider" min="0.1" max="4" step="0.1" value="1.0">
+                    </div>
+
+                    <!-- CC Fader MIDI assignment -->
+                    <div class="scrub-midi-row">
+                        <span class="scrub-label">CC Fader:</span>
+                        <span class="scrub-midi-display" id="scrubCCDisplay">Not mapped</span>
+                        <button class="scrub-midi-learn-btn" id="scrubCCLearnBtn">Learn</button>
+                        <button class="scrub-midi-clear-btn" id="scrubCCClearBtn">✕</button>
+                    </div>
+
+                    <!-- Drum Pad MIDI assignment -->
+                    <div class="scrub-midi-row">
+                        <span class="scrub-label">Drum Pad:</span>
+                        <span class="scrub-midi-display" id="scrubDrumDisplay">Not mapped</span>
+                        <button class="scrub-midi-learn-btn" id="scrubDrumLearnBtn">Learn</button>
+                        <button class="scrub-midi-clear-btn" id="scrubDrumClearBtn">✕</button>
+                    </div>
+
+                </div>
+            </div>
+            <!-- END SCRUB MODES PANEL -->
+
             </div><!-- /.right-panel-controls -->
         </div>
     </div>
