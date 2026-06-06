@@ -259,6 +259,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 speed: scrubConfig.speed,
                 ccController: scrubConfig.ccController,
                 drumPadNote: scrubConfig.drumPadNote,
+                drumPadKey: scrubConfig.drumPadKey,
                 lastMode: scrubMode || null
             }
         };
@@ -448,10 +449,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Restore scrub settings (v1.8+)
             if (sessionData.scrubSettings) {
-                scrubConfig.range       = sessionData.scrubSettings.range       ?? 2.0;
-                scrubConfig.speed       = sessionData.scrubSettings.speed       ?? 1.0;
+                scrubConfig.range        = sessionData.scrubSettings.range        ?? 2.0;
+                scrubConfig.speed        = sessionData.scrubSettings.speed        ?? 1.0;
                 scrubConfig.ccController = sessionData.scrubSettings.ccController || null;
                 scrubConfig.drumPadNote  = sessionData.scrubSettings.drumPadNote  || null;
+                scrubConfig.drumPadKey   = sessionData.scrubSettings.drumPadKey   || null;
                 // Restore last-used mode to UI but do NOT activate scrub on load
                 if (sessionData.scrubSettings.lastMode) {
                     selectScrubModeUI(sessionData.scrubSettings.lastMode);
@@ -2453,8 +2455,12 @@ document.addEventListener('DOMContentLoaded', function() {
         range: 2.0,          // total seconds around centre
         speed: 1.0,          // playbackRate multiplier used by automated modes
         ccController: null,  // { type:'cc', channel, controller } or null
-        drumPadNote: null    // { type:'noteon', channel, note } or null
+        drumPadNote: null,   // { type:'noteon', channel, note } or null
+        drumPadKey: null     // keyboard shortcut string e.g. 'Space', 'x', 'Shift+x'
     };
+
+    // Whether we're currently capturing a keyboard key for the drum pad
+    let scrubKeyLearnActive = false;
 
     // CC fader: last received value (0-127), used when switching to manual-cc mode
     let scrubCCLastValue = 63;
@@ -2522,10 +2528,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (activateBtn) activateBtn.disabled = !mode;
     }
 
-    // Update the CC fader and drum pad MIDI assignment displays
+    // Update the CC fader, drum pad MIDI and drum pad keyboard displays
     function updateScrubMIDIDisplays() {
-        const ccDisplay   = document.getElementById('scrubCCDisplay');
-        const drumDisplay = document.getElementById('scrubDrumDisplay');
+        const ccDisplay      = document.getElementById('scrubCCDisplay');
+        const drumDisplay    = document.getElementById('scrubDrumDisplay');
+        const drumKeyDisplay = document.getElementById('scrubDrumKeyDisplay');
         if (ccDisplay) {
             ccDisplay.textContent = scrubConfig.ccController
                 ? formatMIDIMapping(scrubConfig.ccController)
@@ -2537,6 +2544,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 ? formatMIDIMapping(scrubConfig.drumPadNote)
                 : 'Not mapped';
             drumDisplay.style.color = scrubConfig.drumPadNote ? '#90ee90' : '#888';
+        }
+        if (drumKeyDisplay) {
+            drumKeyDisplay.textContent = scrubConfig.drumPadKey || 'Not mapped';
+            drumKeyDisplay.style.color = scrubConfig.drumPadKey ? '#90ee90' : '#888';
         }
     }
 
@@ -3801,6 +3812,41 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // Capture key for scrub drum pad keyboard learn
+        if (scrubKeyLearnActive) {
+            event.preventDefault();
+            event.stopPropagation();
+            let key = event.key;
+            if (key === ' ') key = 'Space';
+            // Ignore bare modifier presses
+            if (['Shift', 'Control', 'Alt', 'Meta'].includes(key)) return;
+            let shortcut = '';
+            if (event.shiftKey) shortcut += 'Shift+';
+            if (event.ctrlKey)  shortcut += 'Ctrl+';
+            if (event.altKey)   shortcut += 'Alt+';
+            if (event.metaKey)  shortcut += 'Meta+';
+            shortcut += key;
+            scrubConfig.drumPadKey = shortcut;
+            scrubKeyLearnActive = false;
+            const learnBtn = document.getElementById('scrubDrumKeyLearnBtn');
+            if (learnBtn) {
+                learnBtn.classList.remove('learning');
+                learnBtn.textContent = 'Learn';
+            }
+            updateScrubMIDIDisplays();
+            markSessionModified();
+            console.log(`Scrub drum pad key mapped to: ${shortcut}`);
+            return;
+        }
+
+        // Scrub drum pad keyboard trigger
+        if (scrubModeActive && scrubConfig.drumPadKey && matchesShortcut(event, scrubConfig.drumPadKey)) {
+            event.preventDefault();
+            event.stopPropagation();
+            handleScrubDrumHit();
+            return;
+        }
+
         // Check each shortcut
         for (const [action, shortcut] of Object.entries(keyboardShortcuts)) {
             if (matchesShortcut(event, shortcut)) {
@@ -4746,6 +4792,32 @@ document.addEventListener('DOMContentLoaded', function() {
     if (scrubDrumClearBtn) {
         scrubDrumClearBtn.addEventListener('click', function() {
             scrubConfig.drumPadNote = null;
+            updateScrubMIDIDisplays();
+            markSessionModified();
+        });
+    }
+
+    // Drum pad keyboard learn / clear
+    const scrubDrumKeyLearnBtn = document.getElementById('scrubDrumKeyLearnBtn');
+    if (scrubDrumKeyLearnBtn) {
+        scrubDrumKeyLearnBtn.addEventListener('click', function() {
+            // Cancel any active MIDI learn first
+            if (midiLearnActive) {
+                exitScrubMIDILearn();
+            }
+            scrubKeyLearnActive = true;
+            this.classList.add('learning');
+            this.textContent = 'Press key...';
+            console.log('Scrub key learn started — waiting for keypress');
+        });
+    }
+    const scrubDrumKeyClearBtn = document.getElementById('scrubDrumKeyClearBtn');
+    if (scrubDrumKeyClearBtn) {
+        scrubDrumKeyClearBtn.addEventListener('click', function() {
+            scrubConfig.drumPadKey = null;
+            scrubKeyLearnActive = false;
+            const learnBtn = document.getElementById('scrubDrumKeyLearnBtn');
+            if (learnBtn) { learnBtn.classList.remove('learning'); learnBtn.textContent = 'Learn'; }
             updateScrubMIDIDisplays();
             markSessionModified();
         });
