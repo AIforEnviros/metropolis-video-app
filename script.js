@@ -2525,8 +2525,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Automated-mode directions (+1 forward, -1 backward).
     let scrubOscillationDir = 1;
-    let scrubBackForwardNextDirection = 1;
+    // Last B/F direction. It starts at -1 so the first trigger toggles forward.
+    let scrubBackForwardDirection = -1;
     let scrubBackForwardActiveDirection = 0;
+    let scrubBackForwardAwaitingReverseStart = false;
 
     // Timer handle for the scrub control loop. requestAnimationFrame can be
     // suspended when another Electron window owns focus.
@@ -2583,10 +2585,15 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         const { start, end } = getScrubBounds();
-        const nextStroke = scrubMode === 'back-forward'
-            ? `  Next: ${scrubBackForwardNextDirection > 0 ? 'Forward' : 'Back'}`
-            : '';
-        statusEl.textContent = `${formatTimeShort(start)} - ${formatTimeShort(end)}  @${scrubConfig.speed}x${nextStroke}`;
+        let backForwardState = '';
+        if (scrubMode === 'back-forward') {
+            if (scrubBackForwardActiveDirection !== 0) {
+                backForwardState = `  Playing: ${scrubBackForwardActiveDirection > 0 ? 'Forward' : 'Back'}`;
+            } else {
+                backForwardState = `  Next: ${scrubBackForwardDirection < 0 ? 'Forward' : 'Back'}`;
+            }
+        }
+        statusEl.textContent = `${formatTimeShort(start)} - ${formatTimeShort(end)}  @${scrubConfig.speed}x${backForwardState}`;
     }
 
     // Update the scrub panel UI to reflect current state
@@ -2800,8 +2807,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 pauseScrubOutput();
                 setScrubPlaybackRate(scrubConfig.speed);
                 seekScrubPosition(start);
-                scrubBackForwardNextDirection = 1;
+                scrubBackForwardDirection = -1;
                 scrubBackForwardActiveDirection = 0;
+                scrubBackForwardAwaitingReverseStart = false;
                 startScrubAnimationLoop();
                 break;
             case 'pendulum':
@@ -2915,6 +2923,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 pauseScrubOutput();
                 seekScrubPosition(end);
                 scrubBackForwardActiveDirection = 0;
+                updateScrubStatus();
             } else if (scrubBackForwardActiveDirection < 0) {
                 scrubReverseElapsedSeconds += elapsedSeconds;
                 const seekIntervalElapsed = timestamp - scrubLastDecoderSeekTimestamp >= SCRUB_PENDULUM_SEEK_INTERVAL_MS;
@@ -2930,6 +2939,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         pauseScrubOutput();
                         seekScrubPosition(start);
                         scrubBackForwardActiveDirection = 0;
+                        updateScrubStatus();
                     } else {
                         seekScrubPosition(nextPosition);
                     }
@@ -2972,17 +2982,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
         switch (scrubMode) {
             case 'back-forward': {
-                const strokeDirection = scrubBackForwardNextDirection;
-                scrubBackForwardNextDirection *= -1;
-                scrubBackForwardActiveDirection = strokeDirection;
+                scrubBackForwardDirection *= -1;
+                scrubBackForwardActiveDirection = scrubBackForwardDirection;
+                scrubBackForwardAwaitingReverseStart = false;
 
-                if (strokeDirection > 0) {
-                    seekScrubPosition(start);
+                if (scrubBackForwardDirection > 0) {
                     setScrubPlaybackRate(scrubConfig.speed);
                     playScrubOutput();
+                } else if (previewPopoutOpen) {
+                    // Pause in the output window and wait for its exact current
+                    // position before beginning decoder-paced reverse motion.
+                    scrubEffectRunning = false;
+                    scrubBackForwardAwaitingReverseStart = true;
+                    sendToPopout({ type: 'pauseAndReport', reason: 'back-forward-reverse' });
                 } else {
                     pauseScrubOutput();
-                    seekScrubPosition(end);
+                    scrubVirtualPosition = video.currentTime;
                     scrubReverseElapsedSeconds = 0;
                     scrubLastDecoderSeekTimestamp = performance.now();
                     scrubEffectRunning = true;
@@ -5483,6 +5498,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // Listen for time updates from pop-out to update timeline scrubber
     if (window.electronAPI && window.electronAPI.onPreviewUpdate) {
         window.electronAPI.onPreviewUpdate((update) => {
+            if (update.type === 'paused') {
+                if (update.currentTime !== undefined) {
+                    popoutCurrentTime = update.currentTime;
+                    scrubVirtualPosition = update.currentTime;
+                }
+                if (scrubModeActive && scrubMode === 'back-forward' &&
+                    scrubBackForwardActiveDirection < 0 &&
+                    scrubBackForwardAwaitingReverseStart &&
+                    update.reason === 'back-forward-reverse') {
+                    scrubBackForwardAwaitingReverseStart = false;
+                    scrubReverseElapsedSeconds = 0;
+                    scrubLastDecoderSeekTimestamp = performance.now();
+                    scrubEffectRunning = true;
+                }
+                updateTimeline();
+                return;
+            }
             if (update.type === 'seeked') {
                 scrubPopoutSeekPending = false;
                 if (update.currentTime !== undefined) popoutCurrentTime = update.currentTime;

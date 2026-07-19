@@ -175,9 +175,25 @@ async function run() {
   const backwardCompletedSeeks = await window.webContents.executeJavaScript(`window.__backwardStrokeSeeked`);
   assert.ok(backwardCompletedSeeks >= 2, `backward stroke decoded ${backwardCompletedSeeks} frames`);
 
+  // A trigger during motion reverses at the current frame rather than jumping
+  // to the opposite boundary.
+  await setSlider(window, '#scrubSpeedSlider', 1);
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
-  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 2.2`, 'third trigger returns forward', 3000);
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 1.9 && document.getElementById('videoPlayer').currentTime < 2.1`, 'forward mid-stroke position', 3000);
+  const localTurnTime = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
+  await window.webContents.executeJavaScript(`(() => {
+    window.__localMidReverseMax = document.getElementById('videoPlayer').currentTime;
+    document.getElementById('videoPlayer').addEventListener('seeked', () => {
+      window.__localMidReverseMax = Math.max(window.__localMidReverseMax, document.getElementById('videoPlayer').currentTime);
+    });
+  })()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime <= 1.8`, 'mid-stroke direction reversal', 3000);
+  const localMidReverseMax = await window.webContents.executeJavaScript(`window.__localMidReverseMax`);
+  assert.ok(localMidReverseMax <= localTurnTime + 0.08, `local reversal jumped from ${localTurnTime} to ${localMidReverseMax}`);
+  await setSlider(window, '#scrubSpeedSlider', 4);
 
   // Escape must restore the original paused state and rate.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
@@ -335,6 +351,21 @@ async function run() {
   await waitFor(previewWindow, `window.__popoutBackwardSeeked >= 2`, 'pop-out backward decoded frames', 3000);
   const popoutBackwardSeeks = await previewWindow.webContents.executeJavaScript(`window.__popoutBackwardSeeked`);
   assert.ok(popoutBackwardSeeks >= 2, `pop-out backward stroke decoded ${popoutBackwardSeeks} frames`);
+
+  await setSlider(window, '#scrubSpeedSlider', 1);
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  await waitFor(previewWindow, `!document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime >= 1.9 && document.getElementById('previewVideo').currentTime < 2.1`, 'pop-out forward mid-stroke position', 3000);
+  const popoutTurnTime = await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').currentTime`);
+  await previewWindow.webContents.executeJavaScript(`(() => {
+    window.__popoutMidReverseMax = document.getElementById('previewVideo').currentTime;
+    document.getElementById('previewVideo').addEventListener('seeked', () => {
+      window.__popoutMidReverseMax = Math.max(window.__popoutMidReverseMax, document.getElementById('previewVideo').currentTime);
+    });
+  })()`);
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime <= 1.8`, 'pop-out mid-stroke direction reversal', 3000);
+  const popoutMidReverseMax = await previewWindow.webContents.executeJavaScript(`window.__popoutMidReverseMax`);
+  assert.ok(popoutMidReverseMax <= popoutTurnTime + 0.08, `pop-out reversal jumped from ${popoutTurnTime} to ${popoutMidReverseMax}`);
 
   const relevantErrors = rendererErrors.filter(message => !message.includes('MIDI') && !message.includes('favicon'));
   assert.deepEqual(relevantErrors, []);

@@ -142,6 +142,19 @@
                         videoReverse.pause();
                         break;
 
+                    case 'pauseAndReport': {
+                        const activePause = getActiveVideo();
+                        video.pause();
+                        videoReverse.pause();
+                        window.electronAPI.sendPreviewUpdate({
+                            type: 'paused',
+                            reason: command.reason,
+                            currentTime: activePause.currentTime,
+                            duration: activePause.duration
+                        });
+                        break;
+                    }
+
                     case 'seek':
                         const activeSeek = getActiveVideo();
                         activeSeek.currentTime = command.time;
