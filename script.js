@@ -260,7 +260,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 ccController: scrubConfig.ccController,
                 drumPadNote: scrubConfig.drumPadNote,
                 drumPadKey: scrubConfig.drumPadKey,
-                lastMode: scrubMode || null
+                lastMode: selectedScrubMode || null
             }
         };
     }
@@ -1149,6 +1149,12 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('=== SELECTING CLIP SLOT ===');
         console.log('Slot element:', clipSlot);
         console.log('Current tab:', currentTab);
+
+        if (scrubModeActive) deactivateScrubMode();
+        lastNavigatedCueClipNumber = null;
+        lastNavigatedCueTab = null;
+        lastNavigatedCueIndex = -1;
+        lastNavigatedCueTime = 0;
 
         // Clear cue point selection when switching clips
         selectedCuePointIds.clear();
@@ -2039,6 +2045,8 @@ document.addEventListener('DOMContentLoaded', function() {
             justNavigatedToCue = true;
             lastNavigatedCueTime = 0;
             lastNavigatedCueIndex = -1;
+            lastNavigatedCueClipNumber = clipNumber;
+            lastNavigatedCueTab = currentTab;
 
             // Auto-play only if per-clip auto-play is enabled
             if (isClipAutoPlay(clipNumber)) {
@@ -2080,12 +2088,13 @@ document.addEventListener('DOMContentLoaded', function() {
         justNavigatedToCue = true;
         lastNavigatedCueTime = targetCuePoint.time;
         lastNavigatedCueIndex = prevIndex;
+        lastNavigatedCueClipNumber = clipNumber;
+        lastNavigatedCueTab = currentTab;
 
         // Update scrub centre when navigating cues during scrub mode
         if (scrubModeActive) {
-            scrubCentreTime = targetCuePoint.time;
-            updateScrubUI();
-            console.log(`Scrub centre updated to ${formatTimeShort(scrubCentreTime)}`);
+            recenterActiveScrub(targetCuePoint.time);
+            return;
         }
 
         // Pressing Q means "go back and play from previous cue" - only if per-clip auto-play enabled
@@ -2169,6 +2178,28 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // Scrub mode owns cue progression. Always move to the first cue after
+        // the scrub centre, wrapping from the last cue back to the first. This
+        // bypasses normal clip-mode play/resume behavior, which can otherwise
+        // reselect the current cue or send playback to the In Point.
+        if (scrubModeActive) {
+            let targetIndex = cuePoints.findIndex(cuePoint => cuePoint.time > scrubCentreTime + 0.1);
+            if (targetIndex === -1) targetIndex = 0;
+            const targetCuePoint = cuePoints[targetIndex];
+
+            clipCurrentCueIndex[clipNumber] = targetIndex;
+            lastTimeupdateTime = targetCuePoint.time;
+            justNavigatedToCue = true;
+            lastNavigatedCueTime = targetCuePoint.time;
+            lastNavigatedCueIndex = targetIndex;
+            lastNavigatedCueClipNumber = clipNumber;
+            lastNavigatedCueTab = currentTab;
+
+            recenterActiveScrub(targetCuePoint.time);
+            console.log(`Scrub next cue: ${targetIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
+            return;
+        }
+
         // Check if we're currently AT any cue point (within tolerance)
         // If auto-play is enabled: play from current position (maintains linear progression)
         // If auto-play is disabled: skip to next cue (navigation still works)
@@ -2203,6 +2234,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     clipCurrentCueIndex[clipNumber] = -1;
                     console.log(`W key: At last cue, looping to In Point: ${formatTime(inPoint)}`);
 
+                    if (scrubModeActive) {
+                        scrubCentreTime = inPoint;
+                        configureActiveScrubMode(scrubMode);
+                        return;
+                    }
+
                     globalPlayIntent = true;
                     if (previewPopoutOpen) {
                         sendToPopout({ type: 'play' });
@@ -2218,7 +2255,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 justNavigatedToCue = true;
                 lastNavigatedCueTime = cuePoints[currentCueIndex].time;
                 lastNavigatedCueIndex = currentCueIndex;
+                lastNavigatedCueClipNumber = clipNumber;
+                lastNavigatedCueTab = currentTab;
                 lastTimeupdateTime = cuePoints[currentCueIndex].time; // Reset so current cue isn't re-detected
+
+                if (scrubModeActive) {
+                    recenterActiveScrub(cuePoints[currentCueIndex].time);
+                    return;
+                }
 
                 globalPlayIntent = true;
                 if (previewPopoutOpen) {
@@ -2248,6 +2292,13 @@ document.addEventListener('DOMContentLoaded', function() {
             justNavigatedToCue = true;
             lastNavigatedCueTime = nextCuePoint.time;
             lastNavigatedCueIndex = nextCueIndex;
+            lastNavigatedCueClipNumber = clipNumber;
+            lastNavigatedCueTab = currentTab;
+
+            if (scrubModeActive) {
+                recenterActiveScrub(nextCuePoint.time);
+                return;
+            }
 
             console.log(`W key: Jumped to next cue ${nextCueIndex + 1}/${cuePoints.length} at ${formatTime(nextCuePoint.time)}`);
 
@@ -2363,12 +2414,13 @@ document.addEventListener('DOMContentLoaded', function() {
         justNavigatedToCue = true;
         lastNavigatedCueTime = targetCuePoint.time;
         lastNavigatedCueIndex = targetIndex;
+        lastNavigatedCueClipNumber = clipNumber;
+        lastNavigatedCueTab = currentTab;
 
         // Update scrub centre when navigating cues during scrub mode
         if (scrubModeActive) {
-            scrubCentreTime = targetCuePoint.time;
-            updateScrubUI();
-            console.log(`Scrub centre updated to ${formatTimeShort(scrubCentreTime)}`);
+            recenterActiveScrub(targetCuePoint.time);
+            return;
         }
 
         // Start playing - only if per-clip auto-play is enabled
@@ -2433,6 +2485,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let justNavigatedToCue = false;
     let lastNavigatedCueTime = 0;
     let lastNavigatedCueIndex = -1; // Track which cue point we just navigated to
+    let lastNavigatedCueClipNumber = null;
+    let lastNavigatedCueTab = null;
 
     // Track last timeupdate position for crossed-past cue detection in forward-stop mode
     let lastTimeupdateTime = 0;
@@ -2446,6 +2500,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Current scrub mode: null | 'manual-cc' | 'back-forward' | 'pendulum' | 'stutter' | 'drift' | 'hold'
     let scrubMode = null;
+
+    // Last mode selected in the UI. This remains set while scrub is inactive so
+    // keyboard/MIDI triggers and session persistence have an unambiguous target.
+    let selectedScrubMode = null;
 
     // Scrub centre time — set to lastNavigatedCueTime whenever scrub mode is activated
     let scrubCentreTime = 0;
@@ -2465,16 +2523,29 @@ document.addEventListener('DOMContentLoaded', function() {
     // CC fader: last received value (0-127), used when switching to manual-cc mode
     let scrubCCLastValue = 63;
 
-    // Automated mode oscillation direction (+1 forward, -1 backward — for back-forward mode UI state)
+    // Automated-mode directions (+1 forward, -1 backward).
     let scrubOscillationDir = 1;
+    let scrubBackForwardNextDirection = 1;
+    let scrubBackForwardActiveDirection = 0;
 
-    // rAF handle for scrub animation loop
+    // Timer handle for the scrub control loop. requestAnimationFrame can be
+    // suspended when another Electron window owns focus.
     let scrubAnimationFrameId = null;
     let scrubLoopLastTimestamp = 0;
+    let scrubReverseElapsedSeconds = 0;
+    let scrubLastDecoderSeekTimestamp = 0;
+    const SCRUB_PENDULUM_SEEK_INTERVAL_MS = 50;
+
+    // Scrub playback state cannot be inferred from video.paused while the pop-out
+    // owns playback (the embedded video is deliberately paused in that case).
+    let scrubEffectRunning = false;
+    let scrubVirtualPosition = 0;
+    let scrubPopoutSeekPending = false;
 
     // Saved state to restore when scrub mode deactivates
     let scrubSavedPlaybackRate = 1.0;
     let scrubSavedPlayState = false;
+    let scrubSavedGlobalPlayIntent = false;
 
     // MIDI learn state for scrub-specific mappings
     let scrubLearnTarget = null; // 'cc' | 'drum'
@@ -2511,10 +2582,11 @@ document.addEventListener('DOMContentLoaded', function() {
             statusEl.textContent = '';
             return;
         }
-        const halfRange  = scrubConfig.range / 2;
-        const rangeStart = Math.max(0, scrubCentreTime - halfRange);
-        const rangeEnd   = scrubCentreTime + halfRange;
-        statusEl.textContent = `${formatTimeShort(rangeStart)} ←→ ${formatTimeShort(rangeEnd)}  @${scrubConfig.speed}x`;
+        const { start, end } = getScrubBounds();
+        const nextStroke = scrubMode === 'back-forward'
+            ? `  Next: ${scrubBackForwardNextDirection > 0 ? 'Forward' : 'Back'}`
+            : '';
+        statusEl.textContent = `${formatTimeShort(start)} - ${formatTimeShort(end)}  @${scrubConfig.speed}x${nextStroke}`;
     }
 
     // Update the scrub panel UI to reflect current state
@@ -2543,6 +2615,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Highlight the selected mode button in the scrub panel
     function selectScrubModeUI(mode) {
+        selectedScrubMode = mode || null;
         document.querySelectorAll('.scrub-mode-btn').forEach(btn => {
             btn.classList.toggle('selected', btn.dataset.mode === mode);
         });
@@ -2605,10 +2678,61 @@ document.addEventListener('DOMContentLoaded', function() {
         scrubLearnTarget = null;
     }
 
+    function getScrubDuration() {
+        if (Number.isFinite(videoDuration) && videoDuration > 0) return videoDuration;
+        if (Number.isFinite(video.duration) && video.duration > 0) return video.duration;
+        return 0;
+    }
+
+    function getScrubCurrentTime() {
+        if (scrubMode === 'pendulum') return scrubVirtualPosition;
+        return previewPopoutOpen ? popoutCurrentTime : (video.currentTime || 0);
+    }
+
+    function getScrubBounds() {
+        const duration = getScrubDuration();
+        const halfRange = scrubConfig.range / 2;
+        const start = Math.max(0, scrubCentreTime - halfRange);
+        const end = Math.min(duration, scrubCentreTime + halfRange);
+        return { start, end: Math.max(start, end) };
+    }
+
+    function setScrubPlaybackRate(rate) {
+        const safeRate = Math.max(0.1, Number(rate) || 1);
+        if (previewPopoutOpen) {
+            sendToPopout({ type: 'setSpeed', rate: safeRate });
+        } else if (video.src) {
+            video.playbackRate = safeRate;
+        }
+    }
+
+    function playScrubOutput() {
+        scrubEffectRunning = true;
+        if (previewPopoutOpen) {
+            sendToPopout({ type: 'play' });
+        } else if (video.src) {
+            video.play().catch(e => console.warn('Scrub play error:', e));
+        }
+    }
+
+    function pauseScrubOutput() {
+        scrubEffectRunning = false;
+        if (previewPopoutOpen) {
+            sendToPopout({ type: 'pause' });
+        } else {
+            video.pause();
+        }
+    }
+
     // Single point through which all scrub seeks pass — routes to pop-out if open
     function seekScrubPosition(time) {
-        const clampedTime = Math.max(0, Math.min(video.duration || 0, time));
+        const duration = getScrubDuration();
+        const clampedTime = Math.max(0, Math.min(duration, Number(time) || 0));
+        scrubVirtualPosition = clampedTime;
         if (previewPopoutOpen) {
+            const positionChanged = Math.abs(popoutCurrentTime - clampedTime) > 0.001;
+            popoutCurrentTime = clampedTime;
+            scrubPopoutSeekPending = positionChanged;
             sendToPopout({ type: 'seek', time: clampedTime });
         } else {
             video.currentTime = clampedTime;
@@ -2618,240 +2742,268 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Map CC value 0-127 to a position within the scrub range around the centre
     function handleCCFaderScrub(ccValue) {
-        const halfRange  = scrubConfig.range / 2;
-        const normalised = (ccValue - 63) / 63; // -1.0 to ~+1.02
-        const targetTime = scrubCentreTime + (normalised * halfRange);
+        const { start, end } = getScrubBounds();
+        const normalised = Math.max(0, Math.min(127, ccValue)) / 127;
+        const targetTime = start + ((end - start) * normalised);
         seekScrubPosition(targetTime);
         scrubCCLastValue = ccValue;
     }
 
-    // Activate a scrub mode (or deactivate if same mode re-triggered)
-    function activateScrubMode(mode) {
-        if (scrubModeActive && scrubMode === mode) {
-            deactivateScrubMode();
+    // Start the deterministic control loop for automated scrub modes.
+    function startScrubAnimationLoop() {
+        stopScrubAnimationLoop();
+        scrubLoopLastTimestamp = performance.now();
+        scrubAnimationFrameId = setInterval(() => {
+            scrubAnimationTick(performance.now());
+        }, 16);
+    }
+
+    // Stop the scrub control loop.
+    function stopScrubAnimationLoop() {
+        if (scrubAnimationFrameId !== null) {
+            clearInterval(scrubAnimationFrameId);
+            scrubAnimationFrameId = null;
+        }
+    }
+
+    // One playback-owner-aware controller handles both the embedded preview and
+    // the pop-out output window.
+    function getScrubActivationCentre() {
+        const clipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
+        const cueBelongsToSelection = (
+            clipNumber !== null &&
+            lastNavigatedCueTab === currentTab &&
+            lastNavigatedCueClipNumber === clipNumber &&
+            lastNavigatedCueIndex >= 0
+        );
+        return cueBelongsToSelection ? lastNavigatedCueTime : getScrubCurrentTime();
+    }
+
+    function configureActiveScrubMode(mode) {
+        stopScrubAnimationLoop();
+        scrubMode = mode;
+        selectedScrubMode = mode;
+        scrubOscillationDir = 1;
+
+        const { start, end } = getScrubBounds();
+        if (end <= start) {
+            pauseScrubOutput();
             return;
         }
 
-        // Save current playback state so we can restore it on deactivate
-        scrubSavedPlaybackRate = video.playbackRate;
-        scrubSavedPlayState    = !video.paused;
-
-        // Lock centre to last-navigated cue point (or current playhead position)
-        scrubCentreTime = (lastNavigatedCueTime > 0) ? lastNavigatedCueTime : (video.currentTime || 0);
-
-        const halfRange  = scrubConfig.range / 2;
-        const rangeStart = Math.max(0, scrubCentreTime - halfRange);
-
-        scrubModeActive     = true;
-        scrubMode           = mode;
-        scrubOscillationDir = 1;
-
-        // Mode-specific startup position
         switch (mode) {
-            case 'back-forward':
-                // Seek to range start, pause — drum hit will start each stroke
-                video.pause();
-                seekScrubPosition(rangeStart);
-                if (previewPopoutOpen) sendToPopout({ type: 'pause' });
-                break;
-
-            case 'pendulum':
-            case 'stutter':
-                // Seek to range start, begin playing immediately
-                seekScrubPosition(rangeStart);
-                video.playbackRate = scrubConfig.speed;
-                video.play().catch(() => {});
-                if (previewPopoutOpen) {
-                    sendToPopout({ type: 'seek', time: rangeStart });
-                    sendToPopout({ type: 'setSpeed', rate: scrubConfig.speed });
-                    sendToPopout({ type: 'play' });
-                }
-                break;
-
-            case 'drift':
-                // Seek to centre, play very slowly forward
-                seekScrubPosition(scrubCentreTime);
-                const driftRate = Math.max(0.1, scrubConfig.speed * 0.25);
-                video.playbackRate = driftRate;
-                video.play().catch(() => {});
-                if (previewPopoutOpen) {
-                    sendToPopout({ type: 'seek', time: scrubCentreTime });
-                    sendToPopout({ type: 'setSpeed', rate: driftRate });
-                    sendToPopout({ type: 'play' });
-                }
-                break;
-
-            case 'hold':
-                // Freeze at centre
-                seekScrubPosition(scrubCentreTime);
-                video.pause();
-                if (previewPopoutOpen) sendToPopout({ type: 'pause' });
-                break;
-
             case 'manual-cc':
-                // No startup action — fader drives position
+                pauseScrubOutput();
+                handleCCFaderScrub(scrubCCLastValue);
                 break;
-        }
-
-        // Start the rAF loop for automated modes
-        if (mode !== 'manual-cc' && mode !== 'hold') {
-            startScrubAnimationLoop();
+            case 'back-forward':
+                pauseScrubOutput();
+                setScrubPlaybackRate(scrubConfig.speed);
+                seekScrubPosition(start);
+                scrubBackForwardNextDirection = 1;
+                scrubBackForwardActiveDirection = 0;
+                startScrubAnimationLoop();
+                break;
+            case 'pendulum':
+                // Chromium cannot reliably use a negative playbackRate. Drive
+                // both directions with decoder-paced time steps instead.
+                pauseScrubOutput();
+                seekScrubPosition(start);
+                scrubReverseElapsedSeconds = 0;
+                scrubLastDecoderSeekTimestamp = performance.now();
+                scrubEffectRunning = true;
+                startScrubAnimationLoop();
+                break;
+            case 'stutter':
+                setScrubPlaybackRate(scrubConfig.speed);
+                seekScrubPosition(start);
+                playScrubOutput();
+                startScrubAnimationLoop();
+                break;
+            case 'drift':
+                seekScrubPosition(scrubCentreTime);
+                setScrubPlaybackRate(Math.max(0.1, scrubConfig.speed * 0.25));
+                playScrubOutput();
+                break;
+            case 'hold':
+                pauseScrubOutput();
+                seekScrubPosition(scrubCentreTime);
+                break;
         }
 
         updateScrubUI();
         updateScrubStatus();
-        console.log(`Scrub mode activated: ${mode}, centre=${formatTimeShort(scrubCentreTime)}, rangeStart=${formatTimeShort(rangeStart)}`);
     }
 
-    // Deactivate scrub mode and restore previous playback state
-    function deactivateScrubMode() {
-        stopScrubAnimationLoop();
-
-        scrubModeActive = false;
-        scrubMode       = null;
-
-        // Restore saved speed
-        setVideoSpeed(scrubSavedPlaybackRate);
-
-        // Restore saved play state
-        if (scrubSavedPlayState && video.src && !video.ended) {
-            video.play().catch(e => console.error('Scrub deactivate: resume error', e));
-            if (previewPopoutOpen) sendToPopout({ type: 'play' });
+    function activateScrubMode(mode) {
+        if (!mode || !selectedClipSlot || !video.src || getScrubDuration() <= 0) {
+            const statusEl = document.getElementById('scrubStatusLine');
+            if (statusEl) statusEl.textContent = 'Load and select a video before activating scrub.';
+            return false;
+        }
+        if (scrubModeActive && scrubMode === mode) {
+            deactivateScrubMode();
+            return false;
+        }
+        if (scrubModeActive) {
+            configureActiveScrubMode(mode);
+            return true;
         }
 
+        scrubSavedPlaybackRate = video.playbackRate || 1;
+        scrubSavedGlobalPlayIntent = globalPlayIntent;
+        scrubSavedPlayState = previewPopoutOpen ? globalPlayIntent : !video.paused;
+        scrubCentreTime = getScrubActivationCentre();
+        scrubModeActive = true;
+        configureActiveScrubMode(mode);
+        console.log(`Scrub mode activated: ${mode}, centre=${formatTimeShort(scrubCentreTime)}`);
+        return true;
+    }
+
+    function recenterActiveScrub(time) {
+        if (!scrubModeActive) return;
+        scrubCentreTime = Math.max(0, Math.min(getScrubDuration(), time));
+        configureActiveScrubMode(scrubMode);
+        console.log(`Scrub centre updated to ${formatTimeShort(scrubCentreTime)}`);
+    }
+
+    function deactivateScrubMode() {
+        if (!scrubModeActive) return;
+        stopScrubAnimationLoop();
+        pauseScrubOutput();
+        scrubModeActive = false;
+        scrubMode = null;
+        setVideoSpeed(scrubSavedPlaybackRate);
+        globalPlayIntent = scrubSavedGlobalPlayIntent;
+
+        if (scrubSavedPlayState && video.src && !video.ended) {
+            if (previewPopoutOpen) {
+                sendToPopout({ type: 'play' });
+            } else {
+                video.play().catch(e => console.error('Scrub deactivate: resume error', e));
+            }
+        } else if (previewPopoutOpen) {
+            sendToPopout({ type: 'pause' });
+        } else {
+            video.pause();
+        }
+
+        updatePlayingIndicator();
         updateScrubUI();
         updateScrubStatus();
         console.log('Scrub mode deactivated');
     }
 
-    // Start the requestAnimationFrame loop for automated scrub modes
-    function startScrubAnimationLoop() {
-        stopScrubAnimationLoop();
-        scrubLoopLastTimestamp = performance.now();
-        scrubAnimationFrameId  = requestAnimationFrame(scrubAnimationTick);
-    }
-
-    // Stop the rAF loop
-    function stopScrubAnimationLoop() {
-        if (scrubAnimationFrameId !== null) {
-            cancelAnimationFrame(scrubAnimationFrameId);
-            scrubAnimationFrameId = null;
-        }
-    }
-
-    // rAF tick — handles all automated scrub mode logic
     function scrubAnimationTick(timestamp) {
         if (!scrubModeActive) return;
-
+        const elapsedSeconds = Math.max(0, Math.min(0.1, (timestamp - scrubLoopLastTimestamp) / 1000));
         scrubLoopLastTimestamp = timestamp;
+        const { start, end } = getScrubBounds();
+        let currentPos = getScrubCurrentTime();
 
-        const halfRange  = scrubConfig.range / 2;
-        const rangeStart = Math.max(0, scrubCentreTime - halfRange);
-        const rangeEnd   = Math.min(video.duration || Infinity, scrubCentreTime + halfRange);
-        const currentPos = previewPopoutOpen ? popoutCurrentTime : video.currentTime;
+        // Pop-out time reports are intentionally throttled. Predict forward
+        // progress locally so range boundaries remain sub-frame responsive.
+        if (previewPopoutOpen && scrubEffectRunning &&
+            (scrubMode === 'stutter' ||
+                (scrubMode === 'back-forward' && scrubBackForwardActiveDirection > 0))) {
+            scrubVirtualPosition += scrubConfig.speed * elapsedSeconds;
+            currentPos = scrubVirtualPosition;
+        }
 
-        switch (scrubMode) {
+        if (scrubMode === 'back-forward' && scrubEffectRunning) {
+            if (scrubBackForwardActiveDirection > 0 && currentPos >= end) {
+                pauseScrubOutput();
+                seekScrubPosition(end);
+                scrubBackForwardActiveDirection = 0;
+            } else if (scrubBackForwardActiveDirection < 0) {
+                scrubReverseElapsedSeconds += elapsedSeconds;
+                const seekIntervalElapsed = timestamp - scrubLastDecoderSeekTimestamp >= SCRUB_PENDULUM_SEEK_INTERVAL_MS;
+                const decoderReady = previewPopoutOpen ? !scrubPopoutSeekPending : !video.seeking;
 
-            case 'back-forward': {
-                // The drum hit owns play/seek. The rAF only watches the range end.
-                // When the video reaches rangeEnd, pause — stroke is complete.
-                // Do NOT auto-start if paused; that's the drum hit's job.
-                if (!video.paused && currentPos >= rangeEnd) {
-                    video.pause();
-                    seekScrubPosition(rangeEnd);
-                    if (previewPopoutOpen) sendToPopout({ type: 'pause' });
-                    console.log('Scrub B/F: reached range end, paused — awaiting drum hit');
-                }
-                break;
-            }
+                if (seekIntervalElapsed && decoderReady) {
+                    const nextPosition = scrubVirtualPosition -
+                        (scrubConfig.speed * scrubReverseElapsedSeconds);
+                    scrubReverseElapsedSeconds = 0;
+                    scrubLastDecoderSeekTimestamp = timestamp;
 
-            case 'pendulum':
-            case 'stutter': {
-                // Ensure video is playing forward at scrub speed
-                if (video.paused) {
-                    video.playbackRate = scrubConfig.speed;
-                    video.play().catch(() => {});
-                    if (previewPopoutOpen) {
-                        sendToPopout({ type: 'setSpeed', rate: scrubConfig.speed });
-                        sendToPopout({ type: 'play' });
+                    if (nextPosition <= start) {
+                        pauseScrubOutput();
+                        seekScrubPosition(start);
+                        scrubBackForwardActiveDirection = 0;
+                    } else {
+                        seekScrubPosition(nextPosition);
                     }
-                } else if (video.playbackRate !== scrubConfig.speed) {
-                    video.playbackRate = scrubConfig.speed;
-                    if (previewPopoutOpen) sendToPopout({ type: 'setSpeed', rate: scrubConfig.speed });
                 }
-                // Bounce: when reaching range end, single seek back to range start
-                if (currentPos >= rangeEnd) {
-                    seekScrubPosition(rangeStart);
-                }
-                break;
             }
+        } else if (scrubMode === 'stutter' && scrubEffectRunning && currentPos >= end) {
+            seekScrubPosition(start);
+        } else if (scrubMode === 'pendulum' && scrubEffectRunning && end > start) {
+            scrubReverseElapsedSeconds += elapsedSeconds;
+            const seekIntervalElapsed = timestamp - scrubLastDecoderSeekTimestamp >= SCRUB_PENDULUM_SEEK_INTERVAL_MS;
+            const decoderReady = previewPopoutOpen ? !scrubPopoutSeekPending : !video.seeking;
 
-            case 'drift': {
-                // Very slow forward drift — quarter of configured speed
-                const driftRate = Math.max(0.1, scrubConfig.speed * 0.25);
-                if (video.paused) {
-                    video.playbackRate = driftRate;
-                    video.play().catch(() => {});
-                    if (previewPopoutOpen) {
-                        sendToPopout({ type: 'setSpeed', rate: driftRate });
-                        sendToPopout({ type: 'play' });
+            // Starting another seek before Chromium has decoded the previous
+            // frame leaves the video visually frozen. Wait for seeked locally
+            // and cap pop-out IPC seeks at 20fps.
+            if (seekIntervalElapsed && decoderReady) {
+                let nextPosition = scrubVirtualPosition +
+                    (scrubOscillationDir * scrubConfig.speed * scrubReverseElapsedSeconds);
+                while (nextPosition > end || nextPosition < start) {
+                    if (nextPosition > end) {
+                        nextPosition = end - (nextPosition - end);
+                        scrubOscillationDir = -1;
+                    } else {
+                        nextPosition = start + (start - nextPosition);
+                        scrubOscillationDir = 1;
                     }
-                } else if (video.playbackRate !== driftRate) {
-                    video.playbackRate = driftRate;
-                    if (previewPopoutOpen) sendToPopout({ type: 'setSpeed', rate: driftRate });
                 }
-                // Drift does not loop — it drifts until manually deactivated or end of clip
-                break;
+                scrubReverseElapsedSeconds = 0;
+                scrubLastDecoderSeekTimestamp = timestamp;
+                seekScrubPosition(nextPosition);
             }
         }
 
         updateTimeline();
-        scrubAnimationFrameId = requestAnimationFrame(scrubAnimationTick);
     }
 
-    // Handle a drum pad hit during automated scrub modes
     function handleScrubDrumHit() {
         if (!scrubModeActive) return;
-
-        const halfRange  = scrubConfig.range / 2;
-        const rangeStart = Math.max(0, scrubCentreTime - halfRange);
+        const { start, end } = getScrubBounds();
 
         switch (scrubMode) {
-            case 'back-forward':
-                // Every drum hit: jump to range start and play — regardless of current state
-                seekScrubPosition(rangeStart);
-                video.playbackRate = scrubConfig.speed;
-                video.play().catch(e => console.warn('Scrub B/F play error:', e));
-                if (previewPopoutOpen) {
-                    sendToPopout({ type: 'setSpeed', rate: scrubConfig.speed });
-                    sendToPopout({ type: 'play' });
-                }
-                console.log(`Scrub B/F: hit → seek to ${formatTimeShort(rangeStart)}, playing at ${scrubConfig.speed}x`);
-                break;
+            case 'back-forward': {
+                const strokeDirection = scrubBackForwardNextDirection;
+                scrubBackForwardNextDirection *= -1;
+                scrubBackForwardActiveDirection = strokeDirection;
 
-            case 'pendulum':
-            case 'stutter':
-                // Toggle pause/resume of the oscillation
-                if (video.paused) {
-                    video.play().catch(() => {});
-                    if (previewPopoutOpen) sendToPopout({ type: 'play' });
+                if (strokeDirection > 0) {
+                    seekScrubPosition(start);
+                    setScrubPlaybackRate(scrubConfig.speed);
+                    playScrubOutput();
                 } else {
-                    video.pause();
-                    if (previewPopoutOpen) sendToPopout({ type: 'pause' });
+                    pauseScrubOutput();
+                    seekScrubPosition(end);
+                    scrubReverseElapsedSeconds = 0;
+                    scrubLastDecoderSeekTimestamp = performance.now();
+                    scrubEffectRunning = true;
                 }
+                updateScrubStatus();
                 break;
-
+            }
+            case 'pendulum':
+                scrubEffectRunning = !scrubEffectRunning;
+                scrubLoopLastTimestamp = performance.now();
+                break;
+            case 'stutter':
+                if (scrubEffectRunning) pauseScrubOutput();
+                else playScrubOutput();
+                break;
             case 'drift':
-                // Restart drift from centre
                 seekScrubPosition(scrubCentreTime);
-                if (video.paused) {
-                    video.play().catch(() => {});
-                    if (previewPopoutOpen) sendToPopout({ type: 'play' });
-                }
+                setScrubPlaybackRate(Math.max(0.1, scrubConfig.speed * 0.25));
+                playScrubOutput();
                 break;
-
             case 'hold':
-                // Release hold — deactivate scrub
                 deactivateScrubMode();
                 break;
         }
@@ -3342,6 +3494,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         console.log(`Switching from tab ${currentTab} to tab ${tabIndex}`);
+
+        if (scrubModeActive) deactivateScrubMode();
+        lastNavigatedCueClipNumber = null;
+        lastNavigatedCueTab = null;
+        lastNavigatedCueIndex = -1;
+        lastNavigatedCueTime = 0;
 
         // Update tab button appearance
         const allTabButtons = document.querySelectorAll('.tab-btn');
@@ -3917,6 +4075,24 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // While scrub is active, its next-cue shortcut must work even when a
+        // range slider still has focus. Give it priority over the generic input
+        // guard below; shortcut remapping is still respected.
+        if (scrubModeActive && keyboardShortcuts.nextCuePoint &&
+            matchesShortcut(event, keyboardShortcuts.nextCuePoint)) {
+            event.preventDefault();
+            event.stopPropagation();
+            nextCuePointBtn.click();
+            return;
+        }
+
+        if (scrubModeActive && event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            deactivateScrubMode();
+            return;
+        }
+
         // === Standard keyboard guard — after scrub drum key ===
         // Don't trigger shortcuts if typing in an input field or editing content
         if (event.target.tagName === 'INPUT' ||
@@ -4104,13 +4280,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // === SCRUB DRUM PAD INTERCEPT ===
-        if (scrubModeActive &&
-            scrubConfig.drumPadNote &&
+        if (scrubConfig.drumPadNote &&
             message.type === 'noteon' &&
             message.velocity > 0 &&
             message.channel === scrubConfig.drumPadNote.channel &&
             message.note === scrubConfig.drumPadNote.note) {
-            handleScrubDrumHit();
+            flashScrubHit();
+            if (scrubModeActive) {
+                handleScrubDrumHit();
+            } else if (selectedScrubMode) {
+                const activated = activateScrubMode(selectedScrubMode);
+                if (activated && selectedScrubMode === 'back-forward') handleScrubDrumHit();
+            }
             return;
         }
 
@@ -4808,16 +4989,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Mode selector buttons
     document.querySelectorAll('.scrub-mode-btn').forEach(btn => {
         btn.addEventListener('click', function() {
+            const modeChanged = scrubMode !== btn.dataset.mode;
             selectScrubModeUI(btn.dataset.mode);
-            // If scrub is already active, switch modes live
-            if (scrubModeActive) {
-                stopScrubAnimationLoop();
-                scrubMode = btn.dataset.mode;
-                if (scrubMode !== 'manual-cc' && scrubMode !== 'hold') {
-                    startScrubAnimationLoop();
-                }
-                console.log(`Scrub mode switched live to: ${scrubMode}`);
-            }
+            if (scrubModeActive && modeChanged) activateScrubMode(btn.dataset.mode);
             markSessionModified();
         });
     });
@@ -4839,6 +5013,7 @@ document.addEventListener('DOMContentLoaded', function() {
             scrubConfig.range = parseFloat(this.value);
             const rangeValueEl = document.getElementById('scrubRangeValue');
             if (rangeValueEl) rangeValueEl.textContent = `${scrubConfig.range.toFixed(1)}s`;
+            if (scrubModeActive) configureActiveScrubMode(scrubMode);
             markSessionModified();
         });
     }
@@ -4850,10 +5025,13 @@ document.addEventListener('DOMContentLoaded', function() {
             scrubConfig.speed = parseFloat(this.value);
             const speedValueEl = document.getElementById('scrubSpeedValue');
             if (speedValueEl) speedValueEl.textContent = `${scrubConfig.speed.toFixed(1)}x`;
-            // Apply live if automated scrub is active
-            if (scrubModeActive && scrubMode !== 'manual-cc') {
-                video.playbackRate = scrubConfig.speed;
-                if (previewPopoutOpen) sendToPopout({ type: 'setSpeed', rate: scrubConfig.speed });
+            if (scrubModeActive) {
+                if (scrubMode === 'drift') {
+                    setScrubPlaybackRate(Math.max(0.1, scrubConfig.speed * 0.25));
+                } else if (scrubMode === 'back-forward' || scrubMode === 'stutter') {
+                    setScrubPlaybackRate(scrubConfig.speed);
+                }
+                updateScrubStatus();
             }
             markSessionModified();
         });
@@ -5240,6 +5418,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (activeVideo.src) {
                     const wasPlaying = !activeVideo.paused;
+                    popoutCurrentTime = activeVideo.currentTime;
 
                     // Pause main window video - pop-out owns playback now
                     video.pause();
@@ -5304,6 +5483,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Listen for time updates from pop-out to update timeline scrubber
     if (window.electronAPI && window.electronAPI.onPreviewUpdate) {
         window.electronAPI.onPreviewUpdate((update) => {
+            if (update.type === 'seeked') {
+                scrubPopoutSeekPending = false;
+                if (update.currentTime !== undefined) popoutCurrentTime = update.currentTime;
+                updateTimeline();
+                return;
+            }
             if (update.type === 'timeupdate') {
                 // Update timeline display with pop-out's current time
                 if (update.duration && update.duration > 0) {
