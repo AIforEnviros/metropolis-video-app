@@ -101,7 +101,7 @@ Claude Code, you are a dick. My attention span is waay longer than a drum fill..
 
 ---
 
-## Actually Getting This Thing Running on Your Mac
+## Running the Current Electron App
 
 Alright, so Matty figured it out. Here's how to run this thing on your Mac. Don't worry, it's easier than learning a new song.
 
@@ -132,14 +132,8 @@ Just copy each line below, paste it into Terminal, and hit Enter. Wait for each 
 git clone https://github.com/AIforEnviros/metropolis-video-app.git
 cd metropolis-video-app
 
-# Get the latest MIDI version
-git checkout feature/midi-mapping
-
 # Install all the stuff the app needs (this takes a minute)
 npm install
-
-#any error
-npm audit fix --force
 
 # Build the MIDI stuff for Mac (important!)
 npx @electron/rebuild
@@ -149,11 +143,12 @@ npm start
 ```
 
 **What this does:**
-- Line 1-2: Downloads the code and goes into the folder
-- Line 3: Switches to the version with MIDI working
-- Line 4: Installs dependencies (like downloading sample packs)
-- Line 5: Builds MIDI for your Mac (Intel or M1/M2)
-- Line 6: Runs the app!
+- The first two lines download the code and enter the project folder
+- `npm install` installs the locked project dependencies
+- `npx @electron/rebuild` builds the native MIDI dependency for your installed Electron version
+- `npm start` launches the Electron desktop app
+
+Do not check out the old `feature/midi-mapping` branch. MIDI is already part of the current Electron codebase. Do not use `npm audit fix --force`; it can replace Electron/native dependencies with incompatible versions.
 
 ### Step 4: Future Runs (After First Setup)
 
@@ -176,21 +171,46 @@ git pull
 npm start
 ```
 
-(You might need to run `npm install` again if Matty added new stuff, but he'll tell you)
+(Run `npm install` again when `package-lock.json` changes. Run `npx @electron/rebuild` again when Electron or the native MIDI package changes.)
 
 ### If Something Breaks
 
-If you see errors, try this magic fix-everything command:
+If native dependencies are damaged or out of date, reinstall from the lockfile:
 
 ```bash
 cd metropolis-video-app
-rm -rf node_modules package-lock.json
-npm install
+rm -rf node_modules
+npm ci
 npx @electron/rebuild
 npm start
 ```
 
-This deletes everything and reinstalls it fresh. Like clearing your pedalboard and setting it up again.
+This keeps `package-lock.json` intact and reinstalls the exact dependency versions recorded by the project.
+
+### Windows PowerShell
+
+PowerShell may block the `npm.ps1` shim. Use the `.cmd` executable in that case:
+
+```powershell
+cd "C:\Users\User\Documents\Codex tasks\metropolis-video-app"
+npm.cmd install
+npx.cmd @electron/rebuild
+npm.cmd start
+```
+
+### Scrub-Mode Regression Test
+
+```bash
+npm run test:scrub
+```
+
+On restricted Windows PowerShell:
+
+```powershell
+npm.cmd run test:scrub
+```
+
+See `SCRUB_MODES.md` for the current scrub behavior contract and hardware acceptance checklist.
 
 ### Testing MIDI
 

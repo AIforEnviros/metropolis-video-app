@@ -31,7 +31,10 @@ function createMainWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      enableRemoteModule: false
+      enableRemoteModule: false,
+      // Scrub range enforcement and MIDI-driven animation must keep running
+      // when the projection window has focus.
+      backgroundThrottling: false
     },
     title: 'Metropolis Live Remix',
     backgroundColor: '#1a1a1a'
@@ -78,7 +81,8 @@ ipcMain.handle('create-preview-popout', async () => {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      backgroundThrottling: false
     },
     title: 'Metropolis Preview',
     backgroundColor: '#000000'

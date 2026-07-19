@@ -9,6 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "test:scrub": "electron tests/electron-scrub-test.js",
     "build": "electron-builder --win --mac",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",

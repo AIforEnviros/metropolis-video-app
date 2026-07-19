@@ -79,6 +79,20 @@
         }
         requestAnimationFrame(reportTimeUpdate);
 
+        // Acknowledge explicit seeks so decoder-paced reverse scrub modes do
+        // not send the next frame until this one is ready to display.
+        function reportSeekComplete(event) {
+            const activeVideo = event.currentTarget;
+            if (activeVideo !== getActiveVideo()) return;
+            window.electronAPI.sendPreviewUpdate({
+                type: 'seeked',
+                currentTime: activeVideo.currentTime,
+                duration: activeVideo.duration
+            });
+        }
+        video.addEventListener('seeked', reportSeekComplete);
+        videoReverse.addEventListener('seeked', reportSeekComplete);
+
         // Report ended events for bounce mode
         video.addEventListener('ended', () => {
             window.electronAPI.sendPreviewUpdate({
@@ -127,6 +141,19 @@
                         video.pause();
                         videoReverse.pause();
                         break;
+
+                    case 'pauseAndReport': {
+                        const activePause = getActiveVideo();
+                        video.pause();
+                        videoReverse.pause();
+                        window.electronAPI.sendPreviewUpdate({
+                            type: 'paused',
+                            reason: command.reason,
+                            currentTime: activePause.currentTime,
+                            duration: activePause.duration
+                        });
+                        break;
+                    }
 
                     case 'seek':
                         const activeSeek = getActiveVideo();
