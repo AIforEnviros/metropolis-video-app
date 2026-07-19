@@ -45,6 +45,9 @@ Thumbs.db
 *.swo
 *~
 
+# Machine-local Claude Code permissions/settings
+.claude/settings.local.json
+
 # Temporary folders
 tmp/
 temp/

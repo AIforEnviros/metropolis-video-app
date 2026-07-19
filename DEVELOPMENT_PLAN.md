@@ -719,35 +719,12 @@ When working on each step:
 
 ---
 
-### Step 21: Fix Bounce Mode Reverse Playback
-**Status:** Not Started
-**Priority:** MEDIUM - Technical debt / known issue
+### Step 21: Bounce Mode Reverse Playback — Archived
+**Status:** Removed from active application
 
-**Background:**
-See BOUNCE_MODE_TODO.md - bounce mode has lag/freeze when transitioning from forward to reverse
+Bounce mode was explored using pre-generated reversed media and dual video elements, but it was later intentionally removed from the active clip-mode system. `BOUNCE_MODE_TODO.md` is retained only as historical implementation research.
 
-**What to try:**
-1. Pre-buffer approach: Start reverse at 95% duration to eliminate transition gap
-2. Dual video elements: Seamless switch between forward/reverse instances
-3. Canvas-based rendering: Full control over frame-by-frame playback
-4. Format optimization: Test if specific codecs seek better in reverse
-
-**Testing checklist:**
-- [ ] Forward to reverse transition is smooth (no lag/freeze)
-- [ ] Reverse to forward transition is smooth
-- [ ] Bounce mode works at different playback speeds
-- [ ] No visual artifacts during transition
-- [ ] Performance remains stable over multiple bounces
-- [ ] Works with different video formats/codecs
-
-**Commit messages:**
-1. `Fix bounce mode reverse transition lag`
-2. `Optimize reverse playback performance`
-
-**Must continue working:**
-- All other playback modes
-- Per-clip playback mode settings
-- Transport controls
+Do not treat Bounce as pending work or reintroduce it without a new product decision. Scrub-mode B/F and Pendulum behavior is documented separately in `SCRUB_MODES.md` and does not depend on the removed per-clip Bounce mode.
 
 ---
 
@@ -1095,11 +1072,23 @@ During development, several features were implemented that weren't in the origin
 
 ### Per-Clip Playback Modes
 - **Loop Mode:** Video loops continuously
-- **Bounce Mode:** Video plays forward, then reverses, then forward (experimental)
 - **Forward-Stop Mode:** Video plays once and stops at end
 - **Forward-Next Mode:** Video plays and auto-advances to next clip
 - Visual indicators show each clip's playback mode
 - **Status:** ✅ Implemented
+
+**Historical note:** Bounce mode was implemented experimentally and later removed from the active application.
+
+### Scrub Modes
+- Six modes: Fader, B/F, Pendulum, Stutter, Drift, and Hold
+- Keyboard and MIDI learn for drum triggers plus continuous CC fader mapping
+- Next-cue priority while scrub controls have focus and last-to-first cue wrapping
+- Current-position B/F direction reversal with boundary waiting
+- Decoder-paced reverse frames for B/F and Pendulum
+- Matching embedded-preview and pop-out behavior
+- Real Electron integration coverage via `npm run test:scrub`
+- **Status:** ✅ Implemented on `feature/scrub-modes`; hardware acceptance testing remains
+- **Behavior contract:** `SCRUB_MODES.md`
 
 ### Advanced Clip Management
 - **Drag-to-Move:** Drag clips between slots to reorganize
@@ -1122,12 +1111,12 @@ During development, several features were implemented that weren't in the origin
 - **Status:** ✅ Implemented
 
 ### Enhanced Session Format
-- Session file format evolved from v1.0 to v1.4
-- Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes
+- Session file format evolved from v1.0 to v1.8
+- Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, and scrub settings
 - Comprehensive project state preservation
 - **Status:** ✅ Implemented
 
 ---
 
-**Last Updated:** 2025-01-25 - Electron Step 8 (Performance Optimization)
-**Next Steps:** Create application icons and test packaged builds (Step 9)
+**Last Updated:** 2026-07-19 - Scrub modes implemented and verified in Electron
+**Next Steps:** Hardware acceptance testing, external-display performance testing, application icons, and packaged builds

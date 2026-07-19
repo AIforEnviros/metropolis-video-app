@@ -1,4 +1,6 @@
-# Bounce Mode - Fix History & Status
+# Bounce Mode — Archived Implementation History
+
+> **Archived:** Bounce mode was intentionally removed from the active application. This file documents an abandoned implementation path and is not a current TODO list. Do not reintroduce Bounce without a new product decision. For active reverse-direction performance behavior, see `SCRUB_MODES.md`.
 
 ## Status: ✅ RESOLVED (November 9, 2025)
 

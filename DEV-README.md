@@ -1,46 +1,51 @@
-# Metropolis Video App - Developer Quick Start
+# Metropolis Video App — Developer Quick Start
 
-## 🚨 IMPORTANT: Two Versions Exist
+## Active Architecture
 
-### Active Development (HTML/JavaScript)
-**For step-by-step development following the plan:**
+The active project is an Electron desktop application:
+
+- Main process: `main.js`
+- Secure renderer bridge: `preload.js`
+- Renderer UI and playback: `index.html` and `script.js`
+- Projection window: `preview-popout.html`
+
+The `src/` React/TypeScript application and old browser-server commands are legacy code. Do not use them for current development.
+
+## Install and Run
+
 ```bash
-npm run start-html
-# OR
-./start-html.bat
-```
-- Opens: http://localhost:3000
-- Files: `index.html` + `script.js`
-- Status: Step 4 completed
-- Next: Step 5 (Add Basic Cue Point Storage)
-
-### Advanced Prototype (React/TypeScript)
-**For viewing advanced features (NOT for development):**
-```bash
-npm run start-react
-# OR
+npm install
+npx @electron/rebuild
 npm start
-# OR
-./start-react.bat
 ```
-- Opens: http://localhost:3000
-- Files: `src/` directory
-- Contains pre-built Steps 5-12 features
-- Not following development plan sequence
 
-## Quick Commands
+On restricted Windows PowerShell, use `npm.cmd` and `npx.cmd`:
 
-| Command | Purpose | Files |
-|---------|---------|-------|
-| `npm run start-html` | Active development | `index.html`, `script.js` |
-| `npm run start-react` | Advanced prototype | `src/` directory |
+```powershell
+npm.cmd install
+npx.cmd @electron/rebuild
+npm.cmd start
+```
 
-## Current Development Status
+## Verification
 
-- ✅ **Steps 1-4 Complete** (HTML version)
-- ⏳ **Next: Step 5** - Add Basic Cue Point Storage
-- 📋 **See:** `DEVELOPMENT_PLAN.md` for full roadmap
+Run the scrub-mode Electron integration suite:
 
----
+```powershell
+npm.cmd run test:scrub
+```
 
-**Always use the HTML version unless specifically working on React implementation.**
+The suite launches hidden Electron windows and uses `test-videos/test-video.mp4`. It covers the embedded renderer, preload IPC, keyboard and MIDI events, cue navigation, every scrub mode, and the pop-out window.
+
+## Documentation Map
+
+- `CLAUDE.md`: Claude Code project context and historical implementation notes
+- `AGENTS.md`: Codex/project-agent context
+- `SCRUB_MODES.md`: authoritative scrub behavior contract
+- `Development_plan.md`: development history and remaining roadmap
+- `README.md`: collaborator setup and basic operating instructions
+- `IPMIDI_TROUBLESHOOTING.md`: network MIDI troubleshooting
+
+## Current Branch
+
+Active scrub development is on `feature/scrub-modes`. Check `git status --short --branch` rather than relying on an old branch name in historical documentation.
