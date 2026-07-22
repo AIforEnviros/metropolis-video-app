@@ -211,6 +211,7 @@ npm.cmd run test:scrub
 ```
 
 See `SCRUB_MODES.md` for the current scrub behavior contract and hardware acceptance checklist.
+See `VIDEO_COMPATIBILITY.md` for supported codecs, macOS troubleshooting, and encoding footage for responsive fader scrubbing.
 
 ### Testing MIDI
 
