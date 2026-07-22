@@ -22,7 +22,7 @@ This is now an Electron-based desktop application for production live performanc
 - All core features validated in web version
 
 **Current active development (2026-07-22):**
-- Branch: `codex/playback-reliability`
+- Branch: `master` (`codex/playback-reliability` merged on 2026-07-22)
 - Electron is the only active application architecture; `src/` is legacy
 - Scrub session data uses session format v1.8
 - Run the app with `npm start` (`npm.cmd start` in restricted Windows PowerShell)
@@ -772,7 +772,7 @@ Before merging to `electron-conversion` branch:
 
 ### Current Scrub-Mode Development
 
-- Active branch: `feature/scrub-modes`
+- Scrub modes and playback-reliability improvements are merged into `master`
 - Authoritative behavior: `SCRUB_MODES.md`
 - Automated verification: `npm run test:scrub`
 - The suite uses the real Electron renderer, preload bridge, bundled test MP4, keyboard/MIDI events, and the pop-out window
