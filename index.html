@@ -372,6 +372,21 @@
             border-radius: 6px;
         }
 
+        .video-playback-status {
+            display: none;
+            margin-top: 6px;
+            padding: 7px 9px;
+            border-radius: 4px;
+            background: #272727;
+            color: #bbb;
+            font-size: 11px;
+            line-height: 1.35;
+        }
+
+        .video-playback-status.loading { display: block; color: #ddd; }
+        .video-playback-status.warning { display: block; color: #ffd27a; background: #352d1e; }
+        .video-playback-status.error { display: block; color: #ff9c9c; background: #3a2020; }
+
         video {
             width: 100%;
             height: auto;
@@ -1722,6 +1737,7 @@
                     Your browser does not support the video tag.
                 </video>
             </div>
+            <div id="videoPlaybackStatus" class="video-playback-status" role="status" aria-live="polite"></div>
 
             <div class="right-panel-controls">
             <div class="timeline-container">

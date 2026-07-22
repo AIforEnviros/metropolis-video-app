@@ -16,6 +16,9 @@ function registerRendererStubs() {
     'is-preview-popout-open': () => Boolean(previewWindow && !previewWindow.isDestroyed())
   };
   Object.entries(handlers).forEach(([channel, handler]) => ipcMain.handle(channel, handler));
+  ipcMain.on('path-to-file-url', (event, filePath) => {
+    event.returnValue = require('node:url').pathToFileURL(filePath).href;
+  });
 
   ipcMain.handle('create-preview-popout', async () => {
     if (!previewWindow || previewWindow.isDestroyed()) {
@@ -129,7 +132,32 @@ async function run() {
   })()`);
   assert.equal(dropResult.ok, true, dropResult.error);
   console.log('Waiting for video metadata');
-  await waitFor(window, `document.getElementById('videoPlayer').duration > 0`, 'test video metadata', 10000);
+  try {
+    await waitFor(window, `document.getElementById('videoPlayer').duration > 0`, 'test video metadata', 10000);
+  } catch (error) {
+    const diagnostics = await window.webContents.executeJavaScript(`(() => {
+      const video = document.getElementById('videoPlayer');
+      return {
+        src: video.src,
+        currentSrc: video.currentSrc,
+        networkState: video.networkState,
+        readyState: video.readyState,
+        errorCode: video.error && video.error.code,
+        errorMessage: video.error && video.error.message,
+        status: document.getElementById('videoPlaybackStatus').textContent
+      };
+    })()`);
+    console.error('Video metadata diagnostics:', diagnostics, rendererErrors);
+    throw error;
+  }
+  const encodedFileURL = await window.webContents.executeJavaScript(
+    `window.electronAPI.pathToFileURL(${JSON.stringify(path.join(projectRoot, 'folder #1', 'video test.mp4'))})`
+  );
+  assert.ok(encodedFileURL.includes('%23') && encodedFileURL.includes('%20'), `file URL was not safely encoded: ${encodedFileURL}`);
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.getElementById('videoPlaybackStatus').style.display`),
+    'none'
+  );
   const rangeSliderLimits = await window.webContents.executeJavaScript(`(() => {
     const slider = document.getElementById('scrubRangeSlider');
     return { min: slider.min, max: slider.max, step: slider.step };
@@ -220,6 +248,21 @@ async function run() {
   assert.ok(Math.abs(state.time - 2.25) < 0.04, `CC high mapped to ${state.time}`);
   assert.equal(state.paused, true);
 
+  // A dense MIDI burst must coalesce intermediate seeks instead of queuing all
+  // 128 frames and leaving playback trailing behind the physical fader.
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 14, value: 0 });
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime < 1.8`, 'CC burst reset');
+  await window.webContents.executeJavaScript(`(() => {
+    window.__faderSeekCount = 0;
+    document.getElementById('videoPlayer').addEventListener('seeking', () => window.__faderSeekCount++);
+  })()`);
+  for (let value = 0; value <= 127; value++) {
+    window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 14, value });
+  }
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime > 2.2`, 'coalesced CC burst endpoint');
+  const burstSeekCount = await window.webContents.executeJavaScript(`window.__faderSeekCount`);
+  assert.ok(burstSeekCount <= 8, `CC burst caused ${burstSeekCount} decoder seeks`);
+
   // Live mode switching must initialize each distinct behavior.
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await waitFor(window, `!document.getElementById('videoPlayer').paused`, 'stutter start');
@@ -307,6 +350,16 @@ async function run() {
   await waitFor(previewWindow, `document.getElementById('previewVideo').currentTime < 1.8`, 'pop-out CC low endpoint');
   let popoutTime = await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').currentTime`);
   assert.ok(Math.abs(popoutTime - 1.75) < 0.04, `pop-out CC low mapped to ${popoutTime}`);
+  await previewWindow.webContents.executeJavaScript(`(() => {
+    window.__popoutFaderSeekCount = 0;
+    document.getElementById('previewVideo').addEventListener('seeking', () => window.__popoutFaderSeekCount++);
+  })()`);
+  for (let value = 0; value <= 127; value++) {
+    window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 14, value });
+  }
+  await waitFor(previewWindow, `document.getElementById('previewVideo').currentTime > 2.2`, 'coalesced pop-out CC burst endpoint');
+  const popoutFaderSeekCount = await previewWindow.webContents.executeJavaScript(`window.__popoutFaderSeekCount`);
+  assert.ok(popoutFaderSeekCount <= 8, `pop-out CC burst caused ${popoutFaderSeekCount} decoder seeks`);
 
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await waitFor(previewWindow, `!document.getElementById('previewVideo').paused`, 'pop-out stutter start');

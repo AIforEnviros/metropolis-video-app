@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const fs = require('fs').promises;
 const midi = require('@julusian/midi');
 const ffmpeg = require('fluent-ffmpeg');
@@ -228,8 +229,13 @@ ipcMain.handle('load-session', async () => {
 
 // IPC: Get file protocol path (for video loading)
 ipcMain.handle('get-file-path', async (event, filePath) => {
-  // Return file:// URL for video loading
-  return { path: `file:///${filePath.replace(/\\/g, '/')}` };
+  // Use the platform-aware URL implementation so POSIX paths, spaces, # and
+  // other reserved characters work identically on macOS and Windows.
+  return { path: pathToFileURL(filePath).href };
+});
+
+ipcMain.on('path-to-file-url', (event, filePath) => {
+  event.returnValue = pathToFileURL(filePath).href;
 });
 
 // ==============================================================

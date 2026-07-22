@@ -19,6 +19,8 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - Pauses playback while active.
 - Maps a learned MIDI CC value from 0–127 across the complete scrub range.
 - CC 0 selects the range start; CC 127 selects the range end.
+- Coalesces dense MIDI input so only one decoder seek is active at a time and the newest fader position always wins.
+- Final smoothness also depends on source encoding and keyframe spacing; see `VIDEO_COMPATIBILITY.md`.
 
 ### B/F (`back-forward`)
 
@@ -103,6 +105,8 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - Cue advancement, focused-control priority, and last-to-first wrapping
 - Pre-scrub state restoration
 - Embedded and pop-out playback behavior
+- Dense 128-message fader bursts without decoder seek backlogs
+- Cross-platform file URL encoding for spaces and reserved characters
 
 ## Hardware Acceptance Checks
 

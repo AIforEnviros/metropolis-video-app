@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Available methods:', Object.keys(window.electronAPI));
 
     const video = document.getElementById('videoPlayer');
+    const videoPlaybackStatus = document.getElementById('videoPlaybackStatus');
     const prevClipBtn = document.getElementById('prevClipBtn');
     const nextClipBtn = document.getElementById('nextClipBtn');
 
@@ -146,6 +147,68 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentFolderPath = '';
     let currentFolderFiles = [];
     const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp'];
+
+    function showVideoPlaybackStatus(type, message) {
+        if (!videoPlaybackStatus) return;
+        videoPlaybackStatus.className = `video-playback-status ${type || ''}`.trim();
+        videoPlaybackStatus.textContent = message || '';
+        videoPlaybackStatus.style.display = message ? 'block' : 'none';
+    }
+
+    function getNativeFilePath(file) {
+        if (!file) return '';
+        if (typeof file.path === 'string' && file.path) return file.path;
+        try {
+            return window.electronAPI.getPathForFile(file) || '';
+        } catch (error) {
+            console.warn('Could not resolve dropped file path:', error);
+            return '';
+        }
+    }
+
+    function createVideoSource(file) {
+        const filePath = getNativeFilePath(file);
+        if (filePath) {
+            return {
+                filePath,
+                url: window.electronAPI.pathToFileURL(filePath),
+                objectURL: false
+            };
+        }
+        if (file instanceof Blob) {
+            return {
+                filePath: null,
+                url: URL.createObjectURL(file),
+                objectURL: true
+            };
+        }
+        throw new Error(`Could not resolve a readable path for ${file.name || 'the dropped video'}`);
+    }
+
+    function describeMediaError(mediaError, fileName) {
+        const name = fileName || 'This video';
+        const code = mediaError ? mediaError.code : 0;
+        if (code === MediaError.MEDIA_ERR_ABORTED) return `${name}: loading was interrupted. Drop the file again.`;
+        if (code === MediaError.MEDIA_ERR_NETWORK) return `${name}: Electron could not read the file. Check that it still exists and macOS has permission to access its folder.`;
+        if (code === MediaError.MEDIA_ERR_DECODE) return `${name}: the container opened, but its video codec or profile could not be decoded. Convert it to an MP4 with H.264 video (yuv420p).`;
+        if (code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) return `${name}: this container or codec is not supported by this Electron build. Convert it to an MP4 with H.264 video (yuv420p).`;
+        return `${name}: playback failed for an unknown media reason. Check the developer console for details.`;
+    }
+
+    video.addEventListener('loadedmetadata', function() {
+        showVideoPlaybackStatus('', '');
+    });
+
+    video.addEventListener('error', function() {
+        const message = describeMediaError(video.error, video.dataset.sourceName);
+        console.error('Video playback error:', {
+            name: video.dataset.sourceName,
+            src: video.currentSrc || video.src,
+            code: video.error ? video.error.code : null,
+            message: video.error ? video.error.message : ''
+        });
+        showVideoPlaybackStatus('error', message);
+    });
 
     // Session management state
     let currentSessionName = null;
@@ -625,8 +688,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.log(`Attempting to reconnect: ${videoData.name} from ${videoData.filePath}`);
 
                     try {
-                        // Create file URL for Electron
-                        const url = `file:///${videoData.filePath.replace(/\\/g, '/')}`;
+                        // Recreate the saved source with platform-correct URL encoding.
+                        const url = window.electronAPI.pathToFileURL(videoData.filePath);
 
                         // Update the video data with URL
                         videoData.url = url;
@@ -674,9 +737,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (videoData && videoData.name === file.name && (!videoData.url || !videoData.file)) {
                     console.log(`MATCH FOUND! Auto-connecting ${file.name} to tab ${tabIndex}, clip ${clipNumber}`);
 
-                    // Create file URL for Electron
-                    const filePath = file.path || file.name;
-                    const url = `file:///${filePath.replace(/\\/g, '/')}`;
+                    // Create a correctly encoded URL on both Windows and macOS.
+                    const source = createVideoSource(file);
+                    const filePath = source.filePath;
+                    const url = source.url;
                     console.log(`Created file:// URL: ${url}`);
 
                     // Update the video data with new file reference
@@ -715,6 +779,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             // If this slot is currently selected, load it in the video player immediately
                             if (selectedClipSlot && selectedClipSlot.dataset.clipNumber === clipNumber) {
                                 console.log(`This slot is currently selected! Loading video into player: ${file.name}`);
+                                video.dataset.sourceName = file.name;
+                                showVideoPlaybackStatus('loading', `Loading ${file.name}…`);
                                 video.src = url;
                                 video.load();
 
@@ -1182,6 +1248,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Check if we have a valid URL
             if (videoData.url && videoData.file) {
+                video.dataset.sourceName = videoData.name || 'Selected video';
+                showVideoPlaybackStatus('loading', `Loading ${videoData.name || 'video'}…`);
                 video.src = videoData.url;
 
                 // Performance: Ensure audio is disabled
@@ -1312,16 +1380,10 @@ document.addEventListener('DOMContentLoaded', function() {
             callback(null);
         };
 
-        // Handle both Electron file paths and browser File objects
-        if (file.path) {
-            // Electron: use file:// protocol
-            video.src = `file:///${file.path.replace(/\\/g, '/')}`;
-            console.log('Generating thumbnail from Electron path:', video.src);
-        } else {
-            // Browser: use blob URL
-            video.src = URL.createObjectURL(file);
-            console.log('Generating thumbnail from blob URL');
-        }
+        // Handle both Electron disk files and synthetic File objects used by tests.
+        const source = createVideoSource(file);
+        video.src = source.url;
+        console.log('Generating thumbnail from:', video.src);
     }
 
     // Update visual appearance of slot based on whether it has video
@@ -2544,6 +2606,14 @@ document.addEventListener('DOMContentLoaded', function() {
     let scrubVirtualPosition = 0;
     let scrubPopoutSeekPending = false;
 
+    // A MIDI cross-fader can emit hundreds of CC values per second. Issuing a
+    // currentTime assignment for every value creates a decoder backlog and makes
+    // the picture trail behind the controller. Keep only the newest requested
+    // frame and wait for the active decoder to finish each seek.
+    let scrubManualSeekTarget = null;
+    let scrubManualSeekInFlight = false;
+    let scrubManualSeekScheduled = false;
+
     // Saved state to restore when scrub mode deactivates
     let scrubSavedPlaybackRate = 1.0;
     let scrubSavedPlayState = false;
@@ -2747,12 +2817,60 @@ document.addEventListener('DOMContentLoaded', function() {
         updateTimeline();
     }
 
+    function resetManualScrubSeek() {
+        scrubManualSeekTarget = null;
+        scrubManualSeekInFlight = false;
+        scrubManualSeekScheduled = false;
+    }
+
+    function scheduleManualScrubSeek() {
+        if (scrubManualSeekScheduled || scrubManualSeekInFlight || scrubManualSeekTarget === null) return;
+        scrubManualSeekScheduled = true;
+        requestAnimationFrame(() => {
+            scrubManualSeekScheduled = false;
+            if (!scrubModeActive || scrubMode !== 'manual-cc' || scrubManualSeekInFlight || scrubManualSeekTarget === null) return;
+
+            const targetTime = scrubManualSeekTarget;
+            scrubManualSeekTarget = null;
+
+            if (previewPopoutOpen) {
+                scrubManualSeekInFlight = true;
+                sendToPopout({ type: 'seek', time: targetTime });
+                return;
+            }
+
+            if (!video.seeking && Math.abs(video.currentTime - targetTime) < 0.001) {
+                scheduleManualScrubSeek();
+                return;
+            }
+
+            scrubManualSeekInFlight = true;
+            video.currentTime = targetTime;
+        });
+    }
+
+    function completeManualScrubSeek() {
+        if (!scrubManualSeekInFlight) return;
+        scrubManualSeekInFlight = false;
+        scheduleManualScrubSeek();
+    }
+
+    function queueManualScrubPosition(time) {
+        const duration = getScrubDuration();
+        const clampedTime = Math.max(0, Math.min(duration, Number(time) || 0));
+        scrubVirtualPosition = clampedTime;
+        if (previewPopoutOpen) popoutCurrentTime = clampedTime;
+        scrubManualSeekTarget = clampedTime;
+        updateTimeline();
+        scheduleManualScrubSeek();
+    }
+
     // Map CC value 0-127 to a position within the scrub range around the centre
     function handleCCFaderScrub(ccValue) {
         const { start, end } = getScrubBounds();
         const normalised = Math.max(0, Math.min(127, ccValue)) / 127;
         const targetTime = start + ((end - start) * normalised);
-        seekScrubPosition(targetTime);
+        queueManualScrubPosition(targetTime);
         scrubCCLastValue = ccValue;
     }
 
@@ -2788,6 +2906,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function configureActiveScrubMode(mode) {
         stopScrubAnimationLoop();
+        if (mode !== 'manual-cc') resetManualScrubSeek();
         scrubMode = mode;
         selectedScrubMode = mode;
         scrubOscillationDir = 1;
@@ -2878,6 +2997,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function deactivateScrubMode() {
         if (!scrubModeActive) return;
         stopScrubAnimationLoop();
+        resetManualScrubSeek();
         pauseScrubOutput();
         scrubModeActive = false;
         scrubMode = null;
@@ -3912,19 +4032,27 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('=== LOADING FILE ===');
         console.log('File object:', file);
         console.log('file.name:', file.name);
-        console.log('file.path:', file.path);
+        console.log('resolved path:', getNativeFilePath(file));
         console.log('file.type:', file.type);
 
-        // In Electron, use file:// protocol path instead of blob URLs
-        const filePath = file.path || file.name; // file.path from Electron directory reading
-        const url = `file:///${filePath.replace(/\\/g, '/')}`;
+        let source;
+        try {
+            source = createVideoSource(file);
+        } catch (error) {
+            console.error('Could not create video source:', error);
+            showVideoPlaybackStatus('error', error.message);
+            return;
+        }
+        const filePath = source.filePath;
+        const url = source.url;
 
         console.log(`Loading video from Electron file path: ${url}`);
 
-        // Auto-update folder path if we have a full path and folder isn't set yet
-        if (file.path && file.path.includes('\\')) {
-            const folderPath = file.path.substring(0, file.path.lastIndexOf('\\'));
-            if (!currentFolderPath || currentFolderPath === '' || !currentFolderPath.includes('\\')) {
+        // Auto-update folder path using either POSIX or Windows separators.
+        if (filePath) {
+            const lastSeparator = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+            const folderPath = lastSeparator > 0 ? filePath.substring(0, lastSeparator) : '';
+            if (folderPath && !currentFolderPath) {
                 currentFolderPath = folderPath;
                 // currentPathDisplay.textContent = currentFolderPath; // REMOVED - file browser removed
                 console.log('Auto-detected folder path from video file:', currentFolderPath);
@@ -3957,6 +4085,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         // Load video in player
+        video.dataset.sourceName = file.name;
+        showVideoPlaybackStatus('loading', `Loading ${file.name}…`);
         video.src = url;
 
         // Performance: Ensure audio is disabled
@@ -5402,6 +5532,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Note: the IPC feedback loop was fixed by removing activeVideo.currentTime assignment
     // from the onPreviewUpdate handler, so seeked only fires from genuine user actions now.
     video.addEventListener('seeked', function() {
+        completeManualScrubSeek();
         if (previewPopoutOpen && video.style.display !== 'none') {
             sendToPopout({ type: 'seek', time: video.currentTime });
         }
@@ -5518,6 +5649,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (update.type === 'seeked') {
                 scrubPopoutSeekPending = false;
                 if (update.currentTime !== undefined) popoutCurrentTime = update.currentTime;
+                completeManualScrubSeek();
                 updateTimeline();
                 return;
             }

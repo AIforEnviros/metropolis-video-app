@@ -21,13 +21,14 @@ This is now an Electron-based desktop application for production live performanc
 - Now converting to Electron for production performance use
 - All core features validated in web version
 
-**Current active development (2026-07-19):**
-- Branch: `feature/scrub-modes`
+**Current active development (2026-07-22):**
+- Branch: `codex/playback-reliability`
 - Electron is the only active application architecture; `src/` is legacy
 - Scrub session data uses session format v1.8
 - Run the app with `npm start` (`npm.cmd start` in restricted Windows PowerShell)
 - Run scrub regression coverage with `npm run test:scrub` (`npm.cmd run test:scrub` on Windows)
 - Treat `SCRUB_MODES.md` as the authoritative scrub behavior contract
+- Treat `VIDEO_COMPATIBILITY.md` as the playback format and macOS troubleshooting guide
 - Treat `Development_plan.md` as project history/roadmap, not as current run instructions
 
 **Legacy Code:**

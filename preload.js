@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -29,6 +29,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   readDirectory: (dirPath) => ipcRenderer.invoke('read-directory', dirPath),
   getFilePath: (filePath) => ipcRenderer.invoke('get-file-path', filePath),
+  // Electron 29+ removed the non-standard File.path property in favour of
+  // webUtils. Keep the fallback so the app also works on Electron 28.
+  getPathForFile: (file) => {
+    if (webUtils && typeof webUtils.getPathForFile === 'function') {
+      return webUtils.getPathForFile(file);
+    }
+    return file && typeof file.path === 'string' ? file.path : '';
+  },
+  pathToFileURL: (filePath) => ipcRenderer.sendSync('path-to-file-url', filePath),
 
   // Session management
   saveSession: (sessionData) => ipcRenderer.invoke('save-session', sessionData),
