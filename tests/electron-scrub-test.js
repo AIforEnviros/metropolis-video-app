@@ -245,6 +245,26 @@ async function run() {
   await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime <= 1.8`, 'mid-stroke direction reversal', 3000);
   const localMidReverseMax = await window.webContents.executeJavaScript(`window.__localMidReverseMax`);
   assert.ok(localMidReverseMax <= localTurnTime + 0.08, `local reversal jumped from ${localTurnTime} to ${localMidReverseMax}`);
+
+  // B/F alone can replace the centred 10-second range with the clip's full
+  // playable In/Out span, while retaining current-frame direction changes.
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0.75`);
+  await click(window, '#setInPointBtn');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 3.5`);
+  await click(window, '#setOutPointBtn');
+  await click(window, '#scrubFullRangeToggle');
+  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 0.73 && document.getElementById('videoPlayer').currentTime <= 0.8`, 'B/F full In/Out range start');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeValue').textContent`), 'Full');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime > 1.2`, 'B/F full range forward motion', 3000);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime <= 0.8`, 'B/F full range reverse boundary', 3000);
+  await click(window, '#clearInOutBtn');
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime < 0.05`, 'B/F full video start after clearing In/Out');
+  await click(window, '#scrubFullRangeToggle');
   await setSlider(window, '#scrubSpeedSlider', 4);
 
   // Escape must restore the original paused state and rate.
@@ -467,7 +487,15 @@ async function run() {
   const popoutMidReverseMax = await previewWindow.webContents.executeJavaScript(`window.__popoutMidReverseMax`);
   assert.ok(popoutMidReverseMax <= popoutTurnTime + 0.08, `pop-out reversal jumped from ${popoutTurnTime} to ${popoutMidReverseMax}`);
 
-  // Per-slot scrub settings restore independently and serialize in session v1.9.
+  await click(window, '#scrubFullRangeToggle');
+  await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime < 0.05`, 'pop-out B/F full video start');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  await waitFor(previewWindow, `!document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime > 0.5`, 'pop-out B/F full range forward motion', 3000);
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime < 0.05`, 'pop-out B/F full range reverse boundary', 3000);
+  await click(window, '#scrubFullRangeToggle');
+
+  // Per-slot scrub settings restore independently and serialize in session v1.10.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub disabled');
@@ -516,36 +544,43 @@ async function run() {
   await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'drift' && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'slot two restore', 10000);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '1.25');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1.5');
+  await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
+  await click(window, '#scrubFullRangeToggle');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
 
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
-  assert.equal(savedSessionData.version, '1.9');
+  assert.equal(savedSessionData.version, '1.10');
   assert.deepEqual(savedSessionData.tabs.scrubSettings['0']['1'], {
     enabled: false,
     mode: 'hold',
     range: 0.65,
-    speed: 1.7
+    speed: 1.7,
+    fullRange: false
   });
   assert.deepEqual(savedSessionData.tabs.scrubSettings['0']['2'], {
     enabled: true,
-    mode: 'drift',
+    mode: 'back-forward',
     range: 1.25,
-    speed: 1.5
+    speed: 1.5,
+    fullRange: true
   });
 
   // Round-trip through the real session loader, not just the serialized object.
   await setSlider(window, '#scrubRangeSlider', 3);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await click(window, '#loadSessionBtn');
-  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.9 reload', 10000);
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.10 reload', 10000);
   await click(window, '.clip-slot[data-clip-number="1"]');
   await waitFor(window, `document.getElementById('videoPlayer').duration > 0 && document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'hold'`, 'reloaded slot one', 10000);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '0.65');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubActiveBadge').style.display`), 'none');
   await click(window, '.clip-slot[data-clip-number="2"]');
-  await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'drift' && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'reloaded slot two', 10000);
+  await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'back-forward' && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'reloaded slot two', 10000);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '1.25');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubFullRangeToggle').checked`), true);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
 
   // v1.8 global scrub values migrate to each loaded slot with scrub ON.
   sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));
@@ -563,9 +598,10 @@ async function run() {
     mode: document.querySelector('.scrub-mode-btn.selected').dataset.mode,
     range: document.getElementById('scrubRangeSlider').value,
     speed: document.getElementById('scrubSpeedSlider').value,
+    fullRange: document.getElementById('scrubFullRangeToggle').checked,
     active: document.getElementById('scrubActiveBadge').style.display !== 'none'
   }))()`);
-  assert.deepEqual(migratedState, { mode: 'hold', range: '0.8', speed: '2.2', active: true });
+  assert.deepEqual(migratedState, { mode: 'hold', range: '0.8', speed: '2.2', fullRange: false, active: true });
 
   const relevantErrors = rendererErrors.filter(message => !message.includes('MIDI') && !message.includes('favicon'));
   assert.deepEqual(relevantErrors, []);

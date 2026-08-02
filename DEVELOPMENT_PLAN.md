@@ -1085,6 +1085,7 @@ During development, several features were implemented that weren't in the origin
 - Keyboard and MIDI learn for drum triggers plus continuous CC fader mapping
 - Next-cue priority while scrub controls have focus and last-to-first cue wrapping
 - Current-position B/F direction reversal with boundary waiting
+- Optional B/F Full video / In-Out boundaries beyond the normal 10-second scrub limit
 - Decoder-paced reverse frames for B/F and Pendulum
 - Matching embedded-preview and pop-out behavior
 - Real Electron integration coverage via `npm run test:scrub`
@@ -1112,8 +1113,8 @@ During development, several features were implemented that weren't in the origin
 - **Status:** ✅ Implemented
 
 ### Enhanced Session Format
-- Session file format evolved from v1.0 to v1.9
-- Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, and per-slot scrub enabled/mode/range/speed settings
+- Session file format evolved from v1.0 to v1.10
+- Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, and per-slot scrub enabled/mode/range/speed/B-F-full-range settings
 - Comprehensive project state preservation
 - **Status:** ✅ Implemented
 
