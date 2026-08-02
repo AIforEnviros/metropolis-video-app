@@ -31,6 +31,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - Every later trigger reverses direction at the current playhead position. It must not jump to either range boundary.
 - Reaching the range start or end stops playback and waits for another trigger.
 - A trigger at a stopped boundary reverses playback away from that boundary.
+- B/F alone can use **Full video / In-Out** instead of the centered 0.1–10 second range. Its boundaries are the clip's valid In/Out points when set, otherwise `00:00` and the complete video duration.
 - Forward strokes use normal video playback. Backward strokes use decoder-paced frame seeks because Chromium does not reliably support a negative playback rate.
 
 ### Pendulum (`pendulum`)
@@ -79,7 +80,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 
 ## Session Persistence
 
-Scrub settings are stored in session format **v1.9**.
+Scrub settings are stored in session format **v1.10**.
 
 Saved per video slot:
 
@@ -87,6 +88,7 @@ Saved per video slot:
 - Selected scrub mode
 - Range
 - Speed
+- B/F Full video / In-Out selection
 
 Saved globally because they describe the physical controls:
 
@@ -112,7 +114,7 @@ npm run test:scrub
 
 The suite uses `test-videos/test-video.mp4` and verifies:
 
-- All six modes
+- All seven modes
 - Keyboard and MIDI learn
 - First-hit activation
 - Current-position B/F reversals and boundary waiting
@@ -122,7 +124,7 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - Embedded and pop-out playback behavior
 - Dense 128-message fader bursts without decoder seek backlogs
 - Cross-platform file URL encoding for spaces and reserved characters
-- Per-slot mode/range/speed/ON-OFF restoration and session v1.9 round-tripping
+- Per-slot mode/range/speed/B-F-full-range/ON-OFF restoration and session v1.10 round-tripping
 
 ## Hardware Acceptance Checks
 
