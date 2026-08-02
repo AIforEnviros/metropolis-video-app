@@ -6,6 +6,8 @@ const projectRoot = path.resolve(__dirname, '..');
 const testVideoPath = path.join(projectRoot, 'test-videos', 'test-video.mp4');
 let mainWindow = null;
 let previewWindow = null;
+let savedSessionData = null;
+let sessionDataToLoad = null;
 
 function registerRendererStubs() {
   const handlers = {
@@ -13,7 +15,16 @@ function registerRendererStubs() {
     'get-current-midi-device': () => ({ success: true, device: null }),
     'select-midi-device': () => ({ success: true }),
     'reinitialize-midi': () => ({ success: true, devices: [] }),
-    'is-preview-popout-open': () => Boolean(previewWindow && !previewWindow.isDestroyed())
+    'is-preview-popout-open': () => Boolean(previewWindow && !previewWindow.isDestroyed()),
+    'save-session': (_event, sessionData) => {
+      savedSessionData = sessionData;
+      sessionDataToLoad = sessionData;
+      return { success: true, filePath: path.join(projectRoot, 'test-session.json') };
+    },
+    'load-session': () => ({
+      success: true,
+      sessionData: JSON.parse(JSON.stringify(sessionDataToLoad))
+    })
   };
   Object.entries(handlers).forEach(([channel, handler]) => ipcMain.handle(channel, handler));
   ipcMain.on('path-to-file-url', (event, filePath) => {
@@ -150,6 +161,19 @@ async function run() {
     console.error('Video metadata diagnostics:', diagnostics, rendererErrors);
     throw error;
   }
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'new slot scrub default-on');
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.querySelector('.scrub-mode-btn.selected').dataset.mode`),
+    'manual-cc'
+  );
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.querySelector('.clip-slot[data-clip-number="1"] .clip-scrub-indicator').textContent`),
+    'Fader'
+  );
+  // Disable it for the legacy mode-by-mode scenarios below; later assertions
+  // verify this OFF preference is retained for slot one.
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'disable default scrub for scenario setup');
   const encodedFileURL = await window.webContents.executeJavaScript(
     `window.electronAPI.pathToFileURL(${JSON.stringify(path.join(projectRoot, 'folder #1', 'video test.mp4'))})`
   );
@@ -270,6 +294,21 @@ async function run() {
   state = await readState(window);
   assert.ok(state.time >= 1.7 && state.time <= 2.3, `stutter state: ${JSON.stringify(state)}`);
 
+  // Manual stutter plays one pass, waits at the end, and only restarts when
+  // its learned drum/key trigger is pressed.
+  await setSlider(window, '#scrubSpeedSlider', 1);
+  await click(window, '.scrub-mode-btn[data-mode="manual-stutter"]');
+  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 2.2`, 'manual stutter waits at end', 3000);
+  assert.match(
+    await window.webContents.executeJavaScript(`document.getElementById('scrubStatusLine').textContent`),
+    /Waiting for trigger/
+  );
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime < 2.15`, 'manual stutter trigger restart', 3000);
+  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 2.2`, 'manual stutter second wait', 3000);
+  await setSlider(window, '#scrubSpeedSlider', 4);
+
   await window.webContents.executeJavaScript(`(() => {
     window.__localPendulumSeeked = 0;
     document.getElementById('videoPlayer').addEventListener('seeked', () => {
@@ -367,6 +406,14 @@ async function run() {
   popoutTime = await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').currentTime`);
   assert.ok(popoutTime >= 1.7 && popoutTime <= 2.3, `pop-out stutter stayed in range at ${popoutTime}`);
 
+  await setSlider(window, '#scrubSpeedSlider', 1);
+  await click(window, '.scrub-mode-btn[data-mode="manual-stutter"]');
+  await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime >= 2.2`, 'pop-out manual stutter waits at end', 3000);
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  await waitFor(previewWindow, `!document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime < 2.15`, 'pop-out manual stutter trigger restart', 3000);
+  await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime >= 2.2`, 'pop-out manual stutter second wait', 3000);
+  await setSlider(window, '#scrubSpeedSlider', 4);
+
   await previewWindow.webContents.executeJavaScript(`(() => {
     window.__popoutPendulumSeeked = 0;
     document.getElementById('previewVideo').addEventListener('seeked', () => {
@@ -419,6 +466,106 @@ async function run() {
   await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime <= 1.8`, 'pop-out mid-stroke direction reversal', 3000);
   const popoutMidReverseMax = await previewWindow.webContents.executeJavaScript(`window.__popoutMidReverseMax`);
   assert.ok(popoutMidReverseMax <= popoutTurnTime + 0.08, `pop-out reversal jumped from ${popoutTurnTime} to ${popoutMidReverseMax}`);
+
+  // Per-slot scrub settings restore independently and serialize in session v1.9.
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub disabled');
+  await click(window, '#outputWindowBtn');
+  await waitForNode(() => !previewWindow || previewWindow.isDestroyed(), 'pop-out close');
+  await setSlider(window, '#scrubRangeSlider', 0.65);
+  await setSlider(window, '#scrubSpeedSlider', 1.7);
+  await click(window, '.scrub-mode-btn[data-mode="hold"]');
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.querySelector('.clip-slot[data-clip-number="1"] .clip-scrub-indicator').classList.contains('off')`),
+    true
+  );
+
+  const secondDropResult = await window.webContents.executeJavaScript(`(() => {
+    try {
+      const slot = document.querySelector('.clip-slot[data-clip-number="2"]');
+      window.draggedFile = {
+        name: 'test-video-2.mp4',
+        type: 'video/mp4',
+        path: ${JSON.stringify(testVideoPath)}
+      };
+      slot.dispatchEvent(new Event('drop', { bubbles: true }));
+      window.draggedFile = null;
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error.stack || error.message };
+    }
+  })()`);
+  assert.equal(secondDropResult.ok, true, secondDropResult.error);
+  await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="2"]').classList.contains('selected') && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'slot two default scrub activation', 10000);
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-mode-btn.selected').dataset.mode`), 'manual-cc');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '2');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1');
+
+  await setSlider(window, '#scrubRangeSlider', 1.25);
+  await setSlider(window, '#scrubSpeedSlider', 1.5);
+  await click(window, '.scrub-mode-btn[data-mode="drift"]');
+  await click(window, '.clip-slot[data-clip-number="1"]');
+  await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="1"]').classList.contains('selected') && document.getElementById('videoPlayer').duration > 0`, 'slot one restore', 10000);
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-mode-btn.selected').dataset.mode`), 'hold');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '0.65');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1.7');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubActiveBadge').style.display`), 'none');
+
+  await click(window, '.clip-slot[data-clip-number="2"]');
+  await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'drift' && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'slot two restore', 10000);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '1.25');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1.5');
+
+  savedSessionData = null;
+  await click(window, '#saveSessionBtn');
+  await waitForNode(() => savedSessionData !== null, 'session save capture');
+  assert.equal(savedSessionData.version, '1.9');
+  assert.deepEqual(savedSessionData.tabs.scrubSettings['0']['1'], {
+    enabled: false,
+    mode: 'hold',
+    range: 0.65,
+    speed: 1.7
+  });
+  assert.deepEqual(savedSessionData.tabs.scrubSettings['0']['2'], {
+    enabled: true,
+    mode: 'drift',
+    range: 1.25,
+    speed: 1.5
+  });
+
+  // Round-trip through the real session loader, not just the serialized object.
+  await setSlider(window, '#scrubRangeSlider', 3);
+  await click(window, '.scrub-mode-btn[data-mode="stutter"]');
+  await click(window, '#loadSessionBtn');
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.9 reload', 10000);
+  await click(window, '.clip-slot[data-clip-number="1"]');
+  await waitFor(window, `document.getElementById('videoPlayer').duration > 0 && document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'hold'`, 'reloaded slot one', 10000);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '0.65');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubActiveBadge').style.display`), 'none');
+  await click(window, '.clip-slot[data-clip-number="2"]');
+  await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'drift' && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'reloaded slot two', 10000);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '1.25');
+
+  // v1.8 global scrub values migrate to each loaded slot with scrub ON.
+  sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));
+  sessionDataToLoad.version = '1.8';
+  delete sessionDataToLoad.tabs.scrubSettings;
+  sessionDataToLoad.scrubSettings.range = 0.8;
+  sessionDataToLoad.scrubSettings.speed = 2.2;
+  sessionDataToLoad.scrubSettings.lastMode = 'hold';
+  await window.webContents.executeJavaScript(`document.getElementById('sessionStatus').textContent = 'Loading legacy test…'`);
+  await click(window, '#loadSessionBtn');
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'legacy session migration', 10000);
+  await click(window, '.clip-slot[data-clip-number="1"]');
+  await waitFor(window, `document.getElementById('videoPlayer').duration > 0 && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'migrated slot video load', 10000);
+  const migratedState = await window.webContents.executeJavaScript(`(() => ({
+    mode: document.querySelector('.scrub-mode-btn.selected').dataset.mode,
+    range: document.getElementById('scrubRangeSlider').value,
+    speed: document.getElementById('scrubSpeedSlider').value,
+    active: document.getElementById('scrubActiveBadge').style.display !== 'none'
+  }))()`);
+  assert.deepEqual(migratedState, { mode: 'hold', range: '0.8', speed: '2.2', active: true });
 
   const relevantErrors = rendererErrors.filter(message => !message.includes('MIDI') && !message.includes('favicon'));
   assert.deepEqual(relevantErrors, []);

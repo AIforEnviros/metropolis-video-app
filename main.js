@@ -43,8 +43,11 @@ function createMainWindow() {
 
   mainWindow.loadFile('index.html');
 
-  // ALWAYS open DevTools for debugging
-  mainWindow.webContents.openDevTools();
+  // Keep the performance launch clean. DevTools only opens when explicitly
+  // requested through `npm run dev` / the `--dev` flag.
+  if (isDev) {
+    mainWindow.webContents.openDevTools();
+  }
 
   // Log when page finishes loading
   mainWindow.webContents.on('did-finish-load', () => {

@@ -118,6 +118,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track In/Out points for each clip (tabIndex -> { clipNumber -> { inPoint: time, outPoint: time } })
     const tabClipInOutPoints = {};
 
+    // Scrub behavior belongs to each video slot. Controller mappings remain
+    // global, while enabled/mode/range/speed follow the clip across sessions.
+    const tabClipScrubSettings = {};
+    const DEFAULT_CLIP_SCRUB_SETTINGS = Object.freeze({
+        enabled: true,
+        mode: 'manual-cc',
+        range: 2.0,
+        speed: 1.0
+    });
+
     // Initialize tab data structures for default 5 tabs
     for (let i = 0; i < 5; i++) {
         tabClipVideos[i] = {};
@@ -128,6 +138,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipAutoPlay[i] = {};
         tabClipCurrentCueIndex[i] = {};
         tabClipInOutPoints[i] = {};
+        tabClipScrubSettings[i] = {};
     }
 
     // Legacy references for current tab's data (for compatibility)
@@ -139,6 +150,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let clipAutoPlay = tabClipAutoPlay[currentTab];
     let clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
     let clipInOutPoints = tabClipInOutPoints[currentTab];
+    let clipScrubSettings = tabClipScrubSettings[currentTab];
 
     // Cue point selection state (for Ctrl+drag range select and Ctrl+click toggle)
     let selectedCuePointIds = new Set();
@@ -200,6 +212,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     video.addEventListener('error', function() {
+        // Calling load() after intentionally clearing a clip can emit a media
+        // error with no source. That is UI reset, not a playback failure.
+        if (!video.getAttribute('src')) {
+            showVideoPlaybackStatus('', '');
+            return;
+        }
         const message = describeMediaError(video.error, video.dataset.sourceName);
         console.error('Video playback error:', {
             name: video.dataset.sourceName,
@@ -295,7 +313,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.8',
+            version: '1.9',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -315,15 +333,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 clipModes: tabClipModes,
                 clipAutoPlay: tabClipAutoPlay,
                 currentCueIndex: tabClipCurrentCueIndex,
-                inOutPoints: tabClipInOutPoints
+                inOutPoints: tabClipInOutPoints,
+                scrubSettings: tabClipScrubSettings
             },
             scrubSettings: {
-                range: scrubConfig.range,
-                speed: scrubConfig.speed,
                 ccController: scrubConfig.ccController,
                 drumPadNote: scrubConfig.drumPadNote,
                 drumPadKey: scrubConfig.drumPadKey,
-                lastMode: selectedScrubMode || null
+                defaults: DEFAULT_CLIP_SCRUB_SETTINGS
             }
         };
     }
@@ -435,6 +452,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Restoring In/Out points:', sessionData.tabs.inOutPoints);
                 Object.assign(tabClipInOutPoints, sessionData.tabs.inOutPoints);
             }
+            if (sessionData.tabs.scrubSettings) {
+                Object.keys(sessionData.tabs.scrubSettings).forEach(tabIndex => {
+                    tabClipScrubSettings[tabIndex] = {};
+                    Object.keys(sessionData.tabs.scrubSettings[tabIndex]).forEach(clipNumber => {
+                        tabClipScrubSettings[tabIndex][clipNumber] = normaliseClipScrubSettings(
+                            sessionData.tabs.scrubSettings[tabIndex][clipNumber]
+                        );
+                    });
+                });
+            }
+
+            // v1.8 and earlier stored one range/speed/mode for the whole session.
+            // Migrate those values into every video slot and default scrub to ON.
+            const legacyScrubDefaults = normaliseClipScrubSettings({
+                enabled: true,
+                mode: sessionData.scrubSettings?.lastMode || DEFAULT_CLIP_SCRUB_SETTINGS.mode,
+                range: sessionData.scrubSettings?.range ?? DEFAULT_CLIP_SCRUB_SETTINGS.range,
+                speed: sessionData.scrubSettings?.speed ?? DEFAULT_CLIP_SCRUB_SETTINGS.speed
+            });
+            Object.keys(tabClipVideos).forEach(tabIndex => {
+                if (!tabClipScrubSettings[tabIndex]) tabClipScrubSettings[tabIndex] = {};
+                Object.keys(tabClipVideos[tabIndex]).forEach(clipNumber => {
+                    ensureClipScrubSettings(clipNumber, tabIndex, legacyScrubDefaults);
+                });
+            });
 
             console.log('After restoring - tab data:', tabClipVideos);
 
@@ -453,6 +495,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clipAutoPlay = tabClipAutoPlay[currentTab];
             clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
             clipInOutPoints = tabClipInOutPoints[currentTab];
+            clipScrubSettings = tabClipScrubSettings[currentTab];
             console.log('Current tab video data:', clipVideos);
 
             // Restore folder path (keep for backward compatibility)
@@ -510,30 +553,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Restored MIDI mappings:', midiMappings);
             }
 
-            // Restore scrub settings (v1.8+)
+            // Restore global scrub controller mappings. Per-slot mode/range/speed
+            // are restored from tabs.scrubSettings in session v1.9+.
             if (sessionData.scrubSettings) {
-                scrubConfig.range        = sessionData.scrubSettings.range        ?? 2.0;
-                scrubConfig.speed        = sessionData.scrubSettings.speed        ?? 1.0;
                 scrubConfig.ccController = sessionData.scrubSettings.ccController || null;
                 scrubConfig.drumPadNote  = sessionData.scrubSettings.drumPadNote  || null;
                 scrubConfig.drumPadKey   = sessionData.scrubSettings.drumPadKey   || null;
-                // Restore last-used mode to UI but do NOT activate scrub on load
-                if (sessionData.scrubSettings.lastMode) {
-                    selectScrubModeUI(sessionData.scrubSettings.lastMode);
-                }
+                scrubConfig.range = legacyScrubDefaults.range;
+                scrubConfig.speed = legacyScrubDefaults.speed;
+                selectScrubModeUI(legacyScrubDefaults.mode);
                 updateScrubUI();
                 updateScrubMIDIDisplays();
-                // Sync sliders
-                const rangeSlider = document.getElementById('scrubRangeSlider');
-                const speedSliderScrub = document.getElementById('scrubSpeedSlider');
-                if (rangeSlider) {
-                    rangeSlider.value = scrubConfig.range;
-                    document.getElementById('scrubRangeValue').textContent = `${scrubConfig.range.toFixed(1)}s`;
-                }
-                if (speedSliderScrub) {
-                    speedSliderScrub.value = scrubConfig.speed;
-                    document.getElementById('scrubSpeedValue').textContent = `${scrubConfig.speed.toFixed(1)}x`;
-                }
+                syncScrubParameterUI();
                 console.log('Restored scrub settings:', scrubConfig);
             }
 
@@ -570,6 +601,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function clearAllTabs() {
+        if (scrubModeActive) deactivateScrubMode(true, false);
         // Memory management: Revoke all blob URLs before clearing
         for (let i = 0; i < 5; i++) {
             const tabVideos = tabClipVideos[i];
@@ -590,6 +622,8 @@ document.addEventListener('DOMContentLoaded', function() {
             tabClipModes[i] = {};
             tabClipAutoPlay[i] = {};
             tabClipCurrentCueIndex[i] = {};
+            tabClipInOutPoints[i] = {};
+            tabClipScrubSettings[i] = {};
         }
 
         // Update current references
@@ -600,6 +634,8 @@ document.addEventListener('DOMContentLoaded', function() {
         clipModes = tabClipModes[currentTab];
         clipAutoPlay = tabClipAutoPlay[currentTab];
         clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
+        clipInOutPoints = tabClipInOutPoints[currentTab];
+        clipScrubSettings = tabClipScrubSettings[currentTab];
 
         // Clear UI
         refreshClipMatrix();
@@ -1059,6 +1095,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const sourceName = clipNames[sourceClipNumber];
         const sourceMode = clipModes[sourceClipNumber] || 'loop';
         const sourceAutoPlay = tabClipAutoPlay[currentTab][sourceClipNumber];
+        const sourceScrubSettings = clipScrubSettings[sourceClipNumber]
+            ? { ...clipScrubSettings[sourceClipNumber] }
+            : normaliseClipScrubSettings(null);
 
         // Save target clip data (for swap)
         const targetVideo = clipVideos[targetClipNumber];
@@ -1067,6 +1106,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const targetName = clipNames[targetClipNumber];
         const targetMode = clipModes[targetClipNumber] || 'loop';
         const targetAutoPlay = tabClipAutoPlay[currentTab][targetClipNumber];
+        const targetScrubSettings = clipScrubSettings[targetClipNumber]
+            ? { ...clipScrubSettings[targetClipNumber] }
+            : normaliseClipScrubSettings(null);
 
         // Move source to target
         if (sourceVideo) {
@@ -1077,6 +1119,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clipModes[targetClipNumber] = sourceMode;
             if (sourceAutoPlay !== undefined) tabClipAutoPlay[currentTab][targetClipNumber] = sourceAutoPlay;
             else delete tabClipAutoPlay[currentTab][targetClipNumber];
+            clipScrubSettings[targetClipNumber] = sourceScrubSettings;
         } else {
             delete clipVideos[targetClipNumber];
             delete clipCuePoints[targetClipNumber];
@@ -1084,6 +1127,7 @@ document.addEventListener('DOMContentLoaded', function() {
             delete clipNames[targetClipNumber];
             delete clipModes[targetClipNumber];
             delete tabClipAutoPlay[currentTab][targetClipNumber];
+            delete clipScrubSettings[targetClipNumber];
         }
 
         // Move target to source (swap)
@@ -1095,6 +1139,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clipModes[sourceClipNumber] = targetMode;
             if (targetAutoPlay !== undefined) tabClipAutoPlay[currentTab][sourceClipNumber] = targetAutoPlay;
             else delete tabClipAutoPlay[currentTab][sourceClipNumber];
+            clipScrubSettings[sourceClipNumber] = targetScrubSettings;
         } else {
             delete clipVideos[sourceClipNumber];
             delete clipCuePoints[sourceClipNumber];
@@ -1102,6 +1147,7 @@ document.addEventListener('DOMContentLoaded', function() {
             delete clipNames[sourceClipNumber];
             delete clipModes[sourceClipNumber];
             delete tabClipAutoPlay[currentTab][sourceClipNumber];
+            delete clipScrubSettings[sourceClipNumber];
         }
 
         // Update UI for both slots
@@ -1133,6 +1179,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Clear all data for a clip
     function clearClip(clipNumber) {
+        if (scrubModeActive && selectedClipSlot && selectedClipSlot.dataset.clipNumber === String(clipNumber)) {
+            deactivateScrubMode(true, false);
+        }
         // Remove video data
         if (clipVideos[clipNumber]) {
             // Revoke blob URL if it exists to free memory
@@ -1156,6 +1205,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Remove auto-play setting
         delete tabClipAutoPlay[currentTab][clipNumber];
+
+        // Remove per-slot scrub setting
+        delete clipScrubSettings[clipNumber];
 
         // Update the clip slot UI
         const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
@@ -1216,7 +1268,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Slot element:', clipSlot);
         console.log('Current tab:', currentTab);
 
-        if (scrubModeActive) deactivateScrubMode();
+        if (scrubModeActive) deactivateScrubMode(true, false);
         lastNavigatedCueClipNumber = null;
         lastNavigatedCueTab = null;
         lastNavigatedCueIndex = -1;
@@ -1237,6 +1289,7 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedClipSlot = clipSlot;
 
         const clipNumber = clipSlot.dataset.clipNumber;
+        applyClipScrubSettings(clipNumber);
         console.log(`Selected clip slot ${clipNumber}`);
         console.log('Current clipVideos object:', clipVideos);
         console.log(`Video data for slot ${clipNumber}:`, clipVideos[clipNumber]);
@@ -1294,8 +1347,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateTimeline();
                 console.log(`Starting from ${startTime > 0 ? 'In point' : 'beginning'}: ${formatTime(startTime)}`);
 
-                // Auto-play when clip is selected - only if per-clip auto-play is enabled
-                if (isClipAutoPlay(clipNumber)) {
+                const savedScrubSettings = ensureClipScrubSettings(clipNumber);
+
+                // When scrub is ON it owns playback from the outset. Starting
+                // normal autoplay first would race against pausing modes such as
+                // Fader/Hold and reject the superseded play() promise.
+                if (savedScrubSettings.enabled) {
+                    globalPlayIntent = isClipAutoPlay(clipNumber);
+                    if (previewPopoutOpen) {
+                        sendToPopout({
+                            type: 'loadClip',
+                            src: video.src,
+                            currentTime: startTime
+                        });
+                    }
+                    console.log('Clip loaded with saved scrub mode owning playback');
+                } else if (isClipAutoPlay(clipNumber)) {
                     globalPlayIntent = true;
                     if (previewPopoutOpen) {
                         // Route to pop-out - load clip there and play
@@ -1324,6 +1391,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     console.log('Clip loaded but not playing (auto-play disabled)');
                 }
+
+                activateSavedScrubForSelectedClip(clipNumber);
             }, { once: true });
         } else {
             // No video in this slot
@@ -1410,6 +1479,18 @@ document.addEventListener('DOMContentLoaded', function() {
             slot.classList.add('has-video');
             slot.setAttribute('draggable', 'true'); // Make slot draggable when it has video
             const videoData = clipVideos[clipNumber];
+            const savedScrub = ensureClipScrubSettings(clipNumber);
+            const scrubModeNames = {
+                'manual-cc': 'Fader',
+                'back-forward': 'B/F',
+                'pendulum': 'Pend.',
+                'stutter': 'Stutter',
+                'manual-stutter': 'M.Stut',
+                'drift': 'Drift',
+                'hold': 'Hold'
+            };
+            const scrubModeName = scrubModeNames[savedScrub.mode] || 'Fader';
+            const scrubTitle = `Scrub ${savedScrub.enabled ? 'ON' : 'OFF'}: ${scrubModeName}, ${formatScrubRangeValue(savedScrub.range)}s @ ${savedScrub.speed.toFixed(1)}x`;
 
             // Build slot content with thumbnail support
             let thumbnailHtml = '';
@@ -1425,6 +1506,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             slot.innerHTML = `
                 ${thumbnailHtml}
+                <div class="clip-scrub-indicator${savedScrub.enabled ? '' : ' off'}" title="${scrubTitle}">${scrubModeName}</div>
                 <div class="clip-mode-indicator" title="Playback Mode: ${clipMode}${autoPlayEnabled ? '' : ' | Auto-play: off'}">${modeIcon}${autoPlayBadge}</div>
                 <div class="clip-slot-content">
                     <div class="clip-slot-label" data-clip-number="${clipNumber}">${customName}</div>
@@ -1450,6 +1532,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 startEditingClipName(clipNumber, label);
             });
         }
+    }
+
+    function updateClipScrubIndicator(clipNumber) {
+        const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
+        const indicator = slot ? slot.querySelector('.clip-scrub-indicator') : null;
+        if (!indicator) return;
+        const settings = ensureClipScrubSettings(clipNumber);
+        const names = {
+            'manual-cc': 'Fader',
+            'back-forward': 'B/F',
+            'pendulum': 'Pend.',
+            'stutter': 'Stutter',
+            'manual-stutter': 'M.Stut',
+            'drift': 'Drift',
+            'hold': 'Hold'
+        };
+        const name = names[settings.mode] || 'Fader';
+        indicator.textContent = name;
+        indicator.classList.toggle('off', !settings.enabled);
+        indicator.title = `Scrub ${settings.enabled ? 'ON' : 'OFF'}: ${name}, ${formatScrubRangeValue(settings.range)}s @ ${settings.speed.toFixed(1)}x`;
     }
 
     // Start editing a clip name
@@ -2623,6 +2725,85 @@ document.addEventListener('DOMContentLoaded', function() {
     let scrubLearnTarget = null; // 'cc' | 'drum'
     let scrubLearnBtn = null;
 
+    const VALID_SCRUB_MODES = new Set(['manual-cc', 'back-forward', 'pendulum', 'stutter', 'manual-stutter', 'drift', 'hold']);
+
+    function normaliseClipScrubSettings(settings, fallback = DEFAULT_CLIP_SCRUB_SETTINGS) {
+        const source = settings || {};
+        const fallbackMode = VALID_SCRUB_MODES.has(fallback.mode) ? fallback.mode : DEFAULT_CLIP_SCRUB_SETTINGS.mode;
+        const mode = VALID_SCRUB_MODES.has(source.mode) ? source.mode : fallbackMode;
+        const rangeValue = Number(source.range ?? fallback.range);
+        const speedValue = Number(source.speed ?? fallback.speed);
+        return {
+            enabled: source.enabled !== undefined ? Boolean(source.enabled) : Boolean(fallback.enabled),
+            mode,
+            range: Math.max(0.1, Math.min(10, Number.isFinite(rangeValue) ? rangeValue : DEFAULT_CLIP_SCRUB_SETTINGS.range)),
+            speed: Math.max(0.1, Math.min(4, Number.isFinite(speedValue) ? speedValue : DEFAULT_CLIP_SCRUB_SETTINGS.speed))
+        };
+    }
+
+    function ensureClipScrubSettings(clipNumber, tabIndex = currentTab, fallback = DEFAULT_CLIP_SCRUB_SETTINGS) {
+        if (!tabClipScrubSettings[tabIndex]) tabClipScrubSettings[tabIndex] = {};
+        if (!tabClipScrubSettings[tabIndex][clipNumber]) {
+            tabClipScrubSettings[tabIndex][clipNumber] = normaliseClipScrubSettings(null, fallback);
+        } else {
+            tabClipScrubSettings[tabIndex][clipNumber] = normaliseClipScrubSettings(
+                tabClipScrubSettings[tabIndex][clipNumber],
+                fallback
+            );
+        }
+        return tabClipScrubSettings[tabIndex][clipNumber];
+    }
+
+    function formatScrubRangeValue(value) {
+        return Number(value).toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    }
+
+    function syncScrubParameterUI() {
+        const rangeSlider = document.getElementById('scrubRangeSlider');
+        const speedSlider = document.getElementById('scrubSpeedSlider');
+        const rangeValue = document.getElementById('scrubRangeValue');
+        const speedValue = document.getElementById('scrubSpeedValue');
+        if (rangeSlider) rangeSlider.value = scrubConfig.range;
+        if (speedSlider) speedSlider.value = scrubConfig.speed;
+        if (rangeValue) rangeValue.textContent = `${formatScrubRangeValue(scrubConfig.range)}s`;
+        if (speedValue) speedValue.textContent = `${scrubConfig.speed.toFixed(1)}x`;
+    }
+
+    function applyClipScrubSettings(clipNumber) {
+        const settings = ensureClipScrubSettings(clipNumber);
+        scrubConfig.range = settings.range;
+        scrubConfig.speed = settings.speed;
+        selectScrubModeUI(settings.mode);
+        syncScrubParameterUI();
+        updateScrubUI();
+        updateScrubStatus();
+        return settings;
+    }
+
+    function updateSelectedClipScrubSettings(changes, shouldMarkModified = true) {
+        if (!selectedClipSlot) return null;
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const current = ensureClipScrubSettings(clipNumber);
+        const updated = normaliseClipScrubSettings({ ...current, ...changes }, current);
+        tabClipScrubSettings[currentTab][clipNumber] = updated;
+        clipScrubSettings = tabClipScrubSettings[currentTab];
+        updateClipScrubIndicator(clipNumber);
+        if (shouldMarkModified) markSessionModified();
+        return updated;
+    }
+
+    function activateSavedScrubForSelectedClip(clipNumber) {
+        if (!selectedClipSlot || selectedClipSlot.dataset.clipNumber !== String(clipNumber)) return;
+        if (!clipVideos[clipNumber] || !video.src || getScrubDuration() <= 0) return;
+        const settings = applyClipScrubSettings(clipNumber);
+        if (settings.enabled && !scrubModeActive) {
+            const desiredPlayState = isClipAutoPlay(clipNumber);
+            globalPlayIntent = desiredPlayState;
+            const activated = activateScrubMode(settings.mode, false);
+            if (activated) scrubSavedPlayState = desiredPlayState;
+        }
+    }
+
     // ==============================================================
     // END SCRUB MODE STATE
     // ==============================================================
@@ -2655,15 +2836,17 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         const { start, end } = getScrubBounds();
-        let backForwardState = '';
+        let modeState = '';
         if (scrubMode === 'back-forward') {
             if (scrubBackForwardActiveDirection !== 0) {
-                backForwardState = `  Playing: ${scrubBackForwardActiveDirection > 0 ? 'Forward' : 'Back'}`;
+                modeState = `  Playing: ${scrubBackForwardActiveDirection > 0 ? 'Forward' : 'Back'}`;
             } else {
-                backForwardState = `  Next: ${scrubBackForwardDirection < 0 ? 'Forward' : 'Back'}`;
+                modeState = `  Next: ${scrubBackForwardDirection < 0 ? 'Forward' : 'Back'}`;
             }
+        } else if (scrubMode === 'manual-stutter') {
+            modeState = scrubEffectRunning ? '  Playing once' : '  Waiting for trigger';
         }
-        statusEl.textContent = `${formatTimeShort(start)} - ${formatTimeShort(end)}  @${scrubConfig.speed}x${backForwardState}`;
+        statusEl.textContent = `${formatTimeShort(start)} - ${formatTimeShort(end)}  @${scrubConfig.speed}x${modeState}`;
     }
 
     // Update the scrub panel UI to reflect current state
@@ -2675,12 +2858,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (scrubModeActive) {
             badge.style.display = 'inline';
-            activateBtn.textContent = 'Deactivate Scrub';
+            activateBtn.textContent = 'Scrub: ON';
             activateBtn.classList.add('active');
             if (centreDisplay) centreDisplay.textContent = `Centre: ${formatTimeShort(scrubCentreTime)}`;
         } else {
             badge.style.display = 'none';
-            activateBtn.textContent = 'Activate Scrub';
+            const selectedClipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
+            const savedEnabled = selectedClipNumber
+                ? ensureClipScrubSettings(selectedClipNumber).enabled
+                : true;
+            activateBtn.textContent = savedEnabled ? 'Scrub: ON (waiting)' : 'Scrub: OFF';
             activateBtn.classList.remove('active');
             if (centreDisplay) {
                 centreDisplay.textContent = scrubCentreTime > 0
@@ -2697,7 +2884,10 @@ document.addEventListener('DOMContentLoaded', function() {
             btn.classList.toggle('selected', btn.dataset.mode === mode);
         });
         const activateBtn = document.getElementById('scrubActivateBtn');
-        if (activateBtn) activateBtn.disabled = !mode;
+        if (activateBtn) {
+            const selectedClipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
+            activateBtn.disabled = !mode || !selectedClipNumber || !clipVideos[selectedClipNumber];
+        }
     }
 
     // Update the CC fader, drum pad MIDI and drum pad keyboard displays
@@ -2947,6 +3137,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 playScrubOutput();
                 startScrubAnimationLoop();
                 break;
+            case 'manual-stutter':
+                setScrubPlaybackRate(scrubConfig.speed);
+                seekScrubPosition(start);
+                playScrubOutput();
+                startScrubAnimationLoop();
+                break;
             case 'drift':
                 seekScrubPosition(scrubCentreTime);
                 setScrubPlaybackRate(Math.max(0.1, scrubConfig.speed * 0.25));
@@ -2962,7 +3158,7 @@ document.addEventListener('DOMContentLoaded', function() {
         updateScrubStatus();
     }
 
-    function activateScrubMode(mode) {
+    function activateScrubMode(mode, shouldPersistEnabled = true) {
         if (!mode || !selectedClipSlot || !video.src || getScrubDuration() <= 0) {
             const statusEl = document.getElementById('scrubStatusLine');
             if (statusEl) statusEl.textContent = 'Load and select a video before activating scrub.';
@@ -2982,6 +3178,7 @@ document.addEventListener('DOMContentLoaded', function() {
         scrubSavedPlayState = previewPopoutOpen ? globalPlayIntent : !video.paused;
         scrubCentreTime = getScrubActivationCentre();
         scrubModeActive = true;
+        if (shouldPersistEnabled) updateSelectedClipScrubSettings({ enabled: true });
         configureActiveScrubMode(mode);
         console.log(`Scrub mode activated: ${mode}, centre=${formatTimeShort(scrubCentreTime)}`);
         return true;
@@ -2994,17 +3191,18 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Scrub centre updated to ${formatTimeShort(scrubCentreTime)}`);
     }
 
-    function deactivateScrubMode() {
+    function deactivateScrubMode(preserveSlotEnabled = false, restorePlayback = true) {
         if (!scrubModeActive) return;
         stopScrubAnimationLoop();
         resetManualScrubSeek();
         pauseScrubOutput();
         scrubModeActive = false;
         scrubMode = null;
+        if (!preserveSlotEnabled) updateSelectedClipScrubSettings({ enabled: false });
         setVideoSpeed(scrubSavedPlaybackRate);
         globalPlayIntent = scrubSavedGlobalPlayIntent;
 
-        if (scrubSavedPlayState && video.src && !video.ended) {
+        if (restorePlayback && scrubSavedPlayState && video.src && !video.ended) {
             if (previewPopoutOpen) {
                 sendToPopout({ type: 'play' });
             } else {
@@ -3032,7 +3230,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Pop-out time reports are intentionally throttled. Predict forward
         // progress locally so range boundaries remain sub-frame responsive.
         if (previewPopoutOpen && scrubEffectRunning &&
-            (scrubMode === 'stutter' ||
+            (scrubMode === 'stutter' || scrubMode === 'manual-stutter' ||
                 (scrubMode === 'back-forward' && scrubBackForwardActiveDirection > 0))) {
             scrubVirtualPosition += scrubConfig.speed * elapsedSeconds;
             currentPos = scrubVirtualPosition;
@@ -3067,6 +3265,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } else if (scrubMode === 'stutter' && scrubEffectRunning && currentPos >= end) {
             seekScrubPosition(start);
+        } else if (scrubMode === 'manual-stutter' && scrubEffectRunning && currentPos >= end) {
+            pauseScrubOutput();
+            seekScrubPosition(end);
+            updateScrubStatus();
         } else if (scrubMode === 'pendulum' && scrubEffectRunning && end > start) {
             scrubReverseElapsedSeconds += elapsedSeconds;
             const seekIntervalElapsed = timestamp - scrubLastDecoderSeekTimestamp >= SCRUB_PENDULUM_SEEK_INTERVAL_MS;
@@ -3132,6 +3334,13 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'stutter':
                 if (scrubEffectRunning) pauseScrubOutput();
                 else playScrubOutput();
+                break;
+            case 'manual-stutter':
+                seekScrubPosition(start);
+                setScrubPlaybackRate(scrubConfig.speed);
+                playScrubOutput();
+                scrubLoopLastTimestamp = performance.now();
+                updateScrubStatus();
                 break;
             case 'drift':
                 seekScrubPosition(scrubCentreTime);
@@ -3630,7 +3839,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         console.log(`Switching from tab ${currentTab} to tab ${tabIndex}`);
 
-        if (scrubModeActive) deactivateScrubMode();
+        if (scrubModeActive) deactivateScrubMode(true, false);
         lastNavigatedCueClipNumber = null;
         lastNavigatedCueTab = null;
         lastNavigatedCueIndex = -1;
@@ -3659,6 +3868,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipAutoPlay = tabClipAutoPlay[currentTab];
         clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
         clipInOutPoints = tabClipInOutPoints[currentTab];
+        clipScrubSettings = tabClipScrubSettings[currentTab];
 
         // Clear current selection (each tab has its own selection)
         if (selectedClipSlot) {
@@ -3695,6 +3905,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipAutoPlay[newTabIndex] = {};
         tabClipCurrentCueIndex[newTabIndex] = {};
         tabClipInOutPoints[newTabIndex] = {};
+        tabClipScrubSettings[newTabIndex] = {};
 
         // Create tab button
         const tabBtn = document.createElement('button');
@@ -3869,6 +4080,10 @@ document.addEventListener('DOMContentLoaded', function() {
         delete tabClipSpeeds[tabIndex];
         delete tabClipNames[tabIndex];
         delete tabClipModes[tabIndex];
+        delete tabClipAutoPlay[tabIndex];
+        delete tabClipCurrentCueIndex[tabIndex];
+        delete tabClipInOutPoints[tabIndex];
+        delete tabClipScrubSettings[tabIndex];
         delete tabCustomNames[tabIndex];
 
         // Remove tab button from UI
@@ -4067,6 +4282,8 @@ document.addEventListener('DOMContentLoaded', function() {
             filePath: filePath,
             thumbnail: null // Will be set after generation
         };
+        ensureClipScrubSettings(clipNumber);
+        applyClipScrubSettings(clipNumber);
 
         // Mark session as modified
         markSessionModified();
@@ -4103,6 +4320,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Ensure audio stays disabled after load
             video.muted = true;
             video.volume = 0;
+            activateSavedScrubForSelectedClip(clipNumber);
         }, { once: true });
 
         console.log(`Loaded video ${file.name} into clip slot ${clipNumber}`);
@@ -5136,8 +5354,8 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', function() {
             const modeChanged = scrubMode !== btn.dataset.mode;
             selectScrubModeUI(btn.dataset.mode);
+            updateSelectedClipScrubSettings({ mode: btn.dataset.mode });
             if (scrubModeActive && modeChanged) activateScrubMode(btn.dataset.mode);
-            markSessionModified();
         });
     });
 
@@ -5157,9 +5375,9 @@ document.addEventListener('DOMContentLoaded', function() {
         scrubRangeSlider.addEventListener('input', function() {
             scrubConfig.range = parseFloat(this.value);
             const rangeValueEl = document.getElementById('scrubRangeValue');
-            if (rangeValueEl) rangeValueEl.textContent = `${scrubConfig.range.toFixed(1)}s`;
+            if (rangeValueEl) rangeValueEl.textContent = `${formatScrubRangeValue(scrubConfig.range)}s`;
+            updateSelectedClipScrubSettings({ range: scrubConfig.range });
             if (scrubModeActive) configureActiveScrubMode(scrubMode);
-            markSessionModified();
         });
     }
 
@@ -5170,15 +5388,15 @@ document.addEventListener('DOMContentLoaded', function() {
             scrubConfig.speed = parseFloat(this.value);
             const speedValueEl = document.getElementById('scrubSpeedValue');
             if (speedValueEl) speedValueEl.textContent = `${scrubConfig.speed.toFixed(1)}x`;
+            updateSelectedClipScrubSettings({ speed: scrubConfig.speed });
             if (scrubModeActive) {
                 if (scrubMode === 'drift') {
                     setScrubPlaybackRate(Math.max(0.1, scrubConfig.speed * 0.25));
-                } else if (scrubMode === 'back-forward' || scrubMode === 'stutter') {
+                } else if (scrubMode === 'back-forward' || scrubMode === 'stutter' || scrubMode === 'manual-stutter') {
                     setScrubPlaybackRate(scrubConfig.speed);
                 }
                 updateScrubStatus();
             }
-            markSessionModified();
         });
     }
 
