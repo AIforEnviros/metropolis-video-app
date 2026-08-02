@@ -1080,7 +1080,8 @@ During development, several features were implemented that weren't in the origin
 **Historical note:** Bounce mode was implemented experimentally and later removed from the active application.
 
 ### Scrub Modes
-- Six modes: Fader, B/F, Pendulum, Stutter, Drift, and Hold
+- Seven modes: Fader, B/F, Pendulum, Stutter, Manual Stutter, Drift, and Hold
+- Manual Stutter plays one range pass, stops at the end, and restarts only when triggered
 - Keyboard and MIDI learn for drum triggers plus continuous CC fader mapping
 - Next-cue priority while scrub controls have focus and last-to-first cue wrapping
 - Current-position B/F direction reversal with boundary waiting
@@ -1111,8 +1112,8 @@ During development, several features were implemented that weren't in the origin
 - **Status:** ✅ Implemented
 
 ### Enhanced Session Format
-- Session file format evolved from v1.0 to v1.8
-- Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, and scrub settings
+- Session file format evolved from v1.0 to v1.9
+- Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, and per-slot scrub enabled/mode/range/speed settings
 - Comprehensive project state preservation
 - **Status:** ✅ Implemented
 

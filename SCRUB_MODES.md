@@ -9,6 +9,8 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - Range limits: **0.1–10 seconds**, in **0.05-second** increments.
 - Speed limits: **0.1×–4×**.
 - Scrub playback temporarily owns play, pause, seeking, and playback rate. Deactivation restores the play/pause state and speed that existed before activation.
+- New video slots default to Fader mode with scrub ON, a 2-second range, and 1× scrub speed.
+- Enabled state, mode, range, and speed are independent for every video slot; selecting a loaded slot restores and, when enabled, activates its saved scrub behavior.
 - Changing clip or tab safely deactivates scrub and clears stale cue-center state.
 - The embedded preview and pop-out projection window must exhibit the same behavior.
 
@@ -43,6 +45,12 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - Plays forward from range start to range end, then jumps back to range start and repeats.
 - The drum/key trigger pauses or resumes the effect.
 
+### Manual Stutter (`manual-stutter`)
+
+- Plays forward from range start to range end once, then stops at the range end and waits.
+- Each drum/key trigger immediately jumps back to the range start and plays one more pass.
+- A trigger received during a pass restarts that pass immediately from the range start.
+
 ### Drift (`drift`)
 
 - Starts at the scrub center and plays forward at one quarter of the scrub speed, with a minimum playback rate of 0.1×.
@@ -71,15 +79,22 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 
 ## Session Persistence
 
-Scrub settings are stored in session format **v1.8**:
+Scrub settings are stored in session format **v1.9**.
 
-- Range and speed
+Saved per video slot:
+
+- Enabled/disabled state
+- Selected scrub mode
+- Range
+- Speed
+
+Saved globally because they describe the physical controls:
+
 - Learned CC controller
 - Learned MIDI drum note
 - Learned keyboard drum trigger
-- Last selected scrub mode
 
-Loading a session restores the settings and selected mode but does not automatically activate scrub.
+Loading a session restores each slot independently. A slot saved with scrub ON activates automatically when its connected video is selected. Sessions from v1.8 and earlier migrate their former global range, speed, and last mode to every video slot with scrub ON.
 
 ## Automated Verification
 
@@ -107,6 +122,7 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - Embedded and pop-out playback behavior
 - Dense 128-message fader bursts without decoder seek backlogs
 - Cross-platform file URL encoding for spaces and reserved characters
+- Per-slot mode/range/speed/ON-OFF restoration and session v1.9 round-tripping
 
 ## Hardware Acceptance Checks
 
