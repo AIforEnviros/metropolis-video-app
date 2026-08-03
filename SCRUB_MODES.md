@@ -29,8 +29,8 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - Activates at the range start and waits.
 - The first trigger starts forward playback.
 - Every later trigger reverses direction at the current playhead position. It must not jump to either range boundary.
-- Reaching the range start or end stops playback and waits for another trigger.
-- A trigger at a stopped boundary reverses playback away from that boundary.
+- Reaching either range boundary automatically reverses direction and continues playback.
+- Playback keeps bouncing between the boundaries until scrub mode is deactivated; a trigger can still reverse it at any point.
 - B/F alone can use **Full video / In-Out** instead of the centered 0.1–10 second range. Its boundaries are the clip's valid In/Out points when set, otherwise `00:00` and the complete video duration.
 - Forward strokes use normal video playback. Backward strokes use decoder-paced frame seeks because Chromium does not reliably support a negative playback rate.
 
@@ -117,7 +117,7 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - All seven modes
 - Keyboard and MIDI learn
 - First-hit activation
-- Current-position B/F reversals and boundary waiting
+- Current-position B/F reversals and automatic boundary turnarounds
 - Decoder-completed reverse frames
 - Cue advancement, focused-control priority, and last-to-first wrapping
 - Pre-scrub state restoration

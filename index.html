@@ -318,7 +318,7 @@
         }
 
         /* Hide non-essential sections in fullscreen cue-editing mode */
-        .right-panel.fullscreen-expanded .right-panel-controls > h3:last-of-type,
+        .right-panel.fullscreen-expanded .preview-controls-panel-body > h3:last-of-type,
         .right-panel.fullscreen-expanded .speed-control,
         .right-panel.fullscreen-expanded .cue-tip-box {
             display: none;
@@ -340,9 +340,23 @@
             display: none;
         }
 
-        /* Normal mode: controls wrapper is transparent to flex layout */
+        /* Keep preview controls in a deliberate performance-first order. */
         .right-panel-controls {
-            display: contents;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .right-panel-controls > .timeline-container {
+            order: 1;
+        }
+
+        .right-panel-controls > .scrub-panel {
+            order: 2;
+        }
+
+        .right-panel-controls > .preview-controls-panel {
+            order: 3;
         }
 
         .expand-panel-btn {
@@ -1144,6 +1158,12 @@
         .scrub-panel-body.collapsed {
             display: none;
         }
+        .preview-controls-panel-body > h3 {
+            margin: 8px 0 0;
+        }
+        .preview-controls-panel-body > h3:first-of-type {
+            margin-top: 0;
+        }
         .scrub-active-badge {
             background: #cc3333;
             color: white;
@@ -1790,6 +1810,16 @@
                 </div>
             </div>
 
+            <!-- COLLAPSIBLE PLAYBACK / CUE CONTROLS -->
+            <div class="scrub-panel preview-controls-panel" id="previewControlsPanel">
+                <div class="scrub-panel-header" id="previewControlsPanelToggle"
+                     role="button" tabindex="0" aria-expanded="false" aria-controls="previewControlsPanelBody">
+                    <h3>Playback &amp; Cue Controls</h3>
+                    <button type="button" class="scrub-collapse-btn" id="previewControlsCollapseChevron"
+                            aria-label="Expand playback and cue controls">▶</button>
+                </div>
+                <div class="scrub-panel-body preview-controls-panel-body collapsed" id="previewControlsPanelBody">
+
             <div class="timeline-zoom-controls">
                 <label>Zoom:</label>
                 <button class="zoom-btn" data-zoom="1">1x</button>
@@ -1850,12 +1880,18 @@
                 </div>
             </div>
 
+                </div>
+            </div>
+            <!-- END COLLAPSIBLE PLAYBACK / CUE CONTROLS -->
+
             <!-- SCRUB MODES PANEL -->
             <div class="scrub-panel" id="scrubPanel">
-                <div class="scrub-panel-header" id="scrubPanelToggle">
+                <div class="scrub-panel-header" id="scrubPanelToggle"
+                     role="button" tabindex="0" aria-expanded="true" aria-controls="scrubPanelBody">
                     <h3>Scrub Modes — Current Slot</h3>
                     <span class="scrub-active-badge" id="scrubActiveBadge" style="display:none;">ACTIVE</span>
-                    <button class="scrub-collapse-btn" id="scrubCollapseChevron">▼</button>
+                    <button type="button" class="scrub-collapse-btn" id="scrubCollapseChevron"
+                            aria-label="Collapse scrub mode controls">▼</button>
                 </div>
                 <div class="scrub-panel-body" id="scrubPanelBody">
 
@@ -1863,7 +1899,7 @@
                     <div class="scrub-mode-row">
                         <div class="scrub-mode-btns">
                             <button class="scrub-mode-btn" data-mode="manual-cc" title="CC cross-fader controls playhead position within range">Fader</button>
-                            <button class="scrub-mode-btn" data-mode="back-forward" title="Each trigger reverses direction from the current frame; boundaries stop and wait">B/F</button>
+                            <button class="scrub-mode-btn" data-mode="back-forward" title="Each trigger reverses direction from the current frame; boundaries reverse automatically">B/F</button>
                             <button class="scrub-mode-btn" data-mode="pendulum" title="Auto-oscillates forward/back continuously">Pend.</button>
                             <button class="scrub-mode-btn" data-mode="stutter" title="Rapid stutter effect — use short range + fast speed">Stutter</button>
                             <button class="scrub-mode-btn" data-mode="manual-stutter" title="Plays the range once, then waits at the end until the next trigger restarts it">M.Stut</button>

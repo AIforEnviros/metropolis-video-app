@@ -1379,7 +1379,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         video.play().then(() => {
                             console.log('Auto-playing clip on selection');
                         }).catch(e => {
-                            console.error('Error auto-playing video:', e);
+                            if (e?.name === 'AbortError') {
+                                console.log('Auto-play superseded by a newer clip or scrub action');
+                            } else {
+                                console.error('Error auto-playing video:', e);
+                            }
                         });
                     }
                 } else {
@@ -3041,6 +3045,28 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function startBackForwardForward(position = null) {
+        if (Number.isFinite(position)) seekScrubPosition(position);
+        scrubBackForwardDirection = 1;
+        scrubBackForwardActiveDirection = 1;
+        scrubBackForwardAwaitingReverseStart = false;
+        setScrubPlaybackRate(scrubConfig.speed);
+        playScrubOutput();
+        updateScrubStatus();
+    }
+
+    function startBackForwardReverse(position = null) {
+        pauseScrubOutput();
+        if (Number.isFinite(position)) seekScrubPosition(position);
+        scrubBackForwardDirection = -1;
+        scrubBackForwardActiveDirection = -1;
+        scrubBackForwardAwaitingReverseStart = false;
+        scrubReverseElapsedSeconds = 0;
+        scrubLastDecoderSeekTimestamp = performance.now();
+        scrubEffectRunning = true;
+        updateScrubStatus();
+    }
+
     // Single point through which all scrub seeks pass — routes to pop-out if open
     function seekScrubPosition(time) {
         const duration = getScrubDuration();
@@ -3288,10 +3314,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (scrubMode === 'back-forward' && scrubEffectRunning) {
             if (scrubBackForwardActiveDirection > 0 && currentPos >= end) {
-                pauseScrubOutput();
-                seekScrubPosition(end);
-                scrubBackForwardActiveDirection = 0;
-                updateScrubStatus();
+                startBackForwardReverse(end);
             } else if (scrubBackForwardActiveDirection < 0) {
                 scrubReverseElapsedSeconds += elapsedSeconds;
                 const seekIntervalElapsed = timestamp - scrubLastDecoderSeekTimestamp >= SCRUB_PENDULUM_SEEK_INTERVAL_MS;
@@ -3304,10 +3327,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     scrubLastDecoderSeekTimestamp = timestamp;
 
                     if (nextPosition <= start) {
-                        pauseScrubOutput();
-                        seekScrubPosition(start);
-                        scrubBackForwardActiveDirection = 0;
-                        updateScrubStatus();
+                        startBackForwardForward(start);
                     } else {
                         seekScrubPosition(nextPosition);
                     }
@@ -5388,16 +5408,37 @@ document.addEventListener('DOMContentLoaded', function() {
     // SCRUB PANEL EVENT WIRING
     // ============================================================
 
-    // Collapse/expand toggle
-    const scrubPanelToggle = document.getElementById('scrubPanelToggle');
-    if (scrubPanelToggle) {
-        scrubPanelToggle.addEventListener('click', function() {
-            const body    = document.getElementById('scrubPanelBody');
-            const chevron = document.getElementById('scrubCollapseChevron');
+    function wireCollapsiblePanel(toggleId, bodyId, chevronId, panelName) {
+        const toggle = document.getElementById(toggleId);
+        const body = document.getElementById(bodyId);
+        const chevron = document.getElementById(chevronId);
+        if (!toggle || !body) return;
+
+        const togglePanel = () => {
             body.classList.toggle('collapsed');
-            if (chevron) chevron.textContent = body.classList.contains('collapsed') ? '▶' : '▼';
+            const isCollapsed = body.classList.contains('collapsed');
+            toggle.setAttribute('aria-expanded', String(!isCollapsed));
+            if (chevron) {
+                chevron.textContent = isCollapsed ? '\u25B6' : '\u25BC';
+                chevron.setAttribute('aria-label', `${isCollapsed ? 'Expand' : 'Collapse'} ${panelName}`);
+            }
+        };
+
+        toggle.addEventListener('click', togglePanel);
+        toggle.addEventListener('keydown', event => {
+            if (event.target !== toggle || (event.key !== 'Enter' && event.key !== ' ')) return;
+            event.preventDefault();
+            togglePanel();
         });
     }
+
+    wireCollapsiblePanel('scrubPanelToggle', 'scrubPanelBody', 'scrubCollapseChevron', 'scrub mode controls');
+    wireCollapsiblePanel(
+        'previewControlsPanelToggle',
+        'previewControlsPanelBody',
+        'previewControlsCollapseChevron',
+        'playback and cue controls'
+    );
 
     // Mode selector buttons
     document.querySelectorAll('.scrub-mode-btn').forEach(btn => {
@@ -5670,11 +5711,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     video.addEventListener('ended', function() {
         if (scrubModeActive && scrubMode === 'back-forward' && scrubConfig.fullRange) {
-            const { end } = getScrubBounds();
-            pauseScrubOutput();
-            seekScrubPosition(end);
-            scrubBackForwardActiveDirection = 0;
-            updateScrubStatus();
+            if (scrubBackForwardActiveDirection > 0) {
+                const { end } = getScrubBounds();
+                startBackForwardReverse(end);
+            }
             return;
         }
         console.log('Video ended - handling based on playback mode');
@@ -5916,11 +5956,10 @@ document.addEventListener('DOMContentLoaded', function() {
         window.electronAPI.onPreviewUpdate((update) => {
             if (update.type === 'ended' && scrubModeActive &&
                 scrubMode === 'back-forward' && scrubConfig.fullRange) {
-                const { end } = getScrubBounds();
-                pauseScrubOutput();
-                seekScrubPosition(end);
-                scrubBackForwardActiveDirection = 0;
-                updateScrubStatus();
+                if (scrubBackForwardActiveDirection > 0) {
+                    const { end } = getScrubBounds();
+                    startBackForwardReverse(end);
+                }
                 return;
             }
             if (update.type === 'paused') {

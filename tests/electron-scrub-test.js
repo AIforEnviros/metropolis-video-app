@@ -125,6 +125,30 @@ async function run() {
   console.log('Waiting for matrix');
   await waitFor(window, `document.querySelectorAll('.clip-slot').length === 36`, 'matrix initialization');
 
+  const previewControlLayout = await window.webContents.executeJavaScript(`(() => ({
+    scrubTop: document.getElementById('scrubPanel').getBoundingClientRect().top,
+    standardTop: document.getElementById('previewControlsPanel').getBoundingClientRect().top
+  }))()`);
+  assert.ok(
+    previewControlLayout.scrubTop < previewControlLayout.standardTop,
+    'scrub controls should appear above playback and cue controls'
+  );
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.getElementById('previewControlsPanelBody').classList.contains('collapsed')`),
+    true,
+    'playback and cue controls should start collapsed'
+  );
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.getElementById('previewControlsPanelToggle').getAttribute('aria-expanded')`),
+    'false'
+  );
+  await click(window, '#previewControlsPanelToggle');
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.getElementById('previewControlsPanelBody').classList.contains('collapsed')`),
+    false,
+    'playback and cue controls should expand when requested'
+  );
+
   console.log('Dropping test video');
   const dropResult = await window.webContents.executeJavaScript(`(() => {
     try {
@@ -203,35 +227,29 @@ async function run() {
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
   await waitFor(window, `document.getElementById('scrubDrumKeyDisplay').textContent.toLowerCase() === 'x'`, 'keyboard learn');
 
+  await window.webContents.executeJavaScript(`(() => {
+    window.__backwardStrokeSeeked = 0;
+    document.getElementById('videoPlayer').addEventListener('seeked', () => {
+      if (document.getElementById('scrubStatusLine').textContent.includes('Playing: Back')) {
+        window.__backwardStrokeSeeked += 1;
+      }
+    });
+  })()`);
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 2`);
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'first-hit activation');
-  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 2.2`, 'back-forward range stop', 3000);
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back') && document.getElementById('videoPlayer').currentTime < 2.22`, 'automatic reverse at range end', 3000);
+  await waitFor(window, `window.__backwardStrokeSeeked >= 2`, 'automatic backward decoded frames', 3000);
   let state = await readState(window);
   assert.match(state.centre, /00:02/);
-  assert.ok(state.time >= 2.2 && state.time <= 2.27, `back-forward stopped at ${state.time}`);
-
-  await window.webContents.executeJavaScript(`(() => {
-    window.__backwardStrokeSeeked = 0;
-    document.getElementById('videoPlayer').addEventListener('seeked', () => {
-      window.__backwardStrokeSeeked += 1;
-    });
-  })()`);
-  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
-  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
-  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime <= 1.8`, 'backward range stroke', 3000);
-  await waitFor(window, `window.__backwardStrokeSeeked >= 2`, 'backward decoded frames', 3000);
-  state = await readState(window);
-  assert.ok(state.time >= 1.73 && state.time <= 1.8, `backward stroke stopped at ${state.time}`);
   const backwardCompletedSeeks = await window.webContents.executeJavaScript(`window.__backwardStrokeSeeked`);
-  assert.ok(backwardCompletedSeeks >= 2, `backward stroke decoded ${backwardCompletedSeeks} frames`);
+  assert.ok(backwardCompletedSeeks >= 2, `automatic backward stroke decoded ${backwardCompletedSeeks} frames`);
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Forward') && !document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime < 1.95`, 'automatic forward turn at range start', 3000);
 
   // A trigger during motion reverses at the current frame rather than jumping
   // to the opposite boundary.
   await setSlider(window, '#scrubSpeedSlider', 1);
-  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
-  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
   await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 1.9 && document.getElementById('videoPlayer').currentTime < 2.1`, 'forward mid-stroke position', 3000);
   const localTurnTime = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
   await window.webContents.executeJavaScript(`(() => {
@@ -242,7 +260,7 @@ async function run() {
   })()`);
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
-  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime <= 1.8`, 'mid-stroke direction reversal', 3000);
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back') && document.getElementById('videoPlayer').currentTime < ${localTurnTime} - 0.04`, 'mid-stroke direction reversal', 3000);
   const localMidReverseMax = await window.webContents.executeJavaScript(`window.__localMidReverseMax`);
   assert.ok(localMidReverseMax <= localTurnTime + 0.08, `local reversal jumped from ${localTurnTime} to ${localMidReverseMax}`);
 
@@ -256,16 +274,22 @@ async function run() {
   await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 0.73 && document.getElementById('videoPlayer').currentTime <= 0.8`, 'B/F full In/Out range start');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeValue').textContent`), 'Full');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
+  await setSlider(window, '#scrubSpeedSlider', 4);
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
   await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime > 1.2`, 'B/F full range forward motion', 3000);
-  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
-  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
-  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime <= 0.8`, 'B/F full range reverse boundary', 3000);
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back') && document.getElementById('videoPlayer').currentTime < 3.4`, 'B/F In/Out automatic end reversal', 3000);
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Forward') && !document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime < 1.1`, 'B/F In/Out automatic start reversal', 3000);
+
+  // Clearing In/Out while Full is selected expands B/F to the complete video.
+  // Reaching the real media end must reverse there and continue, not reset to
+  // zero and remain paused.
   await click(window, '#clearInOutBtn');
   await waitFor(window, `document.getElementById('videoPlayer').currentTime < 0.05`, 'B/F full video start after clearing In/Out');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back') && document.getElementById('videoPlayer').currentTime > document.getElementById('videoPlayer').duration - 1`, 'B/F full video automatic end reversal', 5000);
   await click(window, '#scrubFullRangeToggle');
-  await setSlider(window, '#scrubSpeedSlider', 4);
 
   // Escape must restore the original paused state and rate.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
@@ -458,8 +482,6 @@ async function run() {
   await waitFor(previewWindow, `document.getElementById('previewVideo').paused`, 'pop-out paused-state restore');
 
   await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
-  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
-  await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime >= 2.2`, 'pop-out forward stroke', 3000);
   await previewWindow.webContents.executeJavaScript(`(() => {
     window.__popoutBackwardSeeked = 0;
     document.getElementById('previewVideo').addEventListener('seeked', () => {
@@ -467,13 +489,17 @@ async function run() {
     });
   })()`);
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
-  await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime <= 1.8`, 'pop-out backward stroke', 3000);
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back')`, 'pop-out automatic reverse at range end', 3000);
   await waitFor(previewWindow, `window.__popoutBackwardSeeked >= 2`, 'pop-out backward decoded frames', 3000);
   const popoutBackwardSeeks = await previewWindow.webContents.executeJavaScript(`window.__popoutBackwardSeeked`);
-  assert.ok(popoutBackwardSeeks >= 2, `pop-out backward stroke decoded ${popoutBackwardSeeks} frames`);
+  assert.ok(popoutBackwardSeeks >= 2, `pop-out automatic backward stroke decoded ${popoutBackwardSeeks} frames`);
+  await waitForNode(async () => {
+    const status = await window.webContents.executeJavaScript(`document.getElementById('scrubStatusLine').textContent`);
+    const previewState = await previewWindow.webContents.executeJavaScript(`({ paused: document.getElementById('previewVideo').paused, time: document.getElementById('previewVideo').currentTime })`);
+    return status.includes('Playing: Forward') && !previewState.paused && previewState.time < 1.95;
+  }, 'pop-out automatic forward turn at range start', 3000);
 
   await setSlider(window, '#scrubSpeedSlider', 1);
-  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
   await waitFor(previewWindow, `!document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime >= 1.9 && document.getElementById('previewVideo').currentTime < 2.1`, 'pop-out forward mid-stroke position', 3000);
   const popoutTurnTime = await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').currentTime`);
   await previewWindow.webContents.executeJavaScript(`(() => {
@@ -483,16 +509,24 @@ async function run() {
     });
   })()`);
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
-  await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime <= 1.8`, 'pop-out mid-stroke direction reversal', 3000);
+  await waitForNode(async () => {
+    const status = await window.webContents.executeJavaScript(`document.getElementById('scrubStatusLine').textContent`);
+    const time = await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').currentTime`);
+    return status.includes('Playing: Back') && time < popoutTurnTime - 0.04;
+  }, 'pop-out mid-stroke direction reversal', 3000);
   const popoutMidReverseMax = await previewWindow.webContents.executeJavaScript(`window.__popoutMidReverseMax`);
   assert.ok(popoutMidReverseMax <= popoutTurnTime + 0.08, `pop-out reversal jumped from ${popoutTurnTime} to ${popoutMidReverseMax}`);
 
+  await setSlider(window, '#scrubSpeedSlider', 4);
   await click(window, '#scrubFullRangeToggle');
   await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime < 0.05`, 'pop-out B/F full video start');
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
   await waitFor(previewWindow, `!document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime > 0.5`, 'pop-out B/F full range forward motion', 3000);
-  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
-  await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime < 0.05`, 'pop-out B/F full range reverse boundary', 3000);
+  await waitForNode(async () => {
+    const status = await window.webContents.executeJavaScript(`document.getElementById('scrubStatusLine').textContent`);
+    const previewState = await previewWindow.webContents.executeJavaScript(`({ time: document.getElementById('previewVideo').currentTime, duration: document.getElementById('previewVideo').duration })`);
+    return status.includes('Playing: Back') && previewState.time > previewState.duration - 1;
+  }, 'pop-out B/F full video automatic end reversal', 5000);
   await click(window, '#scrubFullRangeToggle');
 
   // Per-slot scrub settings restore independently and serialize in session v1.10.
