@@ -24,7 +24,7 @@ This is now an Electron-based desktop application for production live performanc
 **Current active development (2026-08-09):**
 - Branch: `codex/accent-cue-points`
 - Electron is the only active application architecture; `src/` is legacy
-- Session format v1.12 saves scrub settings and four direct-trigger accent cue points per video slot
+- Session format v1.13 saves scrub settings plus four direct-trigger accents with optional per-accent mode/range/speed per video slot
 - Run the app with `npm start` (`npm.cmd start` in restricted Windows PowerShell)
 - Run scrub regression coverage with `npm run test:scrub` (`npm.cmd run test:scrub` on Windows)
 - Treat `SCRUB_MODES.md` as the authoritative scrub behavior contract
@@ -744,7 +744,7 @@ Complete MIDI mapping and MIDI learn functionality has been implemented for all 
 }
 ```
 
-**Original MIDI session format (v1.4; current application format is v1.12):**
+**Original MIDI session format (v1.4; current application format is v1.13):**
 ```json
 {
   "version": "1.4",

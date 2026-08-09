@@ -1113,16 +1113,20 @@ During development, several features were implemented that weren't in the origin
 - **Status:** ✅ Implemented
 
 ### Enhanced Session Format
-- Session file format evolved from v1.0 to v1.12
+- Session file format evolved from v1.0 to v1.13
 - Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, per-slot scrub settings, and four per-slot accent cue points
 - Comprehensive project state preservation
 - **Status:** ✅ Implemented
 
 ### Accent Cue Points
 - Four direct-trigger accent timestamps (A1-A4) per video slot
+- Optional independent scrub mode, 0.1-10 second range, and 0.1x-4x speed for every accent
+- Accent scrub temporarily overrides playback without overwriting the clip's ordinary scrub configuration
+- Explicit Clip/A1-A4 scrub settings selector, separate ACTIVE source display, and compact saved summaries remove ambiguity between editing and playback state
 - Separate from normal cue progression, so the next/previous normal cue resumes from where it left off
 - Keyboard and MIDI mappable, with repeated hits restarting the accent moment
 - Purple timeline markers and controls to set, replace, or clear each accent
+- Drag purple accent markers along the timeline for visual repositioning
 - Works in the embedded preview and pop-out window
 - **Behavior contract:** `ACCENT_CUES.md`
 - **Status:** Implemented on `codex/accent-cue-points`; hardware acceptance testing remains

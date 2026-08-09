@@ -529,14 +529,32 @@
         }
 
         .accent-cue-slot {
-            display: grid;
-            grid-template-columns: auto 1fr auto;
-            align-items: center;
-            gap: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
             padding: 6px;
             border: 1px solid #66518c;
             border-radius: 5px;
             background: rgba(142, 90, 180, 0.1);
+        }
+
+        .accent-cue-header {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .accent-scrub-summary {
+            color: #bca2cf;
+            font: 9px monospace;
+            text-align: center;
+        }
+
+        .accent-cue-slot.active-accent {
+            border-color: #e2a6f7;
+            background: rgba(177, 98, 209, 0.28);
+            box-shadow: 0 0 8px rgba(177, 98, 209, 0.65);
         }
 
         .accent-set-btn,
@@ -845,6 +863,13 @@
             transform: translateX(-50%) scaleX(1.6) scaleY(1.15);
             background: #d386f0;
             z-index: 15;
+        }
+
+        .accent-marker.dragging {
+            transform: translateX(-50%) scaleX(1.8) scaleY(1.18);
+            background: #e2a6f7;
+            box-shadow: 0 0 9px rgba(226, 166, 247, 0.95);
+            z-index: 20;
         }
 
         .accent-marker::after {
@@ -1263,6 +1288,50 @@
             border-radius: 3px;
             letter-spacing: 0.5px;
             animation: scrubPulse 1.2s ease-in-out infinite;
+        }
+        .scrub-settings-scope {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 7px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .scrub-settings-scope-label,
+        .scrub-active-source {
+            font: bold 10px monospace;
+            color: #8ecbff;
+        }
+        .scrub-active-source.accent-active {
+            color: #e2a6f7;
+        }
+        .scrub-target-buttons {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 4px;
+        }
+        .scrub-target-btn {
+            padding: 5px 3px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #2d2d2d;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 10px;
+        }
+        .scrub-target-btn.selected {
+            border-color: #0088ff;
+            background: #0055aa;
+            color: white;
+        }
+        .scrub-target-btn.accent-target.selected {
+            border-color: #d386f0;
+            background: #7b3fb0;
+        }
+        .scrub-target-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
         }
         @keyframes scrubPulse {
             0%, 100% { opacity: 1; }
@@ -1940,29 +2009,41 @@
             <h3>Accent Cue Points</h3>
             <div class="accent-cue-controls" id="accentCueControls">
                 <div class="accent-cue-slot" data-accent-slot="1">
-                    <button class="accent-set-btn" data-accent-slot="1" title="Set Accent 1 at the current frame">A1</button>
-                    <span class="accent-time" id="accentTime1">--:--</span>
-                    <button class="accent-clear-btn" data-accent-slot="1" title="Clear Accent 1" disabled>×</button>
+                    <div class="accent-cue-header">
+                        <button class="accent-set-btn" data-accent-slot="1" title="Set Accent 1 at the current frame">A1</button>
+                        <span class="accent-time" id="accentTime1">--:--</span>
+                        <button class="accent-clear-btn" data-accent-slot="1" title="Clear Accent 1" disabled>×</button>
+                    </div>
+                    <div class="accent-scrub-summary" id="accentSummary1">Not set</div>
                 </div>
                 <div class="accent-cue-slot" data-accent-slot="2">
-                    <button class="accent-set-btn" data-accent-slot="2" title="Set Accent 2 at the current frame">A2</button>
-                    <span class="accent-time" id="accentTime2">--:--</span>
-                    <button class="accent-clear-btn" data-accent-slot="2" title="Clear Accent 2" disabled>×</button>
+                    <div class="accent-cue-header">
+                        <button class="accent-set-btn" data-accent-slot="2" title="Set Accent 2 at the current frame">A2</button>
+                        <span class="accent-time" id="accentTime2">--:--</span>
+                        <button class="accent-clear-btn" data-accent-slot="2" title="Clear Accent 2" disabled>×</button>
+                    </div>
+                    <div class="accent-scrub-summary" id="accentSummary2">Not set</div>
                 </div>
                 <div class="accent-cue-slot" data-accent-slot="3">
-                    <button class="accent-set-btn" data-accent-slot="3" title="Set Accent 3 at the current frame">A3</button>
-                    <span class="accent-time" id="accentTime3">--:--</span>
-                    <button class="accent-clear-btn" data-accent-slot="3" title="Clear Accent 3" disabled>×</button>
+                    <div class="accent-cue-header">
+                        <button class="accent-set-btn" data-accent-slot="3" title="Set Accent 3 at the current frame">A3</button>
+                        <span class="accent-time" id="accentTime3">--:--</span>
+                        <button class="accent-clear-btn" data-accent-slot="3" title="Clear Accent 3" disabled>×</button>
+                    </div>
+                    <div class="accent-scrub-summary" id="accentSummary3">Not set</div>
                 </div>
                 <div class="accent-cue-slot" data-accent-slot="4">
-                    <button class="accent-set-btn" data-accent-slot="4" title="Set Accent 4 at the current frame">A4</button>
-                    <span class="accent-time" id="accentTime4">--:--</span>
-                    <button class="accent-clear-btn" data-accent-slot="4" title="Clear Accent 4" disabled>×</button>
+                    <div class="accent-cue-header">
+                        <button class="accent-set-btn" data-accent-slot="4" title="Set Accent 4 at the current frame">A4</button>
+                        <span class="accent-time" id="accentTime4">--:--</span>
+                        <button class="accent-clear-btn" data-accent-slot="4" title="Clear Accent 4" disabled>×</button>
+                    </div>
+                    <div class="accent-scrub-summary" id="accentSummary4">Not set</div>
                 </div>
             </div>
 
             <div class="cue-tip-box" style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px; color: #888;">
-                💡 <strong>Tip:</strong> Purple A1–A4 markers are direct-trigger accents and do not alter normal cue progression. Double-click an accent marker to clear it. Double-click a normal cue to delete it; Ctrl+drag the timeline to range-select normal cues.
+                💡 <strong>Tip:</strong> Drag purple A1–A4 markers to reposition accents; double-click one to clear it. Accents do not alter normal cue progression. Double-click a normal cue to delete it; Ctrl+drag the timeline to range-select normal cues.
             </div>
 
             <!-- Hidden In/Out Point controls (functionality via hotkeys only) -->
@@ -2009,9 +2090,22 @@
                 </div>
                 <div class="scrub-panel-body" id="scrubPanelBody">
 
+                    <div class="scrub-settings-scope">
+                        <div class="scrub-settings-scope-label" id="scrubSettingsScopeLabel">EDITING: CLIP</div>
+                        <div class="scrub-target-buttons" id="scrubTargetButtons">
+                            <button class="scrub-target-btn selected" data-scrub-target="clip">Clip</button>
+                            <button class="scrub-target-btn accent-target" data-scrub-target="accent1" disabled>A1</button>
+                            <button class="scrub-target-btn accent-target" data-scrub-target="accent2" disabled>A2</button>
+                            <button class="scrub-target-btn accent-target" data-scrub-target="accent3" disabled>A3</button>
+                            <button class="scrub-target-btn accent-target" data-scrub-target="accent4" disabled>A4</button>
+                        </div>
+                        <div class="scrub-active-source" id="scrubActiveSource">ACTIVE: NONE</div>
+                    </div>
+
                     <!-- Mode selector -->
                     <div class="scrub-mode-row">
                         <div class="scrub-mode-btns">
+                            <button class="scrub-mode-btn" id="scrubNoneModeBtn" data-mode="" title="Accent only: jump to the accent and play without a scrub effect">None</button>
                             <button class="scrub-mode-btn" data-mode="manual-cc" title="CC cross-fader controls playhead position within range">Fader</button>
                             <button class="scrub-mode-btn" data-mode="back-forward" title="Each trigger reverses from the current frame; boundaries auto-reverse by default or can stop and wait">B/F</button>
                             <button class="scrub-mode-btn" data-mode="pendulum" title="Auto-oscillates forward/back continuously">Pend.</button>
@@ -2027,7 +2121,7 @@
                         <button class="scrub-activate-btn" id="scrubActivateBtn" disabled>Scrub: ON (waiting)</button>
                         <span class="scrub-centre-display" id="scrubCentreDisplay">Centre: --:--</span>
                     </div>
-                    <div style="font-size:10px; color:#888; margin-bottom:6px;">Mode, range, speed, B/F options and ON/OFF are saved per video slot. New slots default to Fader + ON.</div>
+                    <div id="scrubSettingsHelp" style="font-size:10px; color:#888; margin-bottom:6px;">Editing the selected clip. Mode, range, speed, B/F options and ON/OFF save with this video slot.</div>
 
                     <!-- Live status line -->
                     <div id="scrubStatusLine" style="font-size:11px; color:#f90; font-family:monospace; min-height:14px;"></div>
