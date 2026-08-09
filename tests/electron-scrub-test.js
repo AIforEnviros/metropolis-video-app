@@ -239,6 +239,122 @@ async function run() {
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 3`);
   await click(window, '#recordCuePointBtn');
   await waitFor(window, `document.querySelectorAll('.cue-marker').length === 2`, 'cue point setup');
+
+  // Accent points are separate, direct-trigger positions. Repeated accent
+  // triggers restart the accent, while normal cue navigation resumes from the
+  // logical normal cue position that was active before the accent.
+  await window.webContents.executeJavaScript(`(() => {
+    const video = document.getElementById('videoPlayer');
+    video.pause();
+    video.currentTime = 1.25;
+  })()`);
+  await click(window, '.accent-set-btn[data-accent-slot="1"]');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 3.4`);
+  await click(window, '.accent-set-btn[data-accent-slot="2"]');
+  await waitFor(window, `document.querySelectorAll('.accent-marker').length === 2`, 'accent point setup');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelectorAll('.cue-marker').length`), 2);
+
+  await window.webContents.executeJavaScript(`(() => {
+    const video = document.getElementById('videoPlayer');
+    video.pause();
+    video.currentTime = 0;
+  })()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 1.98`, 'first normal cue before accent');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime >= 1.24 && document.getElementById('videoPlayer').currentTime < 1.55`, 'accent one trigger');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 1.8`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime >= 1.24 && document.getElementById('videoPlayer').currentTime < 1.55`, 'accent one retrigger');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 2.98`, 'normal cue progression after accent');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
+
+  await click(window, '#shortcutsBtn');
+  await click(window, '.midi-learn-btn[data-action="accent2"]');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 62, velocity: 100 });
+  await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="accent2"]').textContent.includes('Note 62')`, 'accent MIDI learn');
+  await click(window, '#saveShortcutsBtn');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0`);
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 62, velocity: 100 });
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime >= 3.39 && document.getElementById('videoPlayer').currentTime < 3.7`, 'accent MIDI trigger');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
+
+  // An accent can temporarily own its own scrub mode, range, and speed. The
+  // same accent trigger restarts the effect, and Escape restores the clip's
+  // ordinary scrub selection without overwriting it.
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 1.6`);
+  await click(window, '.accent-set-btn[data-accent-slot="3"]');
+  await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
+  assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubSettingsScopeLabel').textContent`), /ACCENT A3/);
+  await click(window, '.scrub-mode-btn[data-mode="manual-stutter"]');
+  await setSlider(window, '#scrubRangeSlider', 0.8);
+  await setSlider(window, '#scrubSpeedSlider', 1.5);
+
+  // The general scrub trigger always belongs to the clip, even while the
+  // accent settings are visible. It must not run A3's Manual Stutter as an
+  // unsaved clip mode.
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: CLIP 1') && document.getElementById('scrubActiveSource').textContent.includes('B/F')`, 'clip scrub ownership while editing accent');
+  assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubSettingsScopeLabel').textContent`), /EDITING: ACCENT A3/);
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-mode-btn.selected').dataset.mode`), 'manual-stutter');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'clip scrub deactivation before accent handover');
+
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'D' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'D' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none' && document.getElementById('scrubStatusLine').textContent.includes('Accent A3')`, 'accent scrub activation');
+  assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubActiveSource').textContent`), /ACTIVE: ACCENT A3/);
+  assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubSettingsScopeLabel').textContent`), /EDITING: CLIP 1/);
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-mode-btn.selected').dataset.mode`), 'back-forward');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '2');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '4');
+  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 1.95`, 'accent manual stutter wait', 3000);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'D' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'D' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime < 1.8`, 'accent scrub retrigger restart', 3000);
+
+  // The clip's own scrub trigger hands playback back from the accent and
+  // immediately performs the saved B/F trigger.
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: CLIP 1') && document.getElementById('scrubActiveSource').textContent.includes('B/F')`, 'accent-to-clip scrub handover');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-mode-btn.selected').dataset.mode`), 'back-forward');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '2');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '4');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'clip scrub deactivation after accent handover');
+
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0.5`);
+  await click(window, '.accent-set-btn[data-accent-slot="4"]');
+  const draggedAccentTarget = await window.webContents.executeJavaScript(`(() => {
+    const marker = document.querySelector('.accent-marker[data-accent-slot="4"]');
+    const track = document.getElementById('timelineTrack');
+    const rect = track.getBoundingClientRect();
+    const targetX = rect.left + (rect.width * 0.7);
+    marker.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 0,
+      clientX: marker.getBoundingClientRect().left
+    }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientX: targetX, clientY: rect.top }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: targetX, clientY: rect.top }));
+    return document.getElementById('videoPlayer').duration * 0.7;
+  })()`);
+  await waitFor(window, `Math.abs(document.getElementById('videoPlayer').currentTime - ${draggedAccentTarget}) < 0.05`, 'dragged accent preview position');
+  const draggedAccentLeft = parseFloat(await window.webContents.executeJavaScript(`document.querySelector('.accent-marker[data-accent-slot="4"]').style.left`));
+  assert.ok(Math.abs(draggedAccentLeft - 70) < 0.6, `dragged accent marker rendered at ${draggedAccentLeft}%`);
+
   await setSlider(window, '#scrubRangeSlider', 0.5);
   await setSlider(window, '#scrubSpeedSlider', 4);
   await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
@@ -253,6 +369,8 @@ async function run() {
       }
     });
   })()`);
+  await click(window, '#restartClipBtn');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 2`);
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
@@ -264,6 +382,18 @@ async function run() {
   const backwardCompletedSeeks = await window.webContents.executeJavaScript(`window.__backwardStrokeSeeked`);
   assert.ok(backwardCompletedSeeks >= 2, `automatic backward stroke decoded ${backwardCompletedSeeks} frames`);
   await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Forward') && !document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime < 1.95`, 'automatic forward turn at range start', 3000);
+
+  await setSlider(window, '#scrubSpeedSlider', 1);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
+  await waitFor(window, `document.getElementById('scrubCentreDisplay').textContent.includes('00:03') && document.getElementById('scrubStatusLine').textContent.includes('Playing: Forward') && document.getElementById('videoPlayer').currentTime > 2.85`, 'B/F next cue starts forward');
+  const cueForwardTime = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back') && document.getElementById('videoPlayer').currentTime < ${cueForwardTime} - 0.03`, 'B/F trigger reverses after cue-started playback', 3000);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
+  await waitFor(window, `document.getElementById('scrubCentreDisplay').textContent.includes('00:02') && document.getElementById('scrubStatusLine').textContent.includes('Playing: Forward')`, 'B/F wrapped cue starts forward');
 
   // A trigger during motion reverses at the current frame rather than jumping
   // to the opposite boundary.
@@ -411,7 +541,7 @@ async function run() {
   state = await readState(window);
   assert.equal(state.rate, 1);
   const driftStart = state.time;
-  await new Promise(resolve => setTimeout(resolve, 180));
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime > ${driftStart} + 0.08`, 'drift advancement', 1000);
   state = await readState(window);
   assert.ok(state.time > driftStart + 0.08, 'drift advanced from centre');
 
@@ -459,6 +589,24 @@ async function run() {
   await click(window, '#outputWindowBtn');
   await waitForNode(() => previewWindow && !previewWindow.isDestroyed(), 'pop-out creation');
   await waitFor(previewWindow, `document.getElementById('previewVideo').duration > 0`, 'pop-out video metadata', 10000);
+
+  await window.webContents.executeJavaScript(`document.activeElement && document.activeElement.blur()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await waitFor(previewWindow, `document.getElementById('previewVideo').currentTime >= 1.24 && document.getElementById('previewVideo').currentTime < 1.55`, 'pop-out accent trigger');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'D' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'D' });
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Accent A3')`, 'pop-out accent scrub activation');
+  await waitFor(previewWindow, `document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime >= 1.95`, 'pop-out accent manual stutter wait', 3000);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'pop-out accent scrub deactivation');
+  await previewWindow.webContents.executeJavaScript(`(() => {
+    const video = document.getElementById('previewVideo');
+    video.pause();
+    video.currentTime = 2;
+  })()`);
+  await waitFor(previewWindow, `document.getElementById('previewVideo').currentTime >= 1.98`, 'restore pop-out scrub centre after accent');
 
   await click(window, '.scrub-mode-btn[data-mode="manual-cc"]');
   await click(window, '#scrubActivateBtn');
@@ -581,7 +729,7 @@ async function run() {
   }, 'pop-out B/F stop-and-wait at range start', 3000);
   await click(window, '#scrubAutoReverseToggle');
 
-  // Per-slot scrub settings restore independently and serialize in session v1.11.
+  // Per-slot scrub/accent settings restore independently and serialize in session v1.13.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub disabled');
@@ -634,12 +782,27 @@ async function run() {
   await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
   await click(window, '#scrubFullRangeToggle');
   await click(window, '#scrubAutoReverseToggle');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0.8`);
+  await click(window, '.accent-set-btn[data-accent-slot="1"]');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
 
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
-  assert.equal(savedSessionData.version, '1.11');
+  assert.equal(savedSessionData.version, '1.13');
+  assert.deepEqual(savedSessionData.midiMappings.accent2, { type: 'noteon', channel: 1, note: 62 });
+  assert.equal(savedSessionData.tabs.accentPoints['0']['1']['1'].time, 1.25);
+  assert.equal(savedSessionData.tabs.accentPoints['0']['2']['1'].time, 0.8);
+  assert.equal(savedSessionData.tabs.accentPoints['0']['1']['2'].time, 3.4);
+  assert.ok(Math.abs(savedSessionData.tabs.accentPoints['0']['1']['4'].time - draggedAccentTarget) < 0.05);
+  assert.deepEqual(
+    {
+      mode: savedSessionData.tabs.accentPoints['0']['1']['3'].scrubMode,
+      range: savedSessionData.tabs.accentPoints['0']['1']['3'].scrubRange,
+      speed: savedSessionData.tabs.accentPoints['0']['1']['3'].scrubSpeed
+    },
+    { mode: 'manual-stutter', range: 0.8, speed: 1.5 }
+  );
   assert.deepEqual(savedSessionData.tabs.scrubSettings['0']['1'], {
     enabled: false,
     mode: 'hold',
@@ -661,22 +824,48 @@ async function run() {
   await setSlider(window, '#scrubRangeSlider', 3);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await click(window, '#loadSessionBtn');
-  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.11 reload', 10000);
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.13 reload', 10000);
   await click(window, '.clip-slot[data-clip-number="1"]');
   await waitFor(window, `document.getElementById('videoPlayer').duration > 0 && document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'hold'`, 'reloaded slot one', 10000);
+  await waitFor(window, `document.querySelectorAll('.accent-marker').length === 4`, 'reloaded slot one accents');
+  await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-mode-btn.selected').dataset.mode`), 'manual-stutter');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '0.8');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1.5');
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '0.65');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubActiveBadge').style.display`), 'none');
   await click(window, '.clip-slot[data-clip-number="2"]');
   await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'back-forward' && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'reloaded slot two', 10000);
+  await waitFor(window, `document.querySelectorAll('.accent-marker').length === 1`, 'reloaded slot two accents');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '1.25');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubFullRangeToggle').checked`), true);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').checked`), false);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
 
+  // v1.12 accents did not have their own scrub settings. They migrate to None
+  // with the default 2-second range and 1x speed.
+  sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));
+  sessionDataToLoad.version = '1.12';
+  const legacyAccent = sessionDataToLoad.tabs.accentPoints['0']['1']['1'];
+  delete legacyAccent.scrubMode;
+  delete legacyAccent.scrubRange;
+  delete legacyAccent.scrubSpeed;
+  await window.webContents.executeJavaScript(`document.getElementById('sessionStatus').textContent = 'Loading v1.12 accent test…'`);
+  await click(window, '#loadSessionBtn');
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.12 accent migration', 10000);
+  await click(window, '.clip-slot[data-clip-number="1"]');
+  await waitFor(window, `document.getElementById('videoPlayer').duration > 0`, 'v1.12 accent slot restore', 10000);
+  await click(window, '.scrub-target-btn[data-scrub-target="accent1"]');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubNoneModeBtn').classList.contains('selected')`), true);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '2');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1');
+
   // v1.10 per-slot sessions did not have autoReverse. They must migrate to
   // the new continuous/default behavior rather than unexpectedly stopping.
   sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));
   sessionDataToLoad.version = '1.10';
+  delete sessionDataToLoad.tabs.accentPoints;
   Object.values(sessionDataToLoad.tabs.scrubSettings).forEach(tabSettings => {
     Object.values(tabSettings).forEach(settings => delete settings.autoReverse);
   });

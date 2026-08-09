@@ -13,6 +13,8 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - Enabled state, mode, range, speed, and B/F options are independent for every video slot; selecting a loaded slot restores and, when enabled, activates its saved scrub behavior.
 - Changing clip or tab safely deactivates scrub and clears stale cue-center state.
 - The embedded preview and pop-out projection window must exhibit the same behavior.
+- The Scrub Modes panel has an explicit **Clip / A1 / A2 / A3 / A4** settings target. This controls only which saved configuration is being edited; it does not activate playback.
+- A separate ACTIVE display identifies the scrub source currently running. Playback triggers never silently switch the settings editor target.
 
 ## Modes
 
@@ -28,6 +30,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 
 - Activates at the range start and waits.
 - The first trigger starts forward playback.
+- While B/F is active, **Next Cue Point** recenters the range at the destination cue and immediately starts a forward stroke. The following scrub trigger reverses from the current frame.
 - Every later trigger reverses direction at the current playhead position. It must not jump to either range boundary.
 - **Auto-reverse at boundaries** is ON by default. Reaching either boundary reverses direction automatically, so playback keeps bouncing until scrub mode is deactivated.
 - Turning **Auto-reverse at boundaries** OFF restores stop-and-wait behavior: playback stops at the reached boundary until the next trigger reverses it away from that boundary.
@@ -67,11 +70,13 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 ## Cue Navigation and Priority
 
 - While scrub is active, **Next Cue Point** advances the scrub center to the first cue after the current center.
+- In B/F, that cue advance begins forward playback immediately; other modes retain their normal recenter behavior.
 - Advancing from the final cue wraps directly to the first cue.
 - The remapped Next Cue Point key receives priority even if a scrub slider still has focus.
 - `Escape` always deactivates scrub, including when a slider has focus.
-- The learned scrub drum key has first-hit activation: when a mode is selected but inactive, the first hit activates it. For B/F, that same hit begins the first forward stroke.
-- A learned MIDI drum note has the same first-hit activation behavior.
+- The learned scrub drum key always controls the selected clip's saved scrub mode, regardless of whether the settings editor is displaying Clip or A1-A4. When inactive, its first hit activates the clip mode; for B/F, that same hit begins the first forward stroke.
+- If an accent scrub effect is active, the clip's scrub trigger hands playback back to the clip and performs the clip-mode trigger immediately.
+- A learned MIDI drum note follows exactly the same ownership and first-hit behavior as the keyboard scrub trigger.
 
 ## MIDI and Keyboard Learn
 
@@ -82,7 +87,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 
 ## Session Persistence
 
-Scrub settings are stored in session format **v1.11**.
+Scrub settings are stored in the application's session format **v1.13**.
 
 Saved per video slot:
 
@@ -127,7 +132,7 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - Embedded and pop-out playback behavior
 - Dense 128-message fader bursts without decoder seek backlogs
 - Cross-platform file URL encoding for spaces and reserved characters
-- Per-slot mode/range/speed/B-F-options/ON-OFF restoration and session v1.11 round-tripping
+- Per-slot mode/range/speed/B-F-options/ON-OFF restoration and session v1.13 round-tripping
 
 ## Hardware Acceptance Checks
 
