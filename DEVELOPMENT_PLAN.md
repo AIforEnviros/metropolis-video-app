@@ -1113,12 +1113,21 @@ During development, several features were implemented that weren't in the origin
 - **Status:** ✅ Implemented
 
 ### Enhanced Session Format
-- Session file format evolved from v1.0 to v1.11
-- Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, and per-slot scrub enabled/mode/range/speed/B-F-full-range settings
+- Session file format evolved from v1.0 to v1.12
+- Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, per-slot scrub settings, and four per-slot accent cue points
 - Comprehensive project state preservation
 - **Status:** ✅ Implemented
 
+### Accent Cue Points
+- Four direct-trigger accent timestamps (A1-A4) per video slot
+- Separate from normal cue progression, so the next/previous normal cue resumes from where it left off
+- Keyboard and MIDI mappable, with repeated hits restarting the accent moment
+- Purple timeline markers and controls to set, replace, or clear each accent
+- Works in the embedded preview and pop-out window
+- **Behavior contract:** `ACCENT_CUES.md`
+- **Status:** Implemented on `codex/accent-cue-points`; hardware acceptance testing remains
+
 ---
 
-**Last Updated:** 2026-07-19 - Scrub modes implemented and verified in Electron
-**Next Steps:** Hardware acceptance testing, external-display performance testing, application icons, and packaged builds
+**Last Updated:** 2026-08-09 - Accent cue points implemented with Electron regression coverage
+**Next Steps:** Accent/MIDI hardware acceptance testing, external-display performance testing, application icons, and packaged builds

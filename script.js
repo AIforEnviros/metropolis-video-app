@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const restartClipBtn = document.getElementById('restartClipBtn');
     const prevCuePointBtn = document.getElementById('prevCuePointBtn');
     const nextCuePointBtn = document.getElementById('nextCuePointBtn');
+    const accentCueControls = document.getElementById('accentCueControls');
     const setInPointBtn = document.getElementById('setInPointBtn');
     const setOutPointBtn = document.getElementById('setOutPointBtn');
     const clearInOutBtn = document.getElementById('clearInOutBtn');
@@ -118,6 +119,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track In/Out points for each clip (tabIndex -> { clipNumber -> { inPoint: time, outPoint: time } })
     const tabClipInOutPoints = {};
 
+    // Four direct-trigger accent timestamps per clip. These are deliberately
+    // separate from normal cue points so linear navigation never consumes them.
+    const tabClipAccentPoints = {};
+    const ACCENT_SLOT_COUNT = 4;
+
     // Scrub behavior belongs to each video slot. Controller mappings remain
     // global, while enabled/mode/range/speed/B-F options follow the clip across sessions.
     const tabClipScrubSettings = {};
@@ -140,6 +146,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipAutoPlay[i] = {};
         tabClipCurrentCueIndex[i] = {};
         tabClipInOutPoints[i] = {};
+        tabClipAccentPoints[i] = {};
         tabClipScrubSettings[i] = {};
     }
 
@@ -152,10 +159,15 @@ document.addEventListener('DOMContentLoaded', function() {
     let clipAutoPlay = tabClipAutoPlay[currentTab];
     let clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
     let clipInOutPoints = tabClipInOutPoints[currentTab];
+    let clipAccentPoints = tabClipAccentPoints[currentTab];
     let clipScrubSettings = tabClipScrubSettings[currentTab];
 
     // Cue point selection state (for Ctrl+drag range select and Ctrl+click toggle)
     let selectedCuePointIds = new Set();
+
+    // Set by an accent trigger and consumed by the next normal cue navigation.
+    // The logical cue index remains unchanged while the playhead visits an accent.
+    let accentNavigationContext = null;
 
     // File browser state
     let currentFolderPath = '';
@@ -242,6 +254,10 @@ document.addEventListener('DOMContentLoaded', function() {
         'nextCuePoint': 'w',
         'restartClip': 'r',
         'recordCuePoint': 'c',
+        'accent1': 'a',
+        'accent2': 's',
+        'accent3': 'd',
+        'accent4': 'f',
         'setInPoint': 'i',
         'setOutPoint': 'o',
         'clearInOut': 'Shift+x',
@@ -267,6 +283,10 @@ document.addEventListener('DOMContentLoaded', function() {
         'nextCuePoint': null,
         'restartClip': null,
         'recordCuePoint': null,
+        'accent1': null,
+        'accent2': null,
+        'accent3': null,
+        'accent4': null,
         'setInPoint': null,
         'setOutPoint': null,
         'clearInOut': null,
@@ -315,7 +335,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.11',
+            version: '1.12',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -336,6 +356,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 clipAutoPlay: tabClipAutoPlay,
                 currentCueIndex: tabClipCurrentCueIndex,
                 inOutPoints: tabClipInOutPoints,
+                accentPoints: tabClipAccentPoints,
                 scrubSettings: tabClipScrubSettings
             },
             scrubSettings: {
@@ -454,6 +475,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('Restoring In/Out points:', sessionData.tabs.inOutPoints);
                 Object.assign(tabClipInOutPoints, sessionData.tabs.inOutPoints);
             }
+            if (sessionData.tabs.accentPoints) {
+                console.log('Restoring accent points:', sessionData.tabs.accentPoints);
+                Object.assign(tabClipAccentPoints, sessionData.tabs.accentPoints);
+            }
             if (sessionData.tabs.scrubSettings) {
                 Object.keys(sessionData.tabs.scrubSettings).forEach(tabIndex => {
                     tabClipScrubSettings[tabIndex] = {};
@@ -497,6 +522,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clipAutoPlay = tabClipAutoPlay[currentTab];
             clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
             clipInOutPoints = tabClipInOutPoints[currentTab];
+            clipAccentPoints = tabClipAccentPoints[currentTab];
             clipScrubSettings = tabClipScrubSettings[currentTab];
             console.log('Current tab video data:', clipVideos);
 
@@ -626,6 +652,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tabClipAutoPlay[i] = {};
             tabClipCurrentCueIndex[i] = {};
             tabClipInOutPoints[i] = {};
+            tabClipAccentPoints[i] = {};
             tabClipScrubSettings[i] = {};
         }
 
@@ -638,7 +665,9 @@ document.addEventListener('DOMContentLoaded', function() {
         clipAutoPlay = tabClipAutoPlay[currentTab];
         clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
         clipInOutPoints = tabClipInOutPoints[currentTab];
+        clipAccentPoints = tabClipAccentPoints[currentTab];
         clipScrubSettings = tabClipScrubSettings[currentTab];
+        accentNavigationContext = null;
 
         // Clear UI
         refreshClipMatrix();
@@ -1094,6 +1123,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Save source clip data
         const sourceVideo = clipVideos[sourceClipNumber];
         const sourceCuePoints = clipCuePoints[sourceClipNumber] || [];
+        const sourceAccentPoints = clipAccentPoints[sourceClipNumber]
+            ? { ...clipAccentPoints[sourceClipNumber] }
+            : {};
         const sourceSpeed = clipSpeeds[sourceClipNumber] || 1.0;
         const sourceName = clipNames[sourceClipNumber];
         const sourceMode = clipModes[sourceClipNumber] || 'loop';
@@ -1105,6 +1137,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Save target clip data (for swap)
         const targetVideo = clipVideos[targetClipNumber];
         const targetCuePoints = clipCuePoints[targetClipNumber] || [];
+        const targetAccentPoints = clipAccentPoints[targetClipNumber]
+            ? { ...clipAccentPoints[targetClipNumber] }
+            : {};
         const targetSpeed = clipSpeeds[targetClipNumber] || 1.0;
         const targetName = clipNames[targetClipNumber];
         const targetMode = clipModes[targetClipNumber] || 'loop';
@@ -1117,6 +1152,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (sourceVideo) {
             clipVideos[targetClipNumber] = sourceVideo;
             clipCuePoints[targetClipNumber] = sourceCuePoints;
+            clipAccentPoints[targetClipNumber] = sourceAccentPoints;
             clipSpeeds[targetClipNumber] = sourceSpeed;
             if (sourceName) clipNames[targetClipNumber] = sourceName;
             clipModes[targetClipNumber] = sourceMode;
@@ -1126,6 +1162,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             delete clipVideos[targetClipNumber];
             delete clipCuePoints[targetClipNumber];
+            delete clipAccentPoints[targetClipNumber];
             delete clipSpeeds[targetClipNumber];
             delete clipNames[targetClipNumber];
             delete clipModes[targetClipNumber];
@@ -1137,6 +1174,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (targetVideo) {
             clipVideos[sourceClipNumber] = targetVideo;
             clipCuePoints[sourceClipNumber] = targetCuePoints;
+            clipAccentPoints[sourceClipNumber] = targetAccentPoints;
             clipSpeeds[sourceClipNumber] = targetSpeed;
             if (targetName) clipNames[sourceClipNumber] = targetName;
             clipModes[sourceClipNumber] = targetMode;
@@ -1146,6 +1184,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             delete clipVideos[sourceClipNumber];
             delete clipCuePoints[sourceClipNumber];
+            delete clipAccentPoints[sourceClipNumber];
             delete clipSpeeds[sourceClipNumber];
             delete clipNames[sourceClipNumber];
             delete clipModes[sourceClipNumber];
@@ -1196,6 +1235,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Remove cue points
         delete clipCuePoints[clipNumber];
+        delete clipAccentPoints[clipNumber];
+        accentNavigationContext = null;
 
         // Remove speed setting
         delete clipSpeeds[clipNumber];
@@ -1276,6 +1317,7 @@ document.addEventListener('DOMContentLoaded', function() {
         lastNavigatedCueTab = null;
         lastNavigatedCueIndex = -1;
         lastNavigatedCueTime = 0;
+        accentNavigationContext = null;
 
         // Clear cue point selection when switching clips
         selectedCuePointIds.clear();
@@ -1737,6 +1779,125 @@ document.addEventListener('DOMContentLoaded', function() {
         updateInOutMarkersOnTimeline();
     }
 
+    function updateAccentControls() {
+        const clipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
+        const accents = clipNumber ? (clipAccentPoints[clipNumber] || {}) : {};
+        for (let slot = 1; slot <= ACCENT_SLOT_COUNT; slot++) {
+            const point = accents[slot];
+            const timeDisplay = document.getElementById(`accentTime${slot}`);
+            const clearButton = document.querySelector(`.accent-clear-btn[data-accent-slot="${slot}"]`);
+            if (timeDisplay) timeDisplay.textContent = point ? formatTimeShort(point.time) : '--:--';
+            if (clearButton) clearButton.disabled = !point;
+        }
+    }
+
+    function setAccentPoint(slot) {
+        if (!selectedClipSlot || !video.src) {
+            alert('Please load and select a video first');
+            return;
+        }
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const time = previewPopoutOpen ? popoutCurrentTime : video.currentTime;
+        if (!clipAccentPoints[clipNumber]) clipAccentPoints[clipNumber] = {};
+        clipAccentPoints[clipNumber][slot] = {
+            id: `accent_${clipNumber}_${slot}`,
+            slot,
+            time,
+            timestamp: Date.now()
+        };
+        markSessionModified();
+        updateAccentControls();
+        updateCueMarkersOnTimeline();
+        console.log(`Set Accent ${slot} at ${formatTime(time)} for clip ${clipNumber}`);
+    }
+
+    function clearAccentPoint(slot) {
+        if (!selectedClipSlot) return;
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        if (!clipAccentPoints[clipNumber]?.[slot]) return;
+        delete clipAccentPoints[clipNumber][slot];
+        if (Object.keys(clipAccentPoints[clipNumber]).length === 0) delete clipAccentPoints[clipNumber];
+        markSessionModified();
+        updateAccentControls();
+        updateCueMarkersOnTimeline();
+        console.log(`Cleared Accent ${slot} for clip ${clipNumber}`);
+    }
+
+    function triggerAccent(slot) {
+        if (!selectedClipSlot || !video.src) return;
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const accent = clipAccentPoints[clipNumber]?.[slot];
+        if (!accent) {
+            console.log(`Accent ${slot} is not set for clip ${clipNumber}`);
+            return;
+        }
+
+        const existingContext = accentNavigationContext &&
+            accentNavigationContext.tabIndex === currentTab &&
+            accentNavigationContext.clipNumber === clipNumber
+            ? accentNavigationContext
+            : null;
+        accentNavigationContext = {
+            tabIndex: currentTab,
+            clipNumber,
+            mainCueIndex: existingContext
+                ? existingContext.mainCueIndex
+                : (clipCurrentCueIndex[clipNumber] ?? -1)
+        };
+
+        lastTimeupdateTime = accent.time;
+        if (scrubModeActive) {
+            recenterActiveScrub(accent.time);
+            console.log(`Accent ${slot}: recentered scrub at ${formatTime(accent.time)}`);
+            return;
+        }
+
+        if (previewPopoutOpen) {
+            popoutCurrentTime = accent.time;
+            sendToPopout({ type: 'seek', time: accent.time });
+            sendToPopout({ type: 'play' });
+        } else {
+            video.currentTime = accent.time;
+            video.play().catch(error => {
+                if (error?.name !== 'AbortError') console.error(`Accent ${slot} play error:`, error);
+            });
+        }
+        globalPlayIntent = true;
+        updateTimeline();
+        console.log(`Triggered Accent ${slot} at ${formatTime(accent.time)} without changing normal cue progression`);
+    }
+
+    function navigateToNormalCueFromAccent(clipNumber, cuePoints, targetIndex, directionLabel) {
+        const targetCuePoint = cuePoints[targetIndex];
+        clipCurrentCueIndex[clipNumber] = targetIndex;
+        lastTimeupdateTime = targetCuePoint.time;
+        justNavigatedToCue = true;
+        lastNavigatedCueTime = targetCuePoint.time;
+        lastNavigatedCueIndex = targetIndex;
+        lastNavigatedCueClipNumber = clipNumber;
+        lastNavigatedCueTab = currentTab;
+
+        if (scrubModeActive) {
+            recenterActiveScrub(targetCuePoint.time);
+        } else {
+            if (previewPopoutOpen) {
+                popoutCurrentTime = targetCuePoint.time;
+                sendToPopout({ type: 'seek', time: targetCuePoint.time });
+                if (isClipAutoPlay(clipNumber)) sendToPopout({ type: 'play' });
+            } else {
+                video.currentTime = targetCuePoint.time;
+                if (isClipAutoPlay(clipNumber)) {
+                    video.play().catch(error => {
+                        if (error?.name !== 'AbortError') console.error('Accent return play error:', error);
+                    });
+                }
+            }
+            globalPlayIntent = isClipAutoPlay(clipNumber);
+            updateTimeline();
+        }
+        console.log(`Accent return: ${directionLabel} normal cue ${targetIndex + 1}/${cuePoints.length}`);
+    }
+
     // In/Out point functions
     function setInPoint() {
         if (!selectedClipSlot) {
@@ -2107,6 +2268,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const clipNumber = selectedClipSlot.dataset.clipNumber;
+        accentNavigationContext = null;
 
         if (!clipVideos[clipNumber]) {
             alert('Please load a video into the selected clip first');
@@ -2168,7 +2330,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         console.log('R key: Restarted at beginning (no In Point set)');
                     }
                 }).catch(e => {
-                    console.error('Error playing from In Point:', e);
+                    if (e?.name !== 'AbortError') console.error('Error playing from In Point:', e);
                 });
             }
         } else {
@@ -2199,6 +2361,36 @@ document.addEventListener('DOMContentLoaded', function() {
         const cuePoints = clipCuePoints[clipNumber] || [];
 
         if (cuePoints.length === 0) {
+            accentNavigationContext = null;
+            return;
+        }
+
+        if (accentNavigationContext &&
+            accentNavigationContext.tabIndex === currentTab &&
+            accentNavigationContext.clipNumber === clipNumber) {
+            const mainCueIndex = accentNavigationContext.mainCueIndex;
+            accentNavigationContext = null;
+            if (mainCueIndex > 0) {
+                navigateToNormalCueFromAccent(clipNumber, cuePoints, mainCueIndex - 1, 'previous');
+            } else {
+                const inOut = clipInOutPoints[clipNumber];
+                const inPoint = Number.isFinite(inOut?.inPoint) ? inOut.inPoint : 0;
+                clipCurrentCueIndex[clipNumber] = -1;
+                lastNavigatedCueIndex = -1;
+                lastNavigatedCueTime = inPoint;
+                lastNavigatedCueClipNumber = clipNumber;
+                lastNavigatedCueTab = currentTab;
+                if (scrubModeActive) recenterActiveScrub(inPoint);
+                else if (previewPopoutOpen) {
+                    popoutCurrentTime = inPoint;
+                    sendToPopout({ type: 'seek', time: inPoint });
+                    if (isClipAutoPlay(clipNumber)) sendToPopout({ type: 'play' });
+                } else {
+                    video.currentTime = inPoint;
+                    if (isClipAutoPlay(clipNumber)) video.play().catch(() => {});
+                }
+                updateTimeline();
+            }
             return;
         }
 
@@ -2326,6 +2518,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Special handling for modes with no cue points
         if (cuePoints.length === 0) {
+            accentNavigationContext = null;
             if (clipMode === 'forward-stop') {
                 // No cue points: loop back to In Point
                 if (previewPopoutOpen) {
@@ -2356,6 +2549,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('No cue points to navigate to');
                 return;
             }
+        }
+
+        if (accentNavigationContext &&
+            accentNavigationContext.tabIndex === currentTab &&
+            accentNavigationContext.clipNumber === clipNumber) {
+            const mainCueIndex = accentNavigationContext.mainCueIndex;
+            accentNavigationContext = null;
+            if (scrubModeActive) {
+                const targetIndex = mainCueIndex >= cuePoints.length - 1 ? 0 : Math.max(0, mainCueIndex + 1);
+                navigateToNormalCueFromAccent(clipNumber, cuePoints, targetIndex, 'next');
+                return;
+            }
+            if (mainCueIndex < cuePoints.length - 1) {
+                navigateToNormalCueFromAccent(clipNumber, cuePoints, Math.max(0, mainCueIndex + 1), 'next');
+                return;
+            }
+            if (clipMode === 'forward-next') {
+                goToNextClip();
+                return;
+            }
+            if (clipMode === 'loop' || clipMode === 'forward-stop') {
+                if (previewPopoutOpen) {
+                    popoutCurrentTime = inPoint;
+                    sendToPopout({ type: 'seek', time: inPoint });
+                    if (isClipAutoPlay(clipNumber)) sendToPopout({ type: 'play' });
+                } else {
+                    video.currentTime = inPoint;
+                    if (isClipAutoPlay(clipNumber)) video.play().catch(() => {});
+                }
+                clipCurrentCueIndex[clipNumber] = -1;
+                lastTimeupdateTime = inPoint;
+                globalPlayIntent = isClipAutoPlay(clipNumber);
+                updateTimeline();
+                return;
+            }
+            console.log('Accent return: no more normal cue points ahead');
+            return;
         }
 
         // Scrub mode owns cue progression. Always move to the first cue after
@@ -2612,7 +2842,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 video.play().then(() => {
                     // updatePlayButtonState() removed
                 }).catch(e => {
-                    console.error('Error playing to next cue:', e);
+                    if (e?.name !== 'AbortError') console.error('Error playing to next cue:', e);
                 });
             }
         } else {
@@ -3767,18 +3997,19 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedCuePointIds.clear();
             updateDeleteSelectedButton();
             cueMarkers.innerHTML = '';
+            updateAccentControls();
             return;
         }
 
         const clipNumber = selectedClipSlot.dataset.clipNumber;
         const cuePoints = clipCuePoints[clipNumber] || [];
+        const accentPoints = clipAccentPoints[clipNumber] || {};
 
         // Clear existing markers
         cueMarkers.innerHTML = '';
+        updateAccentControls();
 
-        if (videoDuration === 0 || cuePoints.length === 0) {
-            return;
-        }
+        if (videoDuration === 0) return;
 
         // Create markers for each cue point
         cuePoints.forEach((cuePoint, index) => {
@@ -3801,6 +4032,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
             cueMarkers.appendChild(marker);
         });
+
+        for (let slot = 1; slot <= ACCENT_SLOT_COUNT; slot++) {
+            const accent = accentPoints[slot];
+            if (!accent) continue;
+            const marker = document.createElement('div');
+            marker.className = 'accent-marker';
+            marker.style.left = `${(accent.time / videoDuration) * 100}%`;
+            marker.dataset.accentSlot = String(slot);
+            marker.dataset.label = `A${slot}`;
+            marker.title = `Accent ${slot}: ${formatTime(accent.time)} — double-click to clear`;
+            marker.addEventListener('dblclick', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                clearAccentPoint(slot);
+            });
+            cueMarkers.appendChild(marker);
+        }
     }
 
     // Update the "Delete Selected" button text and enabled state
@@ -3977,7 +4225,9 @@ document.addEventListener('DOMContentLoaded', function() {
         clipAutoPlay = tabClipAutoPlay[currentTab];
         clipCurrentCueIndex = tabClipCurrentCueIndex[currentTab];
         clipInOutPoints = tabClipInOutPoints[currentTab];
+        clipAccentPoints = tabClipAccentPoints[currentTab];
         clipScrubSettings = tabClipScrubSettings[currentTab];
+        accentNavigationContext = null;
 
         // Clear current selection (each tab has its own selection)
         if (selectedClipSlot) {
@@ -4014,6 +4264,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipAutoPlay[newTabIndex] = {};
         tabClipCurrentCueIndex[newTabIndex] = {};
         tabClipInOutPoints[newTabIndex] = {};
+        tabClipAccentPoints[newTabIndex] = {};
         tabClipScrubSettings[newTabIndex] = {};
 
         // Create tab button
@@ -4192,6 +4443,7 @@ document.addEventListener('DOMContentLoaded', function() {
         delete tabClipAutoPlay[tabIndex];
         delete tabClipCurrentCueIndex[tabIndex];
         delete tabClipInOutPoints[tabIndex];
+        delete tabClipAccentPoints[tabIndex];
         delete tabClipScrubSettings[tabIndex];
         delete tabCustomNames[tabIndex];
 
@@ -4614,6 +4866,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     case 'recordCuePoint':
                         recordCuePointBtn.click();
                         break;
+                    case 'accent1':
+                        triggerAccent(1);
+                        break;
+                    case 'accent2':
+                        triggerAccent(2);
+                        break;
+                    case 'accent3':
+                        triggerAccent(3);
+                        break;
+                    case 'accent4':
+                        triggerAccent(4);
+                        break;
                     case 'setInPoint':
                         setInPointBtn.click();
                         break;
@@ -4841,6 +5105,18 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'recordCuePoint':
                 recordCuePointBtn.click();
                 break;
+            case 'accent1':
+                triggerAccent(1);
+                break;
+            case 'accent2':
+                triggerAccent(2);
+                break;
+            case 'accent3':
+                triggerAccent(3);
+                break;
+            case 'accent4':
+                triggerAccent(4);
+                break;
             case 'setInPoint':
                 setInPointBtn.click();
                 break;
@@ -4996,6 +5272,10 @@ document.addEventListener('DOMContentLoaded', function() {
         'nextCuePoint': 'Next Cue Point',
         'restartClip': 'Restart Clip',
         'recordCuePoint': 'Record Cue Point',
+        'accent1': 'Trigger Accent 1',
+        'accent2': 'Trigger Accent 2',
+        'accent3': 'Trigger Accent 3',
+        'accent4': 'Trigger Accent 4',
         'setInPoint': 'Set In Point',
         'setOutPoint': 'Set Out Point',
         'clearInOut': 'Clear In/Out Points',
@@ -5231,6 +5511,10 @@ document.addEventListener('DOMContentLoaded', function() {
             'nextCuePoint': 'w',
             'restartClip': 'r',
             'recordCuePoint': 'c',
+            'accent1': 'a',
+            'accent2': 's',
+            'accent3': 'd',
+            'accent4': 'f',
             'setInPoint': 'i',
             'setOutPoint': 'o',
             'clearInOut': 'Shift+x',
@@ -5354,6 +5638,15 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Record cue point button clicked');
         recordCuePoint();
     });
+
+    if (accentCueControls) {
+        accentCueControls.addEventListener('click', event => {
+            const setButton = event.target.closest('.accent-set-btn');
+            const clearButton = event.target.closest('.accent-clear-btn');
+            if (setButton) setAccentPoint(Number(setButton.dataset.accentSlot));
+            if (clearButton) clearAccentPoint(Number(clearButton.dataset.accentSlot));
+        });
+    }
 
     // Delete All Cues button
     deleteAllCuesBtn.addEventListener('click', function() {

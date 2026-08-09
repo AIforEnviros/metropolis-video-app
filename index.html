@@ -522,6 +522,65 @@
             background-color: #fb4934;
         }
 
+        .accent-cue-controls {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .accent-cue-slot {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 5px;
+            padding: 6px;
+            border: 1px solid #66518c;
+            border-radius: 5px;
+            background: rgba(142, 90, 180, 0.1);
+        }
+
+        .accent-set-btn,
+        .accent-clear-btn {
+            border: 0;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+        }
+
+        .accent-set-btn {
+            min-width: 34px;
+            padding: 6px 7px;
+            background: #7b3fb0;
+            font-weight: bold;
+        }
+
+        .accent-set-btn:hover {
+            background: #9654cf;
+        }
+
+        .accent-clear-btn {
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            background: #4b4055;
+        }
+
+        .accent-clear-btn:hover:not(:disabled) {
+            background: #cc241d;
+        }
+
+        .accent-clear-btn:disabled {
+            opacity: 0.35;
+            cursor: default;
+        }
+
+        .accent-time {
+            min-width: 0;
+            color: #c9a7e8;
+            font: 11px monospace;
+            text-align: center;
+        }
+
         /* In/Out point controls */
         .inout-point-controls {
             display: flex;
@@ -765,6 +824,37 @@
 
         .cue-marker.selected:hover {
             background: #d79921;
+        }
+
+        .accent-marker {
+            position: absolute;
+            top: 0;
+            width: 5px;
+            height: 100%;
+            background: #b162d1;
+            border: 1px solid #f0c6ff;
+            border-radius: 2px;
+            transform: translateX(-50%);
+            box-shadow: 0 0 5px rgba(177, 98, 209, 0.8);
+            pointer-events: auto;
+            cursor: pointer;
+            z-index: 6;
+        }
+
+        .accent-marker:hover {
+            transform: translateX(-50%) scaleX(1.6) scaleY(1.15);
+            background: #d386f0;
+            z-index: 15;
+        }
+
+        .accent-marker::after {
+            content: attr(data-label);
+            position: absolute;
+            top: -16px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #e8c7f5;
+            font: bold 9px monospace;
         }
 
         #cueSelectionRange {
@@ -1847,8 +1937,32 @@
                 <button id="nextCuePointBtn" class="cue-nav-btn" title="Next Cue Point">⏭</button>
             </div>
 
+            <h3>Accent Cue Points</h3>
+            <div class="accent-cue-controls" id="accentCueControls">
+                <div class="accent-cue-slot" data-accent-slot="1">
+                    <button class="accent-set-btn" data-accent-slot="1" title="Set Accent 1 at the current frame">A1</button>
+                    <span class="accent-time" id="accentTime1">--:--</span>
+                    <button class="accent-clear-btn" data-accent-slot="1" title="Clear Accent 1" disabled>×</button>
+                </div>
+                <div class="accent-cue-slot" data-accent-slot="2">
+                    <button class="accent-set-btn" data-accent-slot="2" title="Set Accent 2 at the current frame">A2</button>
+                    <span class="accent-time" id="accentTime2">--:--</span>
+                    <button class="accent-clear-btn" data-accent-slot="2" title="Clear Accent 2" disabled>×</button>
+                </div>
+                <div class="accent-cue-slot" data-accent-slot="3">
+                    <button class="accent-set-btn" data-accent-slot="3" title="Set Accent 3 at the current frame">A3</button>
+                    <span class="accent-time" id="accentTime3">--:--</span>
+                    <button class="accent-clear-btn" data-accent-slot="3" title="Clear Accent 3" disabled>×</button>
+                </div>
+                <div class="accent-cue-slot" data-accent-slot="4">
+                    <button class="accent-set-btn" data-accent-slot="4" title="Set Accent 4 at the current frame">A4</button>
+                    <span class="accent-time" id="accentTime4">--:--</span>
+                    <button class="accent-clear-btn" data-accent-slot="4" title="Clear Accent 4" disabled>×</button>
+                </div>
+            </div>
+
             <div class="cue-tip-box" style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px; color: #888;">
-                💡 <strong>Tip:</strong> Double-click a cue marker to delete it. Ctrl+drag timeline to range-select; Ctrl+click a marker to toggle selection.
+                💡 <strong>Tip:</strong> Purple A1–A4 markers are direct-trigger accents and do not alter normal cue progression. Double-click an accent marker to clear it. Double-click a normal cue to delete it; Ctrl+drag the timeline to range-select normal cues.
             </div>
 
             <!-- Hidden In/Out Point controls (functionality via hotkeys only) -->

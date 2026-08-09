@@ -211,7 +211,12 @@ npm.cmd run test:scrub
 ```
 
 See `SCRUB_MODES.md` for the current scrub behavior contract and hardware acceptance checklist.
+See `ACCENT_CUES.md` for direct-trigger Accent 1-4 behavior, mappings, and normal-cue progression rules.
 See `VIDEO_COMPATIBILITY.md` for supported codecs, macOS troubleshooting, and encoding footage for responsive fader scrubbing.
+
+### Accent Cue Points
+
+Each video slot has four direct-trigger accents, A1-A4. Set them at useful visual hits such as a clap, impact, or machine movement, then map each Accent action to a keyboard key or MIDI note in **Keyboard Shortcuts**. Triggering an accent jumps to it immediately without losing your position in the normal cue sequence; the next normal cue command continues from where that sequence left off.
 
 ### Testing MIDI
 

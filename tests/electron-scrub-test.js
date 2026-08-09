@@ -239,6 +239,53 @@ async function run() {
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 3`);
   await click(window, '#recordCuePointBtn');
   await waitFor(window, `document.querySelectorAll('.cue-marker').length === 2`, 'cue point setup');
+
+  // Accent points are separate, direct-trigger positions. Repeated accent
+  // triggers restart the accent, while normal cue navigation resumes from the
+  // logical normal cue position that was active before the accent.
+  await window.webContents.executeJavaScript(`(() => {
+    const video = document.getElementById('videoPlayer');
+    video.pause();
+    video.currentTime = 1.25;
+  })()`);
+  await click(window, '.accent-set-btn[data-accent-slot="1"]');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 3.4`);
+  await click(window, '.accent-set-btn[data-accent-slot="2"]');
+  await waitFor(window, `document.querySelectorAll('.accent-marker').length === 2`, 'accent point setup');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelectorAll('.cue-marker').length`), 2);
+
+  await window.webContents.executeJavaScript(`(() => {
+    const video = document.getElementById('videoPlayer');
+    video.pause();
+    video.currentTime = 0;
+  })()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 1.98`, 'first normal cue before accent');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime >= 1.24 && document.getElementById('videoPlayer').currentTime < 1.55`, 'accent one trigger');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 1.8`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime >= 1.24 && document.getElementById('videoPlayer').currentTime < 1.55`, 'accent one retrigger');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 2.98`, 'normal cue progression after accent');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
+
+  await click(window, '#shortcutsBtn');
+  await click(window, '.midi-learn-btn[data-action="accent2"]');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 62, velocity: 100 });
+  await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="accent2"]').textContent.includes('Note 62')`, 'accent MIDI learn');
+  await click(window, '#saveShortcutsBtn');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0`);
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 62, velocity: 100 });
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime >= 3.39 && document.getElementById('videoPlayer').currentTime < 3.7`, 'accent MIDI trigger');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
+
   await setSlider(window, '#scrubRangeSlider', 0.5);
   await setSlider(window, '#scrubSpeedSlider', 4);
   await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
@@ -253,6 +300,8 @@ async function run() {
       }
     });
   })()`);
+  await click(window, '#restartClipBtn');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 2`);
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
@@ -460,6 +509,17 @@ async function run() {
   await waitForNode(() => previewWindow && !previewWindow.isDestroyed(), 'pop-out creation');
   await waitFor(previewWindow, `document.getElementById('previewVideo').duration > 0`, 'pop-out video metadata', 10000);
 
+  await window.webContents.executeJavaScript(`document.activeElement && document.activeElement.blur()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await waitFor(previewWindow, `document.getElementById('previewVideo').currentTime >= 1.24 && document.getElementById('previewVideo').currentTime < 1.55`, 'pop-out accent trigger');
+  await previewWindow.webContents.executeJavaScript(`(() => {
+    const video = document.getElementById('previewVideo');
+    video.pause();
+    video.currentTime = 2;
+  })()`);
+  await waitFor(previewWindow, `document.getElementById('previewVideo').currentTime >= 1.98`, 'restore pop-out scrub centre after accent');
+
   await click(window, '.scrub-mode-btn[data-mode="manual-cc"]');
   await click(window, '#scrubActivateBtn');
   window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 14, value: 0 });
@@ -581,7 +641,7 @@ async function run() {
   }, 'pop-out B/F stop-and-wait at range start', 3000);
   await click(window, '#scrubAutoReverseToggle');
 
-  // Per-slot scrub settings restore independently and serialize in session v1.11.
+  // Per-slot scrub/accent settings restore independently and serialize in session v1.12.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub disabled');
@@ -634,12 +694,18 @@ async function run() {
   await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
   await click(window, '#scrubFullRangeToggle');
   await click(window, '#scrubAutoReverseToggle');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0.8`);
+  await click(window, '.accent-set-btn[data-accent-slot="1"]');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
 
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
-  assert.equal(savedSessionData.version, '1.11');
+  assert.equal(savedSessionData.version, '1.12');
+  assert.deepEqual(savedSessionData.midiMappings.accent2, { type: 'noteon', channel: 1, note: 62 });
+  assert.equal(savedSessionData.tabs.accentPoints['0']['1']['1'].time, 1.25);
+  assert.equal(savedSessionData.tabs.accentPoints['0']['2']['1'].time, 0.8);
+  assert.equal(savedSessionData.tabs.accentPoints['0']['1']['2'].time, 3.4);
   assert.deepEqual(savedSessionData.tabs.scrubSettings['0']['1'], {
     enabled: false,
     mode: 'hold',
@@ -661,13 +727,15 @@ async function run() {
   await setSlider(window, '#scrubRangeSlider', 3);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await click(window, '#loadSessionBtn');
-  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.11 reload', 10000);
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.12 reload', 10000);
   await click(window, '.clip-slot[data-clip-number="1"]');
   await waitFor(window, `document.getElementById('videoPlayer').duration > 0 && document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'hold'`, 'reloaded slot one', 10000);
+  await waitFor(window, `document.querySelectorAll('.accent-marker').length === 2`, 'reloaded slot one accents');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '0.65');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubActiveBadge').style.display`), 'none');
   await click(window, '.clip-slot[data-clip-number="2"]');
   await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'back-forward' && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'reloaded slot two', 10000);
+  await waitFor(window, `document.querySelectorAll('.accent-marker').length === 1`, 'reloaded slot two accents');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '1.25');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubFullRangeToggle').checked`), true);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').checked`), false);
@@ -677,6 +745,7 @@ async function run() {
   // the new continuous/default behavior rather than unexpectedly stopping.
   sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));
   sessionDataToLoad.version = '1.10';
+  delete sessionDataToLoad.tabs.accentPoints;
   Object.values(sessionDataToLoad.tabs.scrubSettings).forEach(tabSettings => {
     Object.values(tabSettings).forEach(settings => delete settings.autoReverse);
   });
