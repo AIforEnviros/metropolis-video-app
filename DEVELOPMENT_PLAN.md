@@ -1113,7 +1113,7 @@ During development, several features were implemented that weren't in the origin
 - **Status:** ✅ Implemented
 
 ### Enhanced Session Format
-- Session file format evolved from v1.0 to v1.10
+- Session file format evolved from v1.0 to v1.11
 - Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, and per-slot scrub enabled/mode/range/speed/B-F-full-range settings
 - Comprehensive project state preservation
 - **Status:** ✅ Implemented

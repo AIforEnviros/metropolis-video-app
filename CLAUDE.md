@@ -24,7 +24,7 @@ This is now an Electron-based desktop application for production live performanc
 **Current active development (2026-08-02):**
 - Branch: `codex/scrub-save-ui`
 - Electron is the only active application architecture; `src/` is legacy
-- Scrub session data uses session format v1.10 with enabled/mode/range/speed/B-F-full-range saved per video slot
+- Scrub session data uses session format v1.11 with enabled/mode/range/speed/B-F-full-range/B-F-auto-reverse saved per video slot
 - Run the app with `npm start` (`npm.cmd start` in restricted Windows PowerShell)
 - Run scrub regression coverage with `npm run test:scrub` (`npm.cmd run test:scrub` on Windows)
 - Treat `SCRUB_MODES.md` as the authoritative scrub behavior contract
@@ -743,7 +743,7 @@ Complete MIDI mapping and MIDI learn functionality has been implemented for all 
 }
 ```
 
-**Original MIDI session format (v1.4; current application format is v1.10):**
+**Original MIDI session format (v1.4; current application format is v1.11):**
 ```json
 {
   "version": "1.4",
