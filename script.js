@@ -119,14 +119,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const tabClipInOutPoints = {};
 
     // Scrub behavior belongs to each video slot. Controller mappings remain
-    // global, while enabled/mode/range/speed follow the clip across sessions.
+    // global, while enabled/mode/range/speed/B-F options follow the clip across sessions.
     const tabClipScrubSettings = {};
     const DEFAULT_CLIP_SCRUB_SETTINGS = Object.freeze({
         enabled: true,
         mode: 'manual-cc',
         range: 2.0,
         speed: 1.0,
-        fullRange: false
+        fullRange: false,
+        autoReverse: true
     });
 
     // Initialize tab data structures for default 5 tabs
@@ -314,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.10',
+            version: '1.11',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -1073,7 +1074,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Keep the video element in sync if this clip is currently loaded
         if (selectedClipSlot && selectedClipSlot.dataset.clipNumber == clipNumber) {
-            video.loop = (mode === 'loop');
+            syncScrubNativeLoopSetting();
         }
 
         markSessionModified();
@@ -2692,6 +2693,7 @@ document.addEventListener('DOMContentLoaded', function() {
         range: 2.0,          // total seconds around centre
         speed: 1.0,          // playbackRate multiplier used by automated modes
         fullRange: false,    // B/F only: use clip In/Out points or full video
+        autoReverse: true,   // B/F only: turn around automatically at boundaries
         ccController: null,  // { type:'cc', channel, controller } or null
         drumPadNote: null,   // { type:'noteon', channel, note } or null
         drumPadKey: null     // keyboard shortcut string e.g. 'Space', 'x', 'Shift+x'
@@ -2754,7 +2756,8 @@ document.addEventListener('DOMContentLoaded', function() {
             mode,
             range: Math.max(0.1, Math.min(10, Number.isFinite(rangeValue) ? rangeValue : DEFAULT_CLIP_SCRUB_SETTINGS.range)),
             speed: Math.max(0.1, Math.min(4, Number.isFinite(speedValue) ? speedValue : DEFAULT_CLIP_SCRUB_SETTINGS.speed)),
-            fullRange: source.fullRange !== undefined ? Boolean(source.fullRange) : Boolean(fallback.fullRange)
+            fullRange: source.fullRange !== undefined ? Boolean(source.fullRange) : Boolean(fallback.fullRange),
+            autoReverse: source.autoReverse !== undefined ? Boolean(source.autoReverse) : Boolean(fallback.autoReverse)
         };
     }
 
@@ -2786,6 +2789,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const rangeValue = document.getElementById('scrubRangeValue');
         const fullRangeToggle = document.getElementById('scrubFullRangeToggle');
         const fullRangeOption = document.getElementById('scrubFullRangeOption');
+        const autoReverseToggle = document.getElementById('scrubAutoReverseToggle');
+        const autoReverseOption = document.getElementById('scrubAutoReverseOption');
         const isBackForward = selectedScrubMode === 'back-forward';
         const useFullRange = isBackForward && scrubConfig.fullRange;
 
@@ -2803,6 +2808,11 @@ document.addEventListener('DOMContentLoaded', function() {
             fullRangeToggle.disabled = !isBackForward;
         }
         if (fullRangeOption) fullRangeOption.classList.toggle('disabled', !isBackForward);
+        if (autoReverseToggle) {
+            autoReverseToggle.checked = scrubConfig.autoReverse;
+            autoReverseToggle.disabled = !isBackForward;
+        }
+        if (autoReverseOption) autoReverseOption.classList.toggle('disabled', !isBackForward);
     }
 
     function syncScrubParameterUI() {
@@ -2818,6 +2828,7 @@ document.addEventListener('DOMContentLoaded', function() {
         scrubConfig.range = settings.range;
         scrubConfig.speed = settings.speed;
         scrubConfig.fullRange = settings.fullRange;
+        scrubConfig.autoReverse = settings.autoReverse;
         selectScrubModeUI(settings.mode);
         syncScrubParameterUI();
         updateScrubUI();
@@ -3045,6 +3056,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function syncScrubNativeLoopSetting(activeScrubMode = scrubMode) {
+        const clipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
+        const clipUsesLoop = clipNumber ? (clipModes[clipNumber] || 'loop') === 'loop' : false;
+        // B/F owns both range boundaries. Native looping can wrap a full-video
+        // clip to 00:00 before the scrub controller sees its final frame.
+        const shouldLoop = activeScrubMode === 'back-forward' ? false : clipUsesLoop;
+        video.loop = shouldLoop;
+        if (previewPopoutOpen) sendToPopout({ type: 'setLoop', loop: shouldLoop });
+    }
+
     function startBackForwardForward(position = null) {
         if (Number.isFinite(position)) seekScrubPosition(position);
         scrubBackForwardDirection = 1;
@@ -3064,6 +3085,14 @@ document.addEventListener('DOMContentLoaded', function() {
         scrubReverseElapsedSeconds = 0;
         scrubLastDecoderSeekTimestamp = performance.now();
         scrubEffectRunning = true;
+        updateScrubStatus();
+    }
+
+    function stopBackForwardAtBoundary(position) {
+        pauseScrubOutput();
+        seekScrubPosition(position);
+        scrubBackForwardActiveDirection = 0;
+        scrubBackForwardAwaitingReverseStart = false;
         updateScrubStatus();
     }
 
@@ -3176,6 +3205,7 @@ document.addEventListener('DOMContentLoaded', function() {
         scrubMode = mode;
         selectedScrubMode = mode;
         scrubOscillationDir = 1;
+        syncScrubNativeLoopSetting(mode);
 
         const { start, end } = getScrubBounds();
         if (end <= start) {
@@ -3274,6 +3304,7 @@ document.addEventListener('DOMContentLoaded', function() {
         pauseScrubOutput();
         scrubModeActive = false;
         scrubMode = null;
+        syncScrubNativeLoopSetting(null);
         if (!preserveSlotEnabled) updateSelectedClipScrubSettings({ enabled: false });
         setVideoSpeed(scrubSavedPlaybackRate);
         globalPlayIntent = scrubSavedGlobalPlayIntent;
@@ -3282,7 +3313,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (previewPopoutOpen) {
                 sendToPopout({ type: 'play' });
             } else {
-                video.play().catch(e => console.error('Scrub deactivate: resume error', e));
+                video.play().catch(e => {
+                    if (e?.name === 'AbortError') {
+                        console.log('Scrub resume superseded by a newer playback action');
+                    } else {
+                        console.error('Scrub deactivate: resume error', e);
+                    }
+                });
             }
         } else if (previewPopoutOpen) {
             sendToPopout({ type: 'pause' });
@@ -3314,7 +3351,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (scrubMode === 'back-forward' && scrubEffectRunning) {
             if (scrubBackForwardActiveDirection > 0 && currentPos >= end) {
-                startBackForwardReverse(end);
+                if (scrubConfig.autoReverse) startBackForwardReverse(end);
+                else stopBackForwardAtBoundary(end);
             } else if (scrubBackForwardActiveDirection < 0) {
                 scrubReverseElapsedSeconds += elapsedSeconds;
                 const seekIntervalElapsed = timestamp - scrubLastDecoderSeekTimestamp >= SCRUB_PENDULUM_SEEK_INTERVAL_MS;
@@ -3327,7 +3365,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     scrubLastDecoderSeekTimestamp = timestamp;
 
                     if (nextPosition <= start) {
-                        startBackForwardForward(start);
+                        if (scrubConfig.autoReverse) startBackForwardForward(start);
+                        else stopBackForwardAtBoundary(start);
                     } else {
                         seekScrubPosition(nextPosition);
                     }
@@ -5481,6 +5520,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    const scrubAutoReverseToggle = document.getElementById('scrubAutoReverseToggle');
+    if (scrubAutoReverseToggle) {
+        scrubAutoReverseToggle.addEventListener('change', function() {
+            scrubConfig.autoReverse = this.checked;
+            updateSelectedClipScrubSettings({ autoReverse: scrubConfig.autoReverse });
+            syncScrubRangeUI();
+            updateScrubStatus();
+        });
+    }
+
     // Speed slider
     const scrubSpeedSliderEl = document.getElementById('scrubSpeedSlider');
     if (scrubSpeedSliderEl) {
@@ -5713,7 +5762,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (scrubModeActive && scrubMode === 'back-forward' && scrubConfig.fullRange) {
             if (scrubBackForwardActiveDirection > 0) {
                 const { end } = getScrubBounds();
-                startBackForwardReverse(end);
+                if (scrubConfig.autoReverse) startBackForwardReverse(end);
+                else stopBackForwardAtBoundary(end);
             }
             return;
         }
@@ -5904,7 +5954,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             src: video.src || '',
                             currentTime: activeVideo.currentTime,
                             rate: activeVideo.playbackRate,
-                            loop: (mode === 'loop'),
+                            loop: scrubModeActive && scrubMode === 'back-forward' ? false : (mode === 'loop'),
                             playing: wasPlaying
                         });
                     }, 500);
@@ -5958,7 +6008,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 scrubMode === 'back-forward' && scrubConfig.fullRange) {
                 if (scrubBackForwardActiveDirection > 0) {
                     const { end } = getScrubBounds();
-                    startBackForwardReverse(end);
+                    if (scrubConfig.autoReverse) startBackForwardReverse(end);
+                    else stopBackForwardAtBoundary(end);
                 }
                 return;
             }

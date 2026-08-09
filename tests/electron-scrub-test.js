@@ -211,8 +211,28 @@ async function run() {
     return { min: slider.min, max: slider.max, step: slider.step };
   })()`);
   assert.deepEqual(rangeSliderLimits, { min: '0.1', max: '10', step: '0.05' });
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').checked`), true);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').disabled`), true);
 
-  // Work around auto-play for deterministic setup, then learn a keyboard drum trigger.
+  // A default Loop clip with no cue points must give full-video boundary
+  // ownership to B/F instead of natively wrapping back to 00:00.
+  await setSlider(window, '#scrubSpeedSlider', 4);
+  await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
+  await click(window, '#scrubFullRangeToggle');
+  await click(window, '#scrubDrumKeyLearnBtn');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubDrumKeyDisplay').textContent.toLowerCase() === 'x'`, 'keyboard learn');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('videoPlayer').loop === false`, 'B/F native-loop ownership');
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back') && document.getElementById('videoPlayer').currentTime > document.getElementById('videoPlayer').duration - 1`, 'no-cue full-video automatic reversal', 5000);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(window, `document.getElementById('videoPlayer').loop === true`, 'native loop restoration after B/F');
+  await click(window, '#scrubFullRangeToggle');
+
+  // Work around auto-play for deterministic cue-based scenarios.
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 2`);
   await click(window, '#recordCuePointBtn');
@@ -222,10 +242,8 @@ async function run() {
   await setSlider(window, '#scrubRangeSlider', 0.5);
   await setSlider(window, '#scrubSpeedSlider', 4);
   await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
-  await click(window, '#scrubDrumKeyLearnBtn');
-  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
-  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
-  await waitFor(window, `document.getElementById('scrubDrumKeyDisplay').textContent.toLowerCase() === 'x'`, 'keyboard learn');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').checked`), true);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').disabled`), false);
 
   await window.webContents.executeJavaScript(`(() => {
     window.__backwardStrokeSeeked = 0;
@@ -290,6 +308,21 @@ async function run() {
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
   await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back') && document.getElementById('videoPlayer').currentTime > document.getElementById('videoPlayer').duration - 1`, 'B/F full video automatic end reversal', 5000);
   await click(window, '#scrubFullRangeToggle');
+
+  // Auto-reverse can be disabled per slot to restore the previous B/F
+  // stop-and-wait boundary behavior.
+  await click(window, '#scrubAutoReverseToggle');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').checked`), false);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 2.2 && document.getElementById('scrubStatusLine').textContent.includes('Next: Back')`, 'B/F stop-and-wait at range end', 3000);
+  const stoppedAtEnd = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
+  await new Promise(resolve => setTimeout(resolve, 180));
+  assert.ok(Math.abs(await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`) - stoppedAtEnd) < 0.02, 'B/F should remain stopped at the end boundary');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime <= 1.8 && document.getElementById('scrubStatusLine').textContent.includes('Next: Forward')`, 'B/F stop-and-wait at range start', 3000);
+  await click(window, '#scrubAutoReverseToggle');
 
   // Escape must restore the original paused state and rate.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
@@ -489,6 +522,7 @@ async function run() {
     });
   })()`);
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  await waitFor(previewWindow, `document.getElementById('previewVideo').loop === false`, 'pop-out B/F native-loop ownership');
   await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back')`, 'pop-out automatic reverse at range end', 3000);
   await waitFor(previewWindow, `window.__popoutBackwardSeeked >= 2`, 'pop-out backward decoded frames', 3000);
   const popoutBackwardSeeks = await previewWindow.webContents.executeJavaScript(`window.__popoutBackwardSeeked`);
@@ -529,10 +563,29 @@ async function run() {
   }, 'pop-out B/F full video automatic end reversal', 5000);
   await click(window, '#scrubFullRangeToggle');
 
-  // Per-slot scrub settings restore independently and serialize in session v1.10.
+  await click(window, '#scrubAutoReverseToggle');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  await waitForNode(async () => {
+    const status = await window.webContents.executeJavaScript(`document.getElementById('scrubStatusLine').textContent`);
+    const previewState = await previewWindow.webContents.executeJavaScript(`({ paused: document.getElementById('previewVideo').paused, time: document.getElementById('previewVideo').currentTime })`);
+    return status.includes('Next: Back') && previewState.paused && previewState.time >= 2.2;
+  }, 'pop-out B/F stop-and-wait at range end', 3000);
+  const popoutStoppedAtEnd = await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').currentTime`);
+  await new Promise(resolve => setTimeout(resolve, 180));
+  assert.ok(Math.abs(await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').currentTime`) - popoutStoppedAtEnd) < 0.02, 'pop-out B/F should remain stopped at the end boundary');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  await waitForNode(async () => {
+    const status = await window.webContents.executeJavaScript(`document.getElementById('scrubStatusLine').textContent`);
+    const previewState = await previewWindow.webContents.executeJavaScript(`({ paused: document.getElementById('previewVideo').paused, time: document.getElementById('previewVideo').currentTime })`);
+    return status.includes('Next: Forward') && previewState.paused && previewState.time <= 1.8;
+  }, 'pop-out B/F stop-and-wait at range start', 3000);
+  await click(window, '#scrubAutoReverseToggle');
+
+  // Per-slot scrub settings restore independently and serialize in session v1.11.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub disabled');
+  await waitFor(previewWindow, `document.getElementById('previewVideo').loop === true`, 'pop-out native loop restoration after B/F');
   await click(window, '#outputWindowBtn');
   await waitForNode(() => !previewWindow || previewWindow.isDestroyed(), 'pop-out close');
   await setSlider(window, '#scrubRangeSlider', 0.65);
@@ -580,32 +633,35 @@ async function run() {
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1.5');
   await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
   await click(window, '#scrubFullRangeToggle');
+  await click(window, '#scrubAutoReverseToggle');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
 
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
-  assert.equal(savedSessionData.version, '1.10');
+  assert.equal(savedSessionData.version, '1.11');
   assert.deepEqual(savedSessionData.tabs.scrubSettings['0']['1'], {
     enabled: false,
     mode: 'hold',
     range: 0.65,
     speed: 1.7,
-    fullRange: false
+    fullRange: false,
+    autoReverse: true
   });
   assert.deepEqual(savedSessionData.tabs.scrubSettings['0']['2'], {
     enabled: true,
     mode: 'back-forward',
     range: 1.25,
     speed: 1.5,
-    fullRange: true
+    fullRange: true,
+    autoReverse: false
   });
 
   // Round-trip through the real session loader, not just the serialized object.
   await setSlider(window, '#scrubRangeSlider', 3);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await click(window, '#loadSessionBtn');
-  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.10 reload', 10000);
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.11 reload', 10000);
   await click(window, '.clip-slot[data-clip-number="1"]');
   await waitFor(window, `document.getElementById('videoPlayer').duration > 0 && document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'hold'`, 'reloaded slot one', 10000);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '0.65');
@@ -614,7 +670,22 @@ async function run() {
   await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'back-forward' && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'reloaded slot two', 10000);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '1.25');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubFullRangeToggle').checked`), true);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').checked`), false);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
+
+  // v1.10 per-slot sessions did not have autoReverse. They must migrate to
+  // the new continuous/default behavior rather than unexpectedly stopping.
+  sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));
+  sessionDataToLoad.version = '1.10';
+  Object.values(sessionDataToLoad.tabs.scrubSettings).forEach(tabSettings => {
+    Object.values(tabSettings).forEach(settings => delete settings.autoReverse);
+  });
+  await window.webContents.executeJavaScript(`document.getElementById('sessionStatus').textContent = 'Loading v1.10 test…'`);
+  await click(window, '#loadSessionBtn');
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.10 migration', 10000);
+  await click(window, '.clip-slot[data-clip-number="2"]');
+  await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'back-forward'`, 'v1.10 slot restore', 10000);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').checked`), true);
 
   // v1.8 global scrub values migrate to each loaded slot with scrub ON.
   sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));
@@ -633,9 +704,10 @@ async function run() {
     range: document.getElementById('scrubRangeSlider').value,
     speed: document.getElementById('scrubSpeedSlider').value,
     fullRange: document.getElementById('scrubFullRangeToggle').checked,
+    autoReverse: document.getElementById('scrubAutoReverseToggle').checked,
     active: document.getElementById('scrubActiveBadge').style.display !== 'none'
   }))()`);
-  assert.deepEqual(migratedState, { mode: 'hold', range: '0.8', speed: '2.2', fullRange: false, active: true });
+  assert.deepEqual(migratedState, { mode: 'hold', range: '0.8', speed: '2.2', fullRange: false, autoReverse: true, active: true });
 
   const relevantErrors = rendererErrors.filter(message => !message.includes('MIDI') && !message.includes('favicon'));
   assert.deepEqual(relevantErrors, []);

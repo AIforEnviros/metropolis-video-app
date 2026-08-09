@@ -10,7 +10,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - Speed limits: **0.1×–4×**.
 - Scrub playback temporarily owns play, pause, seeking, and playback rate. Deactivation restores the play/pause state and speed that existed before activation.
 - New video slots default to Fader mode with scrub ON, a 2-second range, and 1× scrub speed.
-- Enabled state, mode, range, and speed are independent for every video slot; selecting a loaded slot restores and, when enabled, activates its saved scrub behavior.
+- Enabled state, mode, range, speed, and B/F options are independent for every video slot; selecting a loaded slot restores and, when enabled, activates its saved scrub behavior.
 - Changing clip or tab safely deactivates scrub and clears stale cue-center state.
 - The embedded preview and pop-out projection window must exhibit the same behavior.
 
@@ -29,9 +29,11 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - Activates at the range start and waits.
 - The first trigger starts forward playback.
 - Every later trigger reverses direction at the current playhead position. It must not jump to either range boundary.
-- Reaching either range boundary automatically reverses direction and continues playback.
-- Playback keeps bouncing between the boundaries until scrub mode is deactivated; a trigger can still reverse it at any point.
+- **Auto-reverse at boundaries** is ON by default. Reaching either boundary reverses direction automatically, so playback keeps bouncing until scrub mode is deactivated.
+- Turning **Auto-reverse at boundaries** OFF restores stop-and-wait behavior: playback stops at the reached boundary until the next trigger reverses it away from that boundary.
+- A trigger can reverse playback immediately at any point in either boundary mode.
 - B/F alone can use **Full video / In-Out** instead of the centered 0.1–10 second range. Its boundaries are the clip's valid In/Out points when set, otherwise `00:00` and the complete video duration.
+- While B/F is active it temporarily disables the clip's native loop setting so a full-video boundary cannot restart at `00:00` before B/F reverses or stops. The clip's normal loop setting is restored afterward.
 - Forward strokes use normal video playback. Backward strokes use decoder-paced frame seeks because Chromium does not reliably support a negative playback rate.
 
 ### Pendulum (`pendulum`)
@@ -80,7 +82,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 
 ## Session Persistence
 
-Scrub settings are stored in session format **v1.10**.
+Scrub settings are stored in session format **v1.11**.
 
 Saved per video slot:
 
@@ -89,6 +91,7 @@ Saved per video slot:
 - Range
 - Speed
 - B/F Full video / In-Out selection
+- B/F Auto-reverse at boundaries selection
 
 Saved globally because they describe the physical controls:
 
@@ -117,14 +120,14 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - All seven modes
 - Keyboard and MIDI learn
 - First-hit activation
-- Current-position B/F reversals and automatic boundary turnarounds
+- Current-position B/F reversals, automatic boundary turnarounds, and optional stop-and-wait boundaries
 - Decoder-completed reverse frames
 - Cue advancement, focused-control priority, and last-to-first wrapping
 - Pre-scrub state restoration
 - Embedded and pop-out playback behavior
 - Dense 128-message fader bursts without decoder seek backlogs
 - Cross-platform file URL encoding for spaces and reserved characters
-- Per-slot mode/range/speed/B-F-full-range/ON-OFF restoration and session v1.10 round-tripping
+- Per-slot mode/range/speed/B-F-options/ON-OFF restoration and session v1.11 round-tripping
 
 ## Hardware Acceptance Checks
 

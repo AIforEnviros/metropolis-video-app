@@ -1899,7 +1899,7 @@
                     <div class="scrub-mode-row">
                         <div class="scrub-mode-btns">
                             <button class="scrub-mode-btn" data-mode="manual-cc" title="CC cross-fader controls playhead position within range">Fader</button>
-                            <button class="scrub-mode-btn" data-mode="back-forward" title="Each trigger reverses direction from the current frame; boundaries reverse automatically">B/F</button>
+                            <button class="scrub-mode-btn" data-mode="back-forward" title="Each trigger reverses from the current frame; boundaries auto-reverse by default or can stop and wait">B/F</button>
                             <button class="scrub-mode-btn" data-mode="pendulum" title="Auto-oscillates forward/back continuously">Pend.</button>
                             <button class="scrub-mode-btn" data-mode="stutter" title="Rapid stutter effect — use short range + fast speed">Stutter</button>
                             <button class="scrub-mode-btn" data-mode="manual-stutter" title="Plays the range once, then waits at the end until the next trigger restarts it">M.Stut</button>
@@ -1913,7 +1913,7 @@
                         <button class="scrub-activate-btn" id="scrubActivateBtn" disabled>Scrub: ON (waiting)</button>
                         <span class="scrub-centre-display" id="scrubCentreDisplay">Centre: --:--</span>
                     </div>
-                    <div style="font-size:10px; color:#888; margin-bottom:6px;">Mode, range, speed and ON/OFF are saved per video slot. New slots default to Fader + ON.</div>
+                    <div style="font-size:10px; color:#888; margin-bottom:6px;">Mode, range, speed, B/F options and ON/OFF are saved per video slot. New slots default to Fader + ON.</div>
 
                     <!-- Live status line -->
                     <div id="scrubStatusLine" style="font-size:11px; color:#f90; font-family:monospace; min-height:14px;"></div>
@@ -1926,6 +1926,10 @@
                     <label class="scrub-full-range-option disabled" id="scrubFullRangeOption" title="Available only in B/F mode; uses the clip In/Out points or the full video">
                         <input type="checkbox" id="scrubFullRangeToggle" disabled>
                         Full video / In-Out (B/F only)
+                    </label>
+                    <label class="scrub-full-range-option disabled" id="scrubAutoReverseOption" title="Available only in B/F mode; turn this off to stop and wait at each boundary">
+                        <input type="checkbox" id="scrubAutoReverseToggle" checked disabled>
+                        Auto-reverse at boundaries (B/F only)
                     </label>
 
                     <!-- Speed -->
