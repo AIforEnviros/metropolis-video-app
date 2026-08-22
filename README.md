@@ -222,12 +222,14 @@ Choose **Clip**, **A1**, **A2**, **A3**, or **A4** at the top of the Scrub Modes
 
 ### Testing MIDI
 
-1. **Plug in your MIDI device BEFORE starting the app**
+1. **Plug in all MIDI controllers BEFORE starting the app**
 2. Open the app (`npm start`)
 3. Click "Keyboard Shortcuts" button
-4. You should see your MIDI device in the dropdown
+4. Confirm all controllers appear in the connected MIDI inputs status
 5. Click "Learn" next to any action, then hit a pad/key
 6. Watch it map! (It'll show "Ch1 Note 60" or similar)
+
+All detected MIDI inputs are connected automatically. Mappings are device-independent, so the same channel/note or CC message performs the same action when sent by either controller.
 
 ---
 

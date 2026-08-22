@@ -323,7 +323,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let midiLearnActive = false;
     let midiLearnAction = null;
     let midiDevices = [];
-    let currentMIDIDevice = null;
 
     // Track if shortcuts modal is open
     let shortcutsModalOpen = false;
@@ -5730,7 +5729,7 @@ document.addEventListener('DOMContentLoaded', function() {
         populateShortcutsGrid();
     }
 
-    // Load MIDI devices into selector
+    // Show every automatically connected MIDI input.
     async function loadMIDIDevices() {
         if (!window.electronAPI || !window.electronAPI.getMIDIDevices) {
             console.log('MIDI API not available');
@@ -5741,48 +5740,30 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await window.electronAPI.getMIDIDevices();
             if (result.success && result.devices) {
                 midiDevices = result.devices;
-                const selector = document.getElementById('midiDeviceSelect');
-                selector.innerHTML = '';
+                const status = document.getElementById('midiDeviceStatus');
+                if (!status) return;
 
                 if (midiDevices.length === 0) {
-                    selector.innerHTML = '<option value="">No MIDI devices found</option>';
+                    status.textContent = 'No MIDI inputs detected';
                 } else {
-                    midiDevices.forEach(device => {
-                        const option = document.createElement('option');
-                        option.value = device.id;
-                        option.textContent = device.name;
-                        selector.appendChild(option);
-                    });
-
-                    // Get current device
-                    const currentResult = await window.electronAPI.getCurrentMIDIDevice();
-                    if (currentResult.success && currentResult.port !== null) {
-                        selector.value = currentResult.port;
-                        currentMIDIDevice = currentResult.port;
-                    }
+                    const connected = midiDevices.filter(device => device.connected !== false);
+                    const failed = midiDevices.filter(device => device.connected === false);
+                    const connectedText = connected.length > 0
+                        ? `Connected (${connected.length}): ${connected.map(device => device.name).join(', ')}`
+                        : 'No MIDI inputs connected';
+                    const failedText = failed.length > 0
+                        ? ` · Could not open: ${failed.map(device => device.name).join(', ')}`
+                        : '';
+                    status.textContent = connectedText + failedText;
                 }
+            } else {
+                const status = document.getElementById('midiDeviceStatus');
+                if (status) status.textContent = `MIDI unavailable: ${result.error || 'unknown error'}`;
             }
         } catch (error) {
             console.error('Error loading MIDI devices:', error);
-        }
-    }
-
-    // Handle MIDI device selection
-    async function handleMIDIDeviceChange(event) {
-        const portIndex = parseInt(event.target.value);
-        if (isNaN(portIndex)) return;
-
-        try {
-            const result = await window.electronAPI.selectMIDIDevice(portIndex);
-            if (result.success) {
-                currentMIDIDevice = portIndex;
-                console.log(`Connected to MIDI device: ${result.name}`);
-            } else {
-                console.error('Failed to select MIDI device:', result.error);
-                alert('Failed to connect to MIDI device');
-            }
-        } catch (error) {
-            console.error('Error selecting MIDI device:', error);
+            const status = document.getElementById('midiDeviceStatus');
+            if (status) status.textContent = 'Could not read MIDI inputs';
         }
     }
 
@@ -6305,20 +6286,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     saveShortcutsBtn.addEventListener('click', saveShortcutsChanges);
 
-    // MIDI device selector event listener
-    const midiDeviceSelect = document.getElementById('midiDeviceSelect');
-    if (midiDeviceSelect) {
-        midiDeviceSelect.addEventListener('change', handleMIDIDeviceChange);
-    }
-
-    // MIDI refresh button on home page — re-enumerates and auto-connects
+    // MIDI refresh button on home page — reconnects every detected input.
     const refreshMIDIBtn = document.getElementById('refreshMIDIBtn');
     if (refreshMIDIBtn && window.electronAPI && window.electronAPI.refreshMIDI) {
         refreshMIDIBtn.addEventListener('click', async () => {
             refreshMIDIBtn.textContent = '↻';
             await window.electronAPI.refreshMIDI();
             refreshMIDIBtn.textContent = '⟳';
-            // Also refresh the dropdown in the shortcuts modal if it's open
+            // Also refresh the connected-device status in the shortcuts modal.
             loadMIDIDevices();
         });
     }

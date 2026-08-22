@@ -10,11 +10,13 @@ let savedSessionData = null;
 let sessionDataToLoad = null;
 
 function registerRendererStubs() {
+  const connectedMIDIDevices = [
+    { id: 0, name: 'SPD-20', connected: true },
+    { id: 1, name: 'DJ Controller', connected: true }
+  ];
   const handlers = {
-    'get-midi-devices': () => ({ success: true, devices: [] }),
-    'get-current-midi-device': () => ({ success: true, device: null }),
-    'select-midi-device': () => ({ success: true }),
-    'reinitialize-midi': () => ({ success: true, devices: [] }),
+    'get-midi-devices': () => ({ success: true, devices: connectedMIDIDevices, connectedCount: 2 }),
+    'reinitialize-midi': () => ({ success: true, devices: connectedMIDIDevices, connectedCount: 2 }),
     'is-preview-popout-open': () => Boolean(previewWindow && !previewWindow.isDestroyed()),
     'save-session': (_event, sessionData) => {
       savedSessionData = sessionData;
@@ -277,12 +279,15 @@ async function run() {
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
 
   await click(window, '#shortcutsBtn');
+  await waitFor(window, `document.getElementById('midiDeviceStatus').textContent.includes('Connected (2): SPD-20, DJ Controller')`, 'multi-input MIDI status');
   await click(window, '.midi-learn-btn[data-action="accent2"]');
-  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 62, velocity: 100 });
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 62, velocity: 100, deviceId: 0, deviceName: 'SPD-20' });
   await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="accent2"]').textContent.includes('Note 62')`, 'accent MIDI learn');
   await click(window, '#saveShortcutsBtn');
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0`);
-  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 62, velocity: 100 });
+  // Mappings remain device-independent: the same note learned from the drum
+  // controller must also work when it arrives from the DJ controller.
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 62, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
   await waitFor(window, `document.getElementById('videoPlayer').currentTime >= 3.39 && document.getElementById('videoPlayer').currentTime < 3.7`, 'accent MIDI trigger');
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
 

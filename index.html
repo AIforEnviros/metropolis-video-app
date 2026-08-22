@@ -2192,11 +2192,9 @@
                     <p><strong>MIDI:</strong> Click "Learn MIDI" and then press a key/pad on your MIDI device.</p>
                     <p><strong>Modifiers:</strong> Use Shift+, Ctrl+, Alt+, or Meta+ before the main key.</p>
                 </div>
-                <div id="midiDeviceSelector" style="margin-bottom: 15px;">
-                    <label for="midiDeviceSelect" style="color: #ccc; margin-right: 10px;">MIDI Device:</label>
-                    <select id="midiDeviceSelect" style="background-color: #404040; color: white; border: 1px solid #666; padding: 8px; border-radius: 4px; font-size: 13px;">
-                        <option value="">Loading devices...</option>
-                    </select>
+                <div id="midiInputsStatusContainer" style="margin-bottom: 15px;">
+                    <span style="color: #ccc; margin-right: 10px;">MIDI Inputs:</span>
+                    <span id="midiDeviceStatus" style="color: #90ee90; font-size: 13px;">Checking connected devices...</span>
                 </div>
                 <div class="shortcuts-grid" id="shortcutsGrid">
                     <!-- Shortcuts will be dynamically generated here -->

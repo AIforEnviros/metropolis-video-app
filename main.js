@@ -14,9 +14,9 @@ let mainWindow = null;
 let popoutWindow = null;
 
 // MIDI state
-let midiInput = null;
-let currentMIDIPort = null;
+const midiInputs = new Map();
 let midiDevices = [];
+let midiInitialized = false;
 
 // Development mode detection
 const isDev = process.argv.includes('--dev');
@@ -375,123 +375,102 @@ ipcMain.handle('check-reversed-video', async (event, videoPath) => {
 // MIDI FUNCTIONALITY
 // ==============================================================
 
-// Initialize MIDI input
-function initializeMIDI() {
-  try {
-    // Create a new MIDI input
-    midiInput = new midi.Input();
-
-    // Get number of available input ports
-    const portCount = midiInput.getPortCount();
-    console.log(`Found ${portCount} MIDI input devices`);
-
-    // Build list of MIDI devices
-    midiDevices = [];
-    for (let i = 0; i < portCount; i++) {
-      const portName = midiInput.getPortName(i);
-      midiDevices.push({ id: i, name: portName });
-      console.log(`  [${i}] ${portName}`);
+function closeAllMIDIInputs() {
+  for (const { input, device } of midiInputs.values()) {
+    try {
+      input.removeAllListeners('message');
+      input.closePort();
+      console.log(`Closed MIDI input: ${device.name}`);
+    } catch (error) {
+      console.warn(`MIDI cleanup warning for ${device.name}:`, error.message);
     }
+  }
+  midiInputs.clear();
+  midiInitialized = false;
+}
 
-    // Auto-connect to first device if available
-    if (portCount > 0) {
-      connectMIDIDevice(0);
-    }
+function forwardMIDIMessage(device, deltaTime, message) {
+  const [status, data1, data2] = message;
+  const messageType = status & 0xF0;
+  const channel = (status & 0x0F) + 1;
+  const midiMessage = {
+    type: getMIDIMessageType(messageType),
+    channel,
+    data1,
+    data2,
+    raw: message,
+    deviceId: device.id,
+    deviceName: device.name
+  };
 
-    return { success: true, devices: midiDevices };
-  } catch (error) {
-    console.error('MIDI initialization error:', error);
-    return { success: false, error: error.message };
+  if (midiMessage.type === 'noteon' || midiMessage.type === 'noteoff') {
+    midiMessage.note = data1;
+    midiMessage.velocity = data2;
+  } else if (midiMessage.type === 'cc') {
+    midiMessage.controller = data1;
+    midiMessage.value = data2;
+  } else if (midiMessage.type === 'program') {
+    midiMessage.program = data1;
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('midi-message', midiMessage);
+  }
+
+  if (MIDI_DEBUG) {
+    console.log(`MIDI [${device.name}]: ${midiMessage.type} Ch${channel} [${data1}, ${data2}] dt=${deltaTime}`);
   }
 }
 
-// Connect to specific MIDI device
-function connectMIDIDevice(portIndex) {
+// Enumerate and connect every available MIDI input. Mappings intentionally do
+// not include device identity, so the same channel/note or CC from either
+// controller performs the same action.
+function initializeMIDI() {
+  closeAllMIDIInputs();
+  midiInitialized = true;
+
   try {
-    // Close existing connection if any
-    if (midiInput && currentMIDIPort !== null) {
-      const oldDeviceName = midiDevices[currentMIDIPort].name;
-      const newDeviceName = midiDevices[portIndex].name;
-      console.log(`Switching MIDI device: ${oldDeviceName} → ${newDeviceName}`);
+    const enumerator = new midi.Input();
+    const portCount = enumerator.getPortCount();
+    console.log(`Found ${portCount} MIDI input devices`);
 
-      midiInput.closePort();
-
-      // FIX: Remove all old event listeners to prevent stacking
-      midiInput.removeAllListeners('message');
-      if (MIDI_DEBUG) console.log('✓ Removed old MIDI message listeners');
-    }
-
-    // Open the specified port with enhanced error handling
-    try {
-      midiInput.openPort(portIndex);
-      currentMIDIPort = portIndex;
-      console.log(`✓ Connected to MIDI device: ${midiDevices[portIndex].name}`);
-
-      // Log port details for diagnostics
-      console.log(`📋 MIDI Port Details:`, {
-        index: portIndex,
-        name: midiDevices[portIndex].name,
-        totalPorts: midiInput.getPortCount()
+    midiDevices = [];
+    for (let portIndex = 0; portIndex < portCount; portIndex++) {
+      midiDevices.push({
+        id: portIndex,
+        name: enumerator.getPortName(portIndex),
+        connected: false
       });
-    } catch (openError) {
-      console.error(`✗ Failed to open MIDI port ${portIndex}:`, openError.message);
-
-      // Check if this is a network MIDI device
-      const deviceName = midiDevices[portIndex].name.toLowerCase();
-      if (deviceName.includes('ipmidi') || deviceName.includes('network') || deviceName.includes('rtp')) {
-        console.warn('⚠ Network MIDI detected - connection may require additional time or configuration');
-      }
-
-      throw openError;
     }
 
-    // Set up message callback
-    midiInput.on('message', (deltaTime, message) => {
-      // DIAGNOSTIC: Always log raw messages to prove they arrive (not behind MIDI_DEBUG)
-      console.log('🎹 RAW MIDI RECEIVED:', message, 'deltaTime:', deltaTime);
+    for (const device of midiDevices) {
+      const input = new midi.Input();
+      input.on('message', (deltaTime, message) => {
+        forwardMIDIMessage(device, deltaTime, message);
+      });
 
-      // Parse MIDI message
-      const [status, data1, data2] = message;
-      const messageType = status & 0xF0; // Get message type (high nibble)
-      const channel = (status & 0x0F) + 1; // Get channel (low nibble), 1-indexed
-
-      const midiMessage = {
-        type: getMIDIMessageType(messageType),
-        channel: channel,
-        data1: data1,
-        data2: data2,
-        raw: message
-      };
-
-      // Add specific fields based on message type
-      if (midiMessage.type === 'noteon' || midiMessage.type === 'noteoff') {
-        midiMessage.note = data1;
-        midiMessage.velocity = data2;
-      } else if (midiMessage.type === 'cc') {
-        midiMessage.controller = data1;
-        midiMessage.value = data2;
-      } else if (midiMessage.type === 'program') {
-        midiMessage.program = data1;
+      try {
+        input.openPort(device.id);
+        device.connected = true;
+        midiInputs.set(device.id, { input, device });
+        console.log(`Connected MIDI input [${device.id}]: ${device.name}`);
+      } catch (error) {
+        input.removeAllListeners('message');
+        device.error = error.message;
+        console.error(`Failed to open MIDI input [${device.id}] ${device.name}:`, error.message);
       }
+    }
 
-      // Send to renderer process
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('midi-message', midiMessage);
-      }
-
-      // Verbose logging (only in debug mode)
-      if (MIDI_DEBUG) {
-        console.log(`MIDI: ${midiMessage.type} Ch${channel} [${data1}, ${data2}]`);
-      }
-    });
-
-    // Confirm listener is attached and waiting
-    console.log('👂 MIDI message listener attached and waiting for messages...');
-
-    return { success: true, port: portIndex, name: midiDevices[portIndex].name };
+    return {
+      success: true,
+      devices: midiDevices,
+      connectedCount: midiInputs.size
+    };
   } catch (error) {
-    console.error('✗ MIDI connection error:', error.message);
-    return { success: false, error: error.message };
+    midiDevices = [];
+    midiInitialized = false;
+    console.error('MIDI initialization error:', error);
+    return { success: false, devices: [], connectedCount: 0, error: error.message };
   }
 }
 
@@ -511,40 +490,15 @@ function getMIDIMessageType(statusByte) {
 
 // IPC: Get available MIDI devices
 ipcMain.handle('get-midi-devices', async () => {
-  if (midiDevices.length === 0) {
+  if (!midiInitialized) {
     return initializeMIDI();
   }
-  return { success: true, devices: midiDevices };
+  return { success: true, devices: midiDevices, connectedCount: midiInputs.size };
 });
 
-// IPC: Reinitialize MIDI (close current port, re-enumerate, auto-connect to first device)
+// IPC: Reinitialize MIDI (close all ports, re-enumerate, connect all inputs)
 ipcMain.handle('reinitialize-midi', async () => {
-  try {
-    if (midiInput) {
-      if (currentMIDIPort !== null) {
-        midiInput.closePort();
-      }
-      midiInput.removeAllListeners('message');
-      currentMIDIPort = null;
-    }
-  } catch (e) {
-    console.warn('MIDI cleanup warning:', e.message);
-  }
   return initializeMIDI();
-});
-
-// IPC: Select MIDI device
-ipcMain.handle('select-midi-device', async (event, portIndex) => {
-  return connectMIDIDevice(portIndex);
-});
-
-// IPC: Get current MIDI device
-ipcMain.handle('get-current-midi-device', async () => {
-  return {
-    success: true,
-    port: currentMIDIPort,
-    name: currentMIDIPort !== null ? midiDevices[currentMIDIPort].name : null
-  };
 });
 
 // ==============================================================
@@ -570,22 +524,19 @@ app.whenReady().then(() => {
 
   // Initialize MIDI after window is created
   setTimeout(() => {
-    initializeMIDI();
+    if (!midiInitialized) initializeMIDI();
   }, 1000); // Small delay to ensure window is fully loaded
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
+      if (!midiInitialized) initializeMIDI();
     }
   });
 });
 
 app.on('window-all-closed', () => {
-  // Clean up MIDI
-  if (midiInput && currentMIDIPort !== null) {
-    midiInput.closePort();
-    console.log('MIDI port closed');
-  }
+  closeAllMIDIInputs();
 
   if (process.platform !== 'darwin') {
     app.quit();
