@@ -1084,6 +1084,7 @@ During development, several features were implemented that weren't in the origin
 - Seven modes: Fader, B/F, Pendulum, Stutter, Manual Stutter, Drift, and Hold
 - Manual Stutter plays one range pass, stops at the end, and restarts only when triggered
 - Keyboard and MIDI learn for drum triggers plus continuous CC fader mapping
+- Cue-less Fader clips play normally while armed, temporarily scratch during CC movement, and resume from the final scratched frame
 - Next-cue priority while scrub controls have focus and last-to-first cue wrapping
 - Current-position B/F direction reversal with boundary waiting
 - Optional B/F Full video / In-Out boundaries beyond the normal 10-second scrub limit

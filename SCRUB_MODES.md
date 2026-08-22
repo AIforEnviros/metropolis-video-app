@@ -22,7 +22,12 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 
 ### Fader (`manual-cc`)
 
-- Pauses playback while active.
+- For clips with normal cue points, pauses playback while active as before.
+- For clips with no normal cue points, stays **armed** while the video plays normally from end to end.
+- The first learned-fader movement on an armed clip captures the current frame as the scrub anchor, pauses playback, and temporarily takes ownership for scratching.
+- MIDI CC faders do not report touch/release, so 100 ms without a new fader value marks the end of the scratch gesture.
+- After the final decoder seek completes, forward playback resumes from the last scratched frame. A clip that was paused before the gesture remains paused.
+- The ACTIVE display distinguishes **FADER ARMED** from **FADER SCRATCHING**.
 - Maps a learned MIDI CC value from 0–127 across the complete scrub range.
 - CC 0 selects the range start; CC 127 selects the range end.
 - Coalesces dense MIDI input so only one decoder seek is active at a time and the newest fader position always wins.
@@ -139,6 +144,7 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - Cue advancement, focused-control priority, and last-to-first wrapping
 - Pre-scrub state restoration
 - Embedded and pop-out playback behavior
+- Cue-less Fader armed playback, momentary scratching, decoder-safe idle resumption, and paused-state retention
 - Dense 128-message fader bursts without decoder seek backlogs
 - Cross-platform file URL encoding for spaces and reserved characters
 - Start/Centre/End range anchoring, clip/accent separation, and media-edge clamping

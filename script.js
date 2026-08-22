@@ -3195,6 +3195,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // CC fader: last received value (0-127), used when switching to manual-cc mode
     let scrubCCLastValue = 63;
+    const SCRUB_FADER_RELEASE_DELAY_MS = 100;
+    let scrubFaderMomentaryArmed = false;
+    let scrubFaderGestureActive = false;
+    let scrubFaderWasPlaying = false;
+    let scrubFaderResumePending = false;
+    let scrubFaderReleaseTimer = null;
 
     // Dense hardware CC streams are reduced to the latest Range/Speed value
     // once per animation frame, avoiding repeated scrub reconfiguration.
@@ -3485,6 +3491,10 @@ document.addEventListener('DOMContentLoaded', function() {
             statusEl.textContent = '';
             return;
         }
+        if (scrubMode === 'manual-cc' && scrubFaderMomentaryArmed && !scrubFaderGestureActive) {
+            statusEl.textContent = 'Fader armed — video plays normally until the controller moves';
+            return;
+        }
         const { start, end } = getScrubBounds();
         let modeState = '';
         if (scrubMode === 'back-forward') {
@@ -3520,9 +3530,12 @@ document.addEventListener('DOMContentLoaded', function() {
             badge.style.display = 'inline';
             badge.textContent = activeAccent ? `A${accentScrubOverride.slot} ACTIVE` : 'CLIP ACTIVE';
             if (activeSource) {
+                const modeLabel = scrubMode === 'manual-cc' && scrubFaderMomentaryArmed
+                    ? `FADER ${scrubFaderGestureActive ? 'SCRATCHING' : 'ARMED'}`
+                    : getAccentScrubModeLabel(scrubMode).toUpperCase();
                 activeSource.textContent = activeAccent
-                    ? `ACTIVE: ACCENT A${accentScrubOverride.slot} · ${getAccentScrubModeLabel(scrubMode).toUpperCase()}`
-                    : `ACTIVE: CLIP ${selectedClipSlot?.dataset.clipNumber || ''} · ${getAccentScrubModeLabel(scrubMode).toUpperCase()}`;
+                    ? `ACTIVE: ACCENT A${accentScrubOverride.slot} · ${modeLabel}`
+                    : `ACTIVE: CLIP ${selectedClipSlot?.dataset.clipNumber || ''} · ${modeLabel}`;
                 activeSource.classList.toggle('accent-active', activeAccent);
             }
             if (centreDisplay) centreDisplay.textContent = `Anchor: ${formatTimeShort(scrubCentreTime)}`;
@@ -3700,6 +3713,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function playMomentaryFaderOutput() {
+        scrubEffectRunning = false;
+        if (previewPopoutOpen) {
+            sendToPopout({ type: 'play' });
+        } else if (video.src) {
+            video.play().catch(e => console.warn('Fader resume error:', e));
+        }
+    }
+
     function syncScrubNativeLoopSetting(activeScrubMode = scrubMode) {
         const clipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
         const clipUsesLoop = clipNumber ? (clipModes[clipNumber] || 'loop') === 'loop' : false;
@@ -3762,10 +3784,63 @@ document.addEventListener('DOMContentLoaded', function() {
         scrubManualSeekScheduled = false;
     }
 
+    function resetMomentaryFaderState() {
+        if (scrubFaderReleaseTimer !== null) clearTimeout(scrubFaderReleaseTimer);
+        scrubFaderReleaseTimer = null;
+        scrubFaderMomentaryArmed = false;
+        scrubFaderGestureActive = false;
+        scrubFaderWasPlaying = false;
+        scrubFaderResumePending = false;
+    }
+
+    function finishMomentaryFaderGesture() {
+        if (!scrubFaderGestureActive) return;
+        const seekStillPending = scrubManualSeekInFlight || scrubManualSeekScheduled ||
+            scrubManualSeekTarget !== null || (previewPopoutOpen && scrubPopoutSeekPending);
+        if (seekStillPending) {
+            scrubFaderResumePending = true;
+            return;
+        }
+
+        const shouldResume = scrubFaderWasPlaying;
+        scrubFaderGestureActive = false;
+        scrubFaderResumePending = false;
+        scrubFaderWasPlaying = false;
+        if (shouldResume) playMomentaryFaderOutput();
+        updateScrubUI();
+        updateScrubStatus();
+    }
+
+    function scheduleMomentaryFaderRelease() {
+        if (scrubFaderReleaseTimer !== null) clearTimeout(scrubFaderReleaseTimer);
+        scrubFaderResumePending = false;
+        scrubFaderReleaseTimer = setTimeout(() => {
+            scrubFaderReleaseTimer = null;
+            finishMomentaryFaderGesture();
+        }, SCRUB_FADER_RELEASE_DELAY_MS);
+    }
+
+    function handleMomentaryFaderScrub(ccValue) {
+        if (!scrubFaderGestureActive) {
+            scrubCentreTime = getScrubCurrentTime();
+            scrubFaderWasPlaying = previewPopoutOpen ? globalPlayIntent : !video.paused;
+            scrubFaderGestureActive = true;
+            pauseScrubOutput();
+            updateScrubUI();
+            updateScrubStatus();
+        }
+        handleCCFaderScrub(ccValue);
+        scheduleMomentaryFaderRelease();
+    }
+
     function scheduleManualScrubSeek() {
         if (scrubManualSeekScheduled || scrubManualSeekInFlight || scrubManualSeekTarget === null) return;
         scrubManualSeekScheduled = true;
-        requestAnimationFrame(() => {
+        // The main renderer's animation frames can be throttled while the
+        // projection pop-out owns focus. A zero-delay task keeps controller
+        // seeks responsive in either window while the in-flight gate still
+        // coalesces dense CC streams to the newest target.
+        setTimeout(() => {
             scrubManualSeekScheduled = false;
             if (!scrubModeActive || scrubMode !== 'manual-cc' || scrubManualSeekInFlight || scrubManualSeekTarget === null) return;
 
@@ -3792,6 +3867,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!scrubManualSeekInFlight) return;
         scrubManualSeekInFlight = false;
         scheduleManualScrubSeek();
+        if (scrubFaderResumePending) finishMomentaryFaderGesture();
     }
 
     function queueManualScrubPosition(time) {
@@ -3845,6 +3921,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function configureActiveScrubMode(mode) {
         stopScrubAnimationLoop();
+        resetMomentaryFaderState();
         if (mode !== 'manual-cc') resetManualScrubSeek();
         scrubMode = mode;
         selectedScrubMode = mode;
@@ -3859,8 +3936,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
         switch (mode) {
             case 'manual-cc':
-                pauseScrubOutput();
-                handleCCFaderScrub(scrubCCLastValue);
+                scrubFaderMomentaryArmed = !accentScrubOverride && selectedClipSlot &&
+                    (clipCuePoints[selectedClipSlot.dataset.clipNumber] || []).length === 0;
+                if (scrubFaderMomentaryArmed) {
+                    resetManualScrubSeek();
+                    if (globalPlayIntent) playMomentaryFaderOutput();
+                } else {
+                    pauseScrubOutput();
+                    handleCCFaderScrub(scrubCCLastValue);
+                }
                 break;
             case 'back-forward':
                 pauseScrubOutput();
@@ -3954,6 +4038,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!scrubModeActive) return;
         const wasAccentOverride = Boolean(accentScrubOverride);
         stopScrubAnimationLoop();
+        resetMomentaryFaderState();
         resetManualScrubSeek();
         pauseScrubOutput();
         scrubModeActive = false;
@@ -5542,7 +5627,8 @@ document.addEventListener('DOMContentLoaded', function() {
             message.type === 'cc' &&
             message.channel === scrubConfig.ccController.channel &&
             message.controller === scrubConfig.ccController.controller) {
-            handleCCFaderScrub(message.value);
+            if (scrubFaderMomentaryArmed) handleMomentaryFaderScrub(message.value);
+            else handleCCFaderScrub(message.value);
             return;
         }
         // Track CC value even when not in manual-cc mode (so position is current when mode activates)
@@ -6388,7 +6474,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (scrubModeActive) configureActiveScrubMode(scrubMode);
             }
             renderScrubSettingsEditor();
-        });
+        }, 0);
     }
 
     document.querySelectorAll('.scrub-range-placement-btn').forEach(button => {
@@ -6707,7 +6793,9 @@ document.addEventListener('DOMContentLoaded', function() {
     video.addEventListener('timeupdate', function() {
         // SCRUB MODE BYPASS: during scrub the rAF loop manages all time enforcement.
         // Still call updateTimeline() so the scrubber position follows correctly.
-        if (scrubModeActive) {
+        const momentaryFaderAllowsNormalPlayback = scrubMode === 'manual-cc' &&
+            scrubFaderMomentaryArmed && !scrubFaderGestureActive;
+        if (scrubModeActive && !momentaryFaderAllowsNormalPlayback) {
             updateTimeline();
             return;
         }
@@ -6986,7 +7074,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateTimeline();
 
                 // SCRUB MODE BYPASS: during scrub the rAF loop manages pop-out enforcement
-                if (scrubModeActive) {
+                const momentaryFaderAllowsNormalPlayback = scrubMode === 'manual-cc' &&
+                    scrubFaderMomentaryArmed && !scrubFaderGestureActive;
+                if (scrubModeActive && !momentaryFaderAllowsNormalPlayback) {
                     return;
                 }
 

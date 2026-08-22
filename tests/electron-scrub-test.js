@@ -237,6 +237,33 @@ async function run() {
     await window.webContents.executeJavaScript(`document.querySelector('.clip-slot[data-clip-number="1"] .clip-scrub-indicator').textContent`),
     'Fader'
   );
+  // With no normal cue points, Fader stays armed while the clip plays. Moving
+  // the controller temporarily scratches, then playback resumes from the last
+  // decoded scratch frame after the CC stream becomes idle.
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime > 1.1`, 'cue-less Fader armed playback', 5000);
+  assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubActiveSource').textContent`), /FADER ARMED/);
+  await click(window, '#scrubCCLearnBtn');
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 14, value: 64 });
+  await waitFor(window, `document.getElementById('scrubCCDisplay').textContent.includes('CC 14')`, 'cue-less Fader CC learn');
+  const beforeMomentaryScratch = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 14, value: 0 });
+  await waitFor(window, `document.getElementById('videoPlayer').paused && document.getElementById('scrubActiveSource').textContent.includes('FADER SCRATCHING') && document.getElementById('videoPlayer').currentTime < ${beforeMomentaryScratch - 0.7}`, 'cue-less Fader scratch ownership');
+  const scratchedPosition = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
+  assert.ok(scratchedPosition < beforeMomentaryScratch - 0.7, `cue-less scratch moved from ${beforeMomentaryScratch} to ${scratchedPosition}`);
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('scrubActiveSource').textContent.includes('FADER ARMED')`, 'cue-less Fader playback resume', 3000);
+  const resumedScratchPosition = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime > ${resumedScratchPosition + 0.1}`, 'cue-less Fader resumed progression');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' });
+  await waitFor(window, `document.getElementById('videoPlayer').paused`, 'pause armed cue-less Fader');
+  const beforePausedScratch = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 14, value: 127 });
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime > ${beforePausedScratch + 0.7}`, 'paused cue-less Fader scratch seek');
+  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('FADER ARMED')`, 'paused cue-less Fader release', 3000);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').paused`), true);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused`, 'resume after paused cue-less Fader test');
   await window.webContents.executeJavaScript(`window.alert = message => { window.__lastAlert = message; }; true`);
   collectedSessionData = null;
   await click(window, '#collectAllBtn');
@@ -992,6 +1019,46 @@ async function run() {
   await click(window, '#scrubAutoReverseToggle');
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0.8`);
   await click(window, '.accent-set-btn[data-accent-slot="1"]');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
+
+  // A fresh third slot guarantees the cue-less momentary Fader uses the same
+  // pause/seek/idle-resume lifecycle when the pop-out owns playback.
+  const thirdDropResult = await window.webContents.executeJavaScript(`(() => {
+    try {
+      const slot = document.querySelector('.clip-slot[data-clip-number="3"]');
+      window.draggedFile = {
+        name: 'test-video-3.mp4',
+        type: 'video/mp4',
+        path: ${JSON.stringify(testVideoPath)}
+      };
+      slot.dispatchEvent(new Event('drop', { bubbles: true }));
+      window.draggedFile = null;
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error.stack || error.message };
+    }
+  })()`);
+  assert.equal(thirdDropResult.ok, true, thirdDropResult.error);
+  await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="3"]').classList.contains('selected') && document.getElementById('scrubActiveSource').textContent.includes('FADER ARMED') && !document.getElementById('videoPlayer').paused`, 'cue-less Fader armed before pop-out', 10000);
+  await click(window, '#outputWindowBtn');
+  await waitForNode(() => previewWindow && !previewWindow.isDestroyed(), 'cue-less Fader pop-out creation');
+  await waitFor(previewWindow, `document.getElementById('previewVideo').duration > 0 && !document.getElementById('previewVideo').paused && document.getElementById('previewVideo').currentTime > 1.1`, 'cue-less Fader pop-out playback', 10000);
+  const popoutBeforeScratch = await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').currentTime`);
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 14, value: 0 });
+  await waitForNode(async () => {
+    const source = await window.webContents.executeJavaScript(`document.getElementById('scrubActiveSource').textContent`);
+    const previewState = await previewWindow.webContents.executeJavaScript(`({ paused: document.getElementById('previewVideo').paused, time: document.getElementById('previewVideo').currentTime })`);
+    return source.includes('FADER SCRATCHING') && previewState.paused && previewState.time < popoutBeforeScratch - 0.5;
+  }, 'cue-less Fader pop-out scratch ownership', 3000);
+  await waitForNode(async () => {
+    const source = await window.webContents.executeJavaScript(`document.getElementById('scrubActiveSource').textContent`);
+    const paused = await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').paused`);
+    return source.includes('FADER ARMED') && !paused;
+  }, 'cue-less Fader pop-out playback resume', 3000);
+  await click(window, '#outputWindowBtn');
+  await waitForNode(() => !previewWindow || previewWindow.isDestroyed(), 'cue-less Fader pop-out close');
+  await click(window, '.clip-slot[data-clip-number="2"]');
+  await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'back-forward' && document.getElementById('scrubFullRangeToggle').checked`, 'slot two restore after cue-less Fader pop-out', 10000);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
 
   savedSessionData = null;

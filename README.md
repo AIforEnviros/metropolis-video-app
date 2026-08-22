@@ -247,6 +247,8 @@ The Scrub Modes panel also provides direct **Range MIDI** and **Speed MIDI** Lea
 
 Use **Cue position in range** to align a scrub range precisely: **Start** begins at the cue/accent, **Centre** keeps the original evenly divided behavior, and **End** finishes at the cue/accent.
 
+When Fader mode is enabled on a clip with no normal cue points, the clip continues playing normally while the fader is armed. Moving the learned crossfader temporarily scratches around the current playback position; after the controller stops moving and the final frame finishes seeking, playback continues forward from that scratched frame.
+
 ---
 
 *This README was written by an AI that's clearly been influenced by too much band humor and questionable life choices. Any resemblance to actual competent documentation is purely coincidental.*
