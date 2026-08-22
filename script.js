@@ -281,6 +281,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'zoomIn': '=',
         'zoomOut': '-',
         'pausePlay': 'Space',
+        'toggleScrubMode': 'u',
         'tab1': '1',
         'tab2': '2',
         'tab3': '3',
@@ -308,6 +309,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'setOutPoint': null,
         'clearInOut': null,
         'pausePlay': null,
+        'toggleScrubMode': null,
         'tab1': null,
         'tab2': null,
         'tab3': null,
@@ -5229,6 +5231,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     case 'pausePlay':
                         pausePlayVideo();
                         break;
+                    case 'toggleScrubMode':
+                        scrubActivateBtn?.click();
+                        break;
                     case 'tab1':
                         switchTab(0);
                         break;
@@ -5461,6 +5466,9 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'pausePlay':
                 pausePlayVideo();
                 break;
+            case 'toggleScrubMode':
+                scrubActivateBtn?.click();
+                break;
             case 'tab1':
                 switchTab(0);
                 break;
@@ -5604,6 +5612,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'zoomIn': 'Zoom Timeline In',
         'zoomOut': 'Zoom Timeline Out',
         'pausePlay': 'Pause/Play Video',
+        'toggleScrubMode': 'Toggle Clip Scrub On/Off',
         'tab1': 'Switch to Tab 1',
         'tab2': 'Switch to Tab 2',
         'tab3': 'Switch to Tab 3',
@@ -5825,6 +5834,7 @@ document.addEventListener('DOMContentLoaded', function() {
             'zoomIn': '=',
             'zoomOut': '-',
             'pausePlay': 'Space',
+            'toggleScrubMode': 'u',
             'tab1': '1',
             'tab2': '2',
             'tab3': '3',

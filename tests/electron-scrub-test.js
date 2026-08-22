@@ -196,6 +196,13 @@ async function run() {
     await window.webContents.executeJavaScript(`document.querySelector('.clip-slot[data-clip-number="1"] .clip-scrub-indicator').textContent`),
     'Fader'
   );
+  // The default U shortcut operates the same saved per-clip toggle as the UI.
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'keyboard scrub toggle off');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'keyboard scrub toggle on');
   // Disable it for the legacy mode-by-mode scenarios below; later assertions
   // verify this OFF preference is retained for slot one.
   await click(window, '#scrubActivateBtn');
@@ -283,7 +290,15 @@ async function run() {
   await click(window, '.midi-learn-btn[data-action="accent2"]');
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 62, velocity: 100, deviceId: 0, deviceName: 'SPD-20' });
   await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="accent2"]').textContent.includes('Note 62')`, 'accent MIDI learn');
+  await click(window, '.midi-learn-btn[data-action="toggleScrubMode"]');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 63, velocity: 100, deviceId: 0, deviceName: 'SPD-20' });
+  await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="toggleScrubMode"]').textContent.includes('Note 63')`, 'scrub toggle MIDI learn');
   await click(window, '#saveShortcutsBtn');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 63, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'MIDI scrub toggle on');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 63, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'MIDI scrub toggle off');
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0`);
   // Mappings remain device-independent: the same note learned from the drum
   // controller must also work when it arrives from the DJ controller.
@@ -796,6 +811,7 @@ async function run() {
   await waitForNode(() => savedSessionData !== null, 'session save capture');
   assert.equal(savedSessionData.version, '1.13');
   assert.deepEqual(savedSessionData.midiMappings.accent2, { type: 'noteon', channel: 1, note: 62 });
+  assert.deepEqual(savedSessionData.midiMappings.toggleScrubMode, { type: 'noteon', channel: 1, note: 63 });
   assert.equal(savedSessionData.tabs.accentPoints['0']['1']['1'].time, 1.25);
   assert.equal(savedSessionData.tabs.accentPoints['0']['2']['1'].time, 0.8);
   assert.equal(savedSessionData.tabs.accentPoints['0']['1']['2'].time, 3.4);

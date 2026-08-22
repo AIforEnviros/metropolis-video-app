@@ -77,6 +77,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - The learned scrub drum key always controls the selected clip's saved scrub mode, regardless of whether the settings editor is displaying Clip or A1-A4. When inactive, its first hit activates the clip mode; for B/F, that same hit begins the first forward stroke.
 - If an accent scrub effect is active, the clip's scrub trigger hands playback back to the clip and performs the clip-mode trigger immediately.
 - A learned MIDI drum note follows exactly the same ownership and first-hit behavior as the keyboard scrub trigger.
+- **Toggle Clip Scrub On/Off** is independently keyboard and MIDI mappable in **Keyboard Shortcuts**. Its default key is `U`, and it performs the same saved per-clip toggle as clicking the Scrub On/Off button.
 
 ## MIDI and Keyboard Learn
 

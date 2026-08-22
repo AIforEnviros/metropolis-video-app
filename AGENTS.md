@@ -21,11 +21,12 @@ This is now an Electron-based desktop application for production live performanc
 - Now converting to Electron for production performance use
 - All core features validated in web version
 
-**Current active development (2026-08-09):**
-- Branch: `codex/multi-midi-controllers`
+**Current active development (2026-08-22):**
+- Branch: `codex/performance-test-updates`
 - Electron is the only active application architecture; `src/` is legacy
 - Session format v1.13 saves scrub settings plus four direct-trigger accents with optional per-accent mode/range/speed per video slot
 - All detected MIDI inputs connect simultaneously; mappings remain device-independent so identical messages from different controllers share an action
+- The selected clip's scrub On/Off control is keyboard and MIDI mappable through the standard shortcuts window
 - Run the app with `npm start` (`npm.cmd start` in restricted Windows PowerShell)
 - Run scrub regression coverage with `npm run test:scrub` (`npm.cmd run test:scrub` on Windows)
 - Treat `SCRUB_MODES.md` as the authoritative scrub behavior contract
@@ -680,19 +681,26 @@ Complete MIDI mapping and MIDI learn functionality has been implemented for all 
 - **Control Change (CC)** - Knobs, faders, buttons
 - **Program Change** - Bank switching (future expansion)
 
-### All Mappable Actions (17 total)
+### All Mappable Actions (26 total)
 
 **Transport Controls:**
 - Play/Pause
 - Previous Clip
 - Next Clip
-- Reverse Play
 
 **Cue Point Navigation:**
 - Previous Cue Point
 - Next Cue Point
 - Restart Clip
 - Record Cue Point
+
+**Accent and Range Controls:**
+- Trigger Accent 1-4
+- Set In Point
+- Set Out Point
+- Clear In/Out Points
+- Zoom Timeline In/Out
+- Toggle Clip Scrub On/Off
 
 **Tab Switching:**
 - Switch to Tab 1-5

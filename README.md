@@ -231,6 +231,8 @@ Choose **Clip**, **A1**, **A2**, **A3**, or **A4** at the top of the Scrub Modes
 
 All detected MIDI inputs are connected automatically. Mappings are device-independent, so the same channel/note or CC message performs the same action when sent by either controller.
 
+The selected clip's Scrub On/Off button is available as **Toggle Clip Scrub On/Off** in the same mapping window. Its default keyboard shortcut is `U`, and a MIDI note, CC, or program-change message can be learned for it.
+
 ---
 
 *This README was written by an AI that's clearly been influenced by too much band humor and questionable life choices. Any resemblance to actual competent documentation is purely coincidental.*

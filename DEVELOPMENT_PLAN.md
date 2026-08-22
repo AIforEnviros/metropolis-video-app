@@ -916,11 +916,12 @@ Do not treat Bounce as pending work or reintroduce it without a new product deci
 - ✅ Real-time MIDI message display in UI
 - ✅ Shows message type, channel, and data values
 
-**All 17 Mappable Actions:**
+**Original 17 Mappable Actions (now expanded to 26):**
 - Transport: Play/Pause, Previous Clip, Next Clip, Reverse Play
 - Cue Points: Previous/Next/Restart, Record Cue Point
 - Tabs: Switch to Tab 1-5
 - Speed: Presets 0.5x, 1x, 1.5x, 2x
+- Later additions: Accent 1-4, In/Out controls, timeline zoom, and Toggle Clip Scrub On/Off
 
 **Testing completed:**
 - [x] MIDI devices detected and listed in dropdown
