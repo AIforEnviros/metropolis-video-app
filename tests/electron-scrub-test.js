@@ -220,7 +220,7 @@ async function run() {
   collectedSessionData = null;
   await click(window, '#collectAllBtn');
   await waitForNode(() => collectedSessionData !== null, 'Collect All & Save renderer request');
-  assert.equal(collectedSessionData.version, '1.14');
+  assert.equal(collectedSessionData.version, '1.15');
   await waitFor(window, `document.getElementById('collectAllBtn').disabled === false && document.getElementById('collectAllBtn').textContent === 'Collect All & Save'`, 'Collect All & Save button restoration');
   assert.match(await window.webContents.executeJavaScript(`window.__lastAlert`), /unique video file\(s\) collected/);
   // The default U shortcut operates the same saved per-clip toggle as the UI.
@@ -320,7 +320,41 @@ async function run() {
   await click(window, '.midi-learn-btn[data-action="toggleScrubMode"]');
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 63, velocity: 100, deviceId: 0, deviceName: 'SPD-20' });
   await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="toggleScrubMode"]').textContent.includes('Note 63')`, 'scrub toggle MIDI learn');
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.querySelector('.shortcut-input[data-action="outputFade"]').textContent`),
+    'MIDI CC only'
+  );
+  await click(window, '.midi-learn-btn[data-action="outputFade"]');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 64, velocity: 100, deviceId: 0, deviceName: 'SPD-20' });
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.querySelector('.midi-learn-btn[data-action="outputFade"]').textContent`),
+    'Waiting...',
+    'output fade learn must ignore note messages'
+  );
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 127, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="outputFade"]').textContent.includes('CC 21')`, 'output fade CC learn');
   await click(window, '#saveShortcutsBtn');
+
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 0, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '1'`, 'output fade black endpoint');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('outputFadeSlider').value`), '0');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('outputBlackBadge').style.display`), 'inline-block');
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 64, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `Math.abs(Number(document.getElementById('outputFadeOverlay').style.opacity) - (1 - 64 / 127)) < 0.001`, 'output fade midpoint');
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 127, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '0'`, 'output fade visible endpoint');
+
+  await window.webContents.executeJavaScript(`(() => {
+    const video = document.getElementById('videoPlayer');
+    video.currentTime = 0;
+    return video.play();
+  })()`);
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 0, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '1' && document.getElementById('videoPlayer').currentTime > 0.2`, 'video continues beneath black');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 127, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '0'`, 'restore visible output');
+
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 63, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'MIDI scrub toggle on');
   await new Promise(resolve => setTimeout(resolve, 20));
@@ -633,9 +667,19 @@ async function run() {
     video.pause();
     video.currentTime = 2;
   })()`);
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 0, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '1'`, 'black before pop-out creation');
   await click(window, '#outputWindowBtn');
   await waitForNode(() => previewWindow && !previewWindow.isDestroyed(), 'pop-out creation');
   await waitFor(previewWindow, `document.getElementById('previewVideo').duration > 0`, 'pop-out video metadata', 10000);
+
+  await waitFor(previewWindow, `document.getElementById('outputFadeOverlay').style.opacity === '1'`, 'initial pop-out black synchronization');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('outputFadeOverlay').style.opacity`), '1');
+  for (let value = 0; value <= 127; value++) {
+    window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value, deviceId: 1, deviceName: 'DJ Controller' });
+  }
+  await waitFor(previewWindow, `document.getElementById('outputFadeOverlay').style.opacity === '0'`, 'rapid pop-out fade endpoint');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('outputFadeOverlay').style.opacity`), '0');
 
   await window.webContents.executeJavaScript(`document.activeElement && document.activeElement.blur()`);
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
@@ -776,13 +820,17 @@ async function run() {
   }, 'pop-out B/F stop-and-wait at range start', 3000);
   await click(window, '#scrubAutoReverseToggle');
 
-  // Per-slot scrub/accent settings restore independently and serialize in session v1.14.
+  // Per-slot scrub/accent settings restore independently and serialize in session v1.15.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub disabled');
   await waitFor(previewWindow, `document.getElementById('previewVideo').loop === true`, 'pop-out native loop restoration after B/F');
   await click(window, '#outputWindowBtn');
   await waitForNode(() => !previewWindow || previewWindow.isDestroyed(), 'pop-out close');
+  await click(window, '#outputFadeReverse');
+  await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '1'`, 'reverse MIDI direction applies last CC value');
+  await setSlider(window, '#outputFadeSlider', 100);
+  await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '0'`, 'manual slider remains non-reversed');
   await setSlider(window, '#scrubRangeSlider', 0.65);
   await setSlider(window, '#scrubSpeedSlider', 1.7);
   await click(window, '.scrub-mode-btn[data-mode="hold"]');
@@ -836,9 +884,11 @@ async function run() {
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
-  assert.equal(savedSessionData.version, '1.14');
+  assert.equal(savedSessionData.version, '1.15');
   assert.deepEqual(savedSessionData.midiMappings.accent2, { type: 'noteon', channel: 1, note: 62 });
   assert.deepEqual(savedSessionData.midiMappings.toggleScrubMode, { type: 'noteon', channel: 1, note: 63 });
+  assert.deepEqual(savedSessionData.midiMappings.outputFade, { type: 'cc', channel: 1, controller: 21 });
+  assert.deepEqual(savedSessionData.outputFadeSettings, { reversed: true });
   assert.equal(savedSessionData.tabs.accentPoints['0']['1']['1'].time, 1.25);
   assert.equal(savedSessionData.tabs.accentPoints['0']['2']['1'].time, 0.8);
   assert.equal(savedSessionData.tabs.accentPoints['0']['1']['2'].time, 3.4);
@@ -872,7 +922,12 @@ async function run() {
   await setSlider(window, '#scrubRangeSlider', 3);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await click(window, '#loadSessionBtn');
-  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.14 reload', 10000);
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.15 reload', 10000);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('outputFadeReverse').checked`), true);
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 127, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '1'`, 'reloaded reversed fade mapping');
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 0, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '0'`, 'reloaded reversed visible endpoint');
   await click(window, '.clip-slot[data-clip-number="1"]');
   await waitFor(window, `document.getElementById('videoPlayer').duration > 0 && document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'hold'`, 'reloaded slot one', 10000);
   await waitFor(window, `document.querySelectorAll('.accent-marker').length === 4`, 'reloaded slot one accents');

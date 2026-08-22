@@ -384,6 +384,76 @@
             text-align: center;
             overflow: hidden;
             border-radius: 6px;
+            position: relative;
+            background: #000;
+        }
+
+        .output-fade-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+            pointer-events: none;
+            background: #000;
+            opacity: 0;
+            transition: opacity 45ms linear;
+        }
+
+        .output-fade-control {
+            margin-top: 10px;
+            padding: 9px 10px;
+            border: 1px solid #444;
+            border-radius: 6px;
+            background: #242424;
+        }
+
+        .output-fade-header,
+        .output-fade-options {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .output-fade-header {
+            margin-bottom: 6px;
+            color: #ddd;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .output-fade-status {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .output-black-badge {
+            display: none;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: #000;
+            border: 1px solid #777;
+            color: #fff;
+            font-size: 10px;
+            letter-spacing: 0.08em;
+        }
+
+        #outputFadeSlider {
+            width: 100%;
+            accent-color: #e85d04;
+        }
+
+        .output-fade-options {
+            justify-content: flex-end;
+            margin-top: 4px;
+            color: #aaa;
+            font-size: 11px;
+        }
+
+        .shortcut-input.midi-only {
+            cursor: default;
+            opacity: 0.55;
         }
 
         .video-playback-status {
@@ -1953,8 +2023,24 @@
                 <video id="videoPlayer" controls muted>
                     Your browser does not support the video tag.
                 </video>
+                <div id="outputFadeOverlay" class="output-fade-overlay" aria-hidden="true"></div>
             </div>
             <div id="videoPlaybackStatus" class="video-playback-status" role="status" aria-live="polite"></div>
+
+            <div class="output-fade-control" aria-label="Global output fade">
+                <div class="output-fade-header">
+                    <label for="outputFadeSlider">Master Output</label>
+                    <span class="output-fade-status">
+                        <span id="outputFadeValue">100%</span>
+                        <span id="outputBlackBadge" class="output-black-badge">BLACK</span>
+                    </span>
+                </div>
+                <input type="range" id="outputFadeSlider" min="0" max="100" step="1" value="100">
+                <label class="output-fade-options" title="Reverse the direction of the assigned MIDI CC fader">
+                    <input type="checkbox" id="outputFadeReverse">
+                    Reverse MIDI direction
+                </label>
+            </div>
 
             <div class="right-panel-controls">
             <div class="timeline-container">

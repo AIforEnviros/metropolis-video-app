@@ -214,10 +214,15 @@ See `SCRUB_MODES.md` for the current scrub behavior contract and hardware accept
 See `ACCENT_CUES.md` for direct-trigger Accent 1-4 behavior, mappings, and normal-cue progression rules.
 See `VIDEO_COMPATIBILITY.md` for supported codecs, macOS troubleshooting, and encoding footage for responsive fader scrubbing.
 See `PORTABLE_SESSIONS.md` for collecting all show media into a portable Windows/macOS session package.
+See `OUTPUT_FADE.md` for the global MIDI master output fade and blackout behavior.
 
 ### Portable Show Packages
 
 Click **Collect All & Save** to copy every referenced video into a package containing the session JSON and a `Media` folder. Choose an empty destination for the first collection, or select the same package folder again to update it safely. Reused source files are copied once, filename collisions are renamed safely, and the resulting folder can be moved between Windows and macOS as one unit.
+
+### Master Output Fade
+
+The compact **Master Output** slider fades both the embedded preview and pop-out output to black while video playback and performance controls continue underneath. Assign **Master Output Fade Fader** to a MIDI CC through the Keyboard Shortcuts window. Use **Reverse MIDI direction** if the physical fader orientation is opposite to the desired movement.
 
 ### Accent Cue Points
 

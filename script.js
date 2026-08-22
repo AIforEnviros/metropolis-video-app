@@ -49,12 +49,39 @@ document.addEventListener('DOMContentLoaded', function() {
     const resetShortcutsBtn = document.getElementById('resetShortcutsBtn');
     const saveShortcutsBtn = document.getElementById('saveShortcutsBtn');
     const popoutBtn = document.getElementById('outputWindowBtn');
+    const outputFadeSlider = document.getElementById('outputFadeSlider');
+    const outputFadeValue = document.getElementById('outputFadeValue');
+    const outputFadeOverlay = document.getElementById('outputFadeOverlay');
+    const outputBlackBadge = document.getElementById('outputBlackBadge');
+    const outputFadeReverse = document.getElementById('outputFadeReverse');
     const addTabBtn = document.getElementById('addTabBtn');
     const clipContextMenu = document.getElementById('clipContextMenu');
 
     // Pop-out preview state
     let previewPopoutOpen = false;
     let popoutCurrentTime = 0;
+
+    // Global output level, independent of playback and the opacity used when
+    // the forward/reverse video elements exchange ownership.
+    let outputFadeLevel = 1;
+    let outputFadeReversed = false;
+    let lastOutputFadeMIDIValue = null;
+
+    function setOutputFadeLevel(level, sendToOutput = true) {
+        const numericLevel = Number(level);
+        outputFadeLevel = Math.max(0, Math.min(1, Number.isFinite(numericLevel) ? numericLevel : 1));
+        if (outputFadeOverlay) outputFadeOverlay.style.opacity = String(1 - outputFadeLevel);
+        if (outputFadeSlider) outputFadeSlider.value = String(Math.round(outputFadeLevel * 100));
+        if (outputFadeValue) outputFadeValue.textContent = `${Math.round(outputFadeLevel * 100)}%`;
+        if (outputBlackBadge) outputBlackBadge.style.display = outputFadeLevel <= 0.001 ? 'inline-block' : 'none';
+        if (sendToOutput) sendToPopout({ type: 'setOutputFade', level: outputFadeLevel });
+    }
+
+    function handleOutputFadeMIDI(value) {
+        lastOutputFadeMIDIValue = Math.max(0, Math.min(127, Number(value) || 0));
+        const normalised = lastOutputFadeMIDIValue / 127;
+        setOutputFadeLevel(outputFadeReversed ? 1 - normalised : normalised);
+    }
 
     // Performance optimizations - disable audio globally
     video.muted = true;
@@ -310,6 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'clearInOut': null,
         'pausePlay': null,
         'toggleScrubMode': null,
+        'outputFade': null,
         'tab1': null,
         'tab2': null,
         'tab3': null,
@@ -361,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.14',
+            version: '1.15',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -370,6 +398,9 @@ document.addEventListener('DOMContentLoaded', function() {
             globalPlayIntent: globalPlayIntent,
             keyboardShortcuts: keyboardShortcuts,
             midiMappings: midiMappings,
+            outputFadeSettings: {
+                reversed: outputFadeReversed
+            },
             allTabs: allTabs,
             nextTabIndex: nextTabIndex,
             tabCustomNames: tabCustomNames,
@@ -666,6 +697,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 midiMappings = { ...midiMappings, ...sessionData.midiMappings };
                 console.log('Restored MIDI mappings:', midiMappings);
             }
+
+            // Keep the current operational fade level when loading a show so
+            // a black output cannot flash visible. Only fader direction persists.
+            outputFadeReversed = sessionData.outputFadeSettings?.reversed === true;
+            if (outputFadeReverse) outputFadeReverse.checked = outputFadeReversed;
+            setOutputFadeLevel(outputFadeLevel);
 
             // Restore global scrub controller mappings. Per-slot mode/range/speed
             // are restored from tabs.scrubSettings in session v1.9+.
@@ -5385,6 +5422,15 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // === GLOBAL OUTPUT FADE CC INTERCEPT ===
+        // Continuous fader data bypasses the debounced button-action path.
+        // The safety-critical output mapping wins if a CC is assigned twice.
+        const outputFadeMapping = midiMappings.outputFade;
+        if (outputFadeMapping && message.type === 'cc' && matchesMIDIMapping(message, outputFadeMapping)) {
+            handleOutputFadeMIDI(message.value);
+            return;
+        }
+
         // === SCRUB CC FADER INTERCEPT ===
         // Bypass the debounce/action system entirely for real-time fader control
         if (scrubModeActive && scrubMode === 'manual-cc' &&
@@ -5618,6 +5664,9 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // Master output is a continuous control and only accepts MIDI CC.
+        if (midiLearnAction === 'outputFade' && message.type !== 'cc') return;
+
         // Store the mapping for regular actions
         const mapping = {
             type: message.type,
@@ -5670,6 +5719,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'zoomOut': 'Zoom Timeline Out',
         'pausePlay': 'Pause/Play Video',
         'toggleScrubMode': 'Toggle Clip Scrub On/Off',
+        'outputFade': 'Master Output Fade Fader',
         'tab1': 'Switch to Tab 1',
         'tab2': 'Switch to Tab 2',
         'tab3': 'Switch to Tab 3',
@@ -5722,12 +5772,17 @@ document.addEventListener('DOMContentLoaded', function() {
             // Keyboard shortcut column
             const inputDiv = document.createElement('div');
             inputDiv.className = 'shortcut-input';
-            inputDiv.textContent = tempKeyboardShortcuts[action];
+            const midiOnly = action === 'outputFade';
+            inputDiv.textContent = midiOnly ? 'MIDI CC only' : tempKeyboardShortcuts[action];
             inputDiv.dataset.action = action;
 
-            inputDiv.addEventListener('click', function() {
-                startEditingShortcut(action, inputDiv);
-            });
+            if (midiOnly) {
+                inputDiv.classList.add('midi-only');
+            } else {
+                inputDiv.addEventListener('click', function() {
+                    startEditingShortcut(action, inputDiv);
+                });
+            }
 
             // MIDI mapping column
             const midiCell = document.createElement('div');
@@ -6099,6 +6154,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const speed = parseFloat(speedSlider.value);
         changeSpeed(speed);
     });
+
+    if (outputFadeSlider) {
+        outputFadeSlider.addEventListener('input', function() {
+            setOutputFadeLevel(Number(outputFadeSlider.value) / 100);
+        });
+    }
+
+    if (outputFadeReverse) {
+        outputFadeReverse.addEventListener('change', function() {
+            outputFadeReversed = outputFadeReverse.checked;
+            if (lastOutputFadeMIDIValue !== null) handleOutputFadeMIDI(lastOutputFadeMIDIValue);
+            markSessionModified();
+        });
+    }
 
     speedPresetBtns.forEach(btn => {
         btn.addEventListener('click', function() {
@@ -6650,10 +6719,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             currentTime: activeVideo.currentTime,
                             rate: activeVideo.playbackRate,
                             loop: scrubModeActive && scrubMode === 'back-forward' ? false : (mode === 'loop'),
+                            outputFadeLevel: outputFadeLevel,
                             playing: wasPlaying
                         });
                     }, 500);
                 }
+
+                // Synchronise black even if the output was opened before a clip.
+                setTimeout(() => sendToPopout({ type: 'setOutputFade', level: outputFadeLevel }), 500);
 
                 console.log('Preview pop-out opened');
             } else {

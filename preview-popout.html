@@ -37,15 +37,32 @@
 
         #previewVideo        { opacity: 1; }
         #previewVideoReverse { opacity: 0; }
+
+        #outputFadeOverlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            pointer-events: none;
+            background: #000;
+            opacity: 0;
+            transition: opacity 45ms linear;
+        }
     </style>
 </head>
 <body>
     <video id="previewVideo" muted></video>
     <video id="previewVideoReverse" muted></video>
+    <div id="outputFadeOverlay" aria-hidden="true"></div>
 
     <script>
         const video = document.getElementById('previewVideo');
         const videoReverse = document.getElementById('previewVideoReverse');
+        const outputFadeOverlay = document.getElementById('outputFadeOverlay');
+
+        function setOutputFade(level) {
+            const safeLevel = Math.max(0, Math.min(1, Number(level)));
+            outputFadeOverlay.style.opacity = String(1 - safeLevel);
+        }
 
         // Ensure both are muted
         video.muted = true;
@@ -165,6 +182,10 @@
                         videoReverse.playbackRate = command.rate;
                         break;
 
+                    case 'setOutputFade':
+                        setOutputFade(command.level);
+                        break;
+
                     case 'switchToForward':
                         videoReverse.pause();
                         videoReverse.style.opacity = '0';
@@ -198,6 +219,9 @@
                         break;
 
                     case 'setState':
+                        if (command.outputFadeLevel !== undefined) {
+                            setOutputFade(command.outputFadeLevel);
+                        }
                         // Full state restore (used when pop-out first opens)
                         if (command.src) {
                             video.src = command.src;
