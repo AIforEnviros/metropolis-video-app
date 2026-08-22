@@ -161,10 +161,12 @@ document.addEventListener('DOMContentLoaded', function() {
         ['hold', 'Hold']
     ];
     const ACCENT_SCRUB_MODES = new Set(ACCENT_SCRUB_MODE_OPTIONS.map(([mode]) => mode).filter(Boolean));
+    const VALID_SCRUB_RANGE_PLACEMENTS = new Set(['start', 'center', 'end']);
     const DEFAULT_ACCENT_SCRUB_SETTINGS = Object.freeze({
         scrubMode: null,
         scrubRange: 2,
-        scrubSpeed: 1
+        scrubSpeed: 1,
+        scrubRangePlacement: 'center'
     });
 
     // Scrub behavior belongs to each video slot. Controller mappings remain
@@ -175,6 +177,7 @@ document.addEventListener('DOMContentLoaded', function() {
         mode: 'manual-cc',
         range: 2.0,
         speed: 1.0,
+        rangePlacement: 'center',
         fullRange: false,
         autoReverse: true
     });
@@ -389,7 +392,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.16',
+            version: '1.17',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -1923,7 +1926,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (summary) summary.textContent = !point
                 ? 'Not set'
                 : settings.scrubMode
-                    ? `${getAccentScrubModeLabel(settings.scrubMode)} · ${formatScrubRangeValue(settings.scrubRange)}s · ${settings.scrubSpeed.toFixed(1)}x`
+                    ? `${getAccentScrubModeLabel(settings.scrubMode)} · ${formatScrubRangeValue(settings.scrubRange)}s · ${formatScrubRangePlacement(settings.scrubRangePlacement)} · ${settings.scrubSpeed.toFixed(1)}x`
                     : 'Jump + Play';
             if (targetButton) targetButton.disabled = !point;
             if (card) card.classList.toggle('active-accent', Boolean(scrubModeActive &&
@@ -1941,10 +1944,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const mode = ACCENT_SCRUB_MODES.has(source?.scrubMode) ? source.scrubMode : null;
         const range = Number(source?.scrubRange ?? DEFAULT_ACCENT_SCRUB_SETTINGS.scrubRange);
         const speed = Number(source?.scrubSpeed ?? DEFAULT_ACCENT_SCRUB_SETTINGS.scrubSpeed);
+        const placement = VALID_SCRUB_RANGE_PLACEMENTS.has(source?.scrubRangePlacement)
+            ? source.scrubRangePlacement
+            : DEFAULT_ACCENT_SCRUB_SETTINGS.scrubRangePlacement;
         return {
             scrubMode: mode,
             scrubRange: Math.max(0.1, Math.min(10, Number.isFinite(range) ? range : 2)),
-            scrubSpeed: Math.max(0.1, Math.min(4, Number.isFinite(speed) ? speed : 1))
+            scrubSpeed: Math.max(0.1, Math.min(4, Number.isFinite(speed) ? speed : 1)),
+            scrubRangePlacement: placement
         };
     }
 
@@ -1995,6 +2002,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (changes.mode !== undefined) accentChanges.scrubMode = changes.mode;
             if (changes.range !== undefined) accentChanges.scrubRange = changes.range;
             if (changes.speed !== undefined) accentChanges.scrubSpeed = changes.speed;
+            if (changes.rangePlacement !== undefined) accentChanges.scrubRangePlacement = changes.rangePlacement;
             if (Object.keys(accentChanges).length > 0) {
                 return updateAccentScrubSettings(context.accentSlot, accentChanges);
             }
@@ -2106,6 +2114,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         scrubConfig.range = settings.scrubRange;
         scrubConfig.speed = settings.scrubSpeed;
+        scrubConfig.rangePlacement = settings.scrubRangePlacement;
         scrubConfig.fullRange = false;
         scrubConfig.autoReverse = true;
         selectScrubModeUI(settings.scrubMode);
@@ -3169,8 +3178,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Scrub configuration (global, persisted in session)
     let scrubConfig = {
-        range: 2.0,          // total seconds around centre
+        range: 2.0,          // total scrub duration in seconds
         speed: 1.0,          // playbackRate multiplier used by automated modes
+        rangePlacement: 'center', // cue/accent location within the range
         fullRange: false,    // B/F only: use clip In/Out points or full video
         autoReverse: true,   // B/F only: turn around automatically at boundaries
         ccController: null,  // { type:'cc', channel, controller } or null
@@ -3266,11 +3276,18 @@ document.addEventListener('DOMContentLoaded', function() {
         const mode = VALID_SCRUB_MODES.has(source.mode) ? source.mode : fallbackMode;
         const rangeValue = Number(source.range ?? fallback.range);
         const speedValue = Number(source.speed ?? fallback.speed);
+        const fallbackPlacement = VALID_SCRUB_RANGE_PLACEMENTS.has(fallback.rangePlacement)
+            ? fallback.rangePlacement
+            : DEFAULT_CLIP_SCRUB_SETTINGS.rangePlacement;
+        const rangePlacement = VALID_SCRUB_RANGE_PLACEMENTS.has(source.rangePlacement)
+            ? source.rangePlacement
+            : fallbackPlacement;
         return {
             enabled: source.enabled !== undefined ? Boolean(source.enabled) : Boolean(fallback.enabled),
             mode,
             range: Math.max(0.1, Math.min(10, Number.isFinite(rangeValue) ? rangeValue : DEFAULT_CLIP_SCRUB_SETTINGS.range)),
             speed: Math.max(0.1, Math.min(4, Number.isFinite(speedValue) ? speedValue : DEFAULT_CLIP_SCRUB_SETTINGS.speed)),
+            rangePlacement,
             fullRange: source.fullRange !== undefined ? Boolean(source.fullRange) : Boolean(fallback.fullRange),
             autoReverse: source.autoReverse !== undefined ? Boolean(source.autoReverse) : Boolean(fallback.autoReverse)
         };
@@ -3293,6 +3310,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return Number(value).toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
     }
 
+    function formatScrubRangePlacement(value) {
+        if (value === 'start') return 'Start';
+        if (value === 'end') return 'End';
+        return 'Centre';
+    }
+
     function describeClipScrubRange(settings) {
         return settings.mode === 'back-forward' && settings.fullRange
             ? 'Full video / In-Out'
@@ -3311,6 +3334,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const rangeValue = document.getElementById('scrubRangeValue');
         const speedSlider = document.getElementById('scrubSpeedSlider');
         const speedValue = document.getElementById('scrubSpeedValue');
+        const placementButtons = document.querySelectorAll('.scrub-range-placement-btn');
         const fullRangeToggle = document.getElementById('scrubFullRangeToggle');
         const fullRangeOption = document.getElementById('scrubFullRangeOption');
         const autoReverseToggle = document.getElementById('scrubAutoReverseToggle');
@@ -3324,6 +3348,10 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             if (rangeSlider) rangeSlider.disabled = true;
             if (speedSlider) speedSlider.disabled = true;
+            placementButtons.forEach(button => {
+                button.classList.remove('selected');
+                button.disabled = true;
+            });
             return;
         }
 
@@ -3331,6 +3359,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const mode = isClip ? context.settings.mode : context.settings.scrubMode;
         const range = isClip ? context.settings.range : context.settings.scrubRange;
         const speed = isClip ? context.settings.speed : context.settings.scrubSpeed;
+        const rangePlacement = isClip ? context.settings.rangePlacement : context.settings.scrubRangePlacement;
         const isBackForward = mode === 'back-forward';
         const useFullRange = isClip && isBackForward && context.settings.fullRange;
         if (scopeLabel) scopeLabel.textContent = isClip
@@ -3355,6 +3384,10 @@ document.addEventListener('DOMContentLoaded', function() {
             speedSlider.disabled = !mode;
         }
         if (speedValue) speedValue.textContent = `${speed.toFixed(1)}x`;
+        placementButtons.forEach(button => {
+            button.classList.toggle('selected', button.dataset.placement === rangePlacement);
+            button.disabled = !mode || useFullRange;
+        });
         if (fullRangeToggle) {
             fullRangeToggle.checked = isClip ? context.settings.fullRange : false;
             fullRangeToggle.disabled = !isClip || !isBackForward;
@@ -3379,6 +3412,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const settings = ensureClipScrubSettings(clipNumber);
         scrubConfig.range = settings.range;
         scrubConfig.speed = settings.speed;
+        scrubConfig.rangePlacement = settings.rangePlacement;
         scrubConfig.fullRange = settings.fullRange;
         scrubConfig.autoReverse = settings.autoReverse;
         selectedScrubMode = settings.mode;
@@ -3491,7 +3525,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     : `ACTIVE: CLIP ${selectedClipSlot?.dataset.clipNumber || ''} · ${getAccentScrubModeLabel(scrubMode).toUpperCase()}`;
                 activeSource.classList.toggle('accent-active', activeAccent);
             }
-            if (centreDisplay) centreDisplay.textContent = `Centre: ${formatTimeShort(scrubCentreTime)}`;
+            if (centreDisplay) centreDisplay.textContent = `Anchor: ${formatTimeShort(scrubCentreTime)}`;
         } else {
             badge.style.display = 'none';
             if (activeSource) {
@@ -3500,8 +3534,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             if (centreDisplay) {
                 centreDisplay.textContent = scrubCentreTime > 0
-                    ? `Centre: ${formatTimeShort(scrubCentreTime)}`
-                    : 'Centre: --:--';
+                    ? `Anchor: ${formatTimeShort(scrubCentreTime)}`
+                    : 'Anchor: --:--';
             }
         }
 
@@ -3608,20 +3642,35 @@ document.addEventListener('DOMContentLoaded', function() {
         return previewPopoutOpen ? popoutCurrentTime : (video.currentTime || 0);
     }
 
+    function calculatePositionedScrubBounds(anchorTime, range, placement, duration) {
+        const safeDuration = Math.max(0, Number(duration) || 0);
+        const anchor = Math.max(0, Math.min(safeDuration, Number(anchorTime) || 0));
+        const safeRange = Math.max(0.1, Number(range) || DEFAULT_CLIP_SCRUB_SETTINGS.range);
+        const beforeFraction = placement === 'start' ? 0 : placement === 'end' ? 1 : 0.5;
+        const start = Math.max(0, anchor - (safeRange * beforeFraction));
+        const end = Math.min(safeDuration, anchor + (safeRange * (1 - beforeFraction)));
+        return { start, end: Math.max(start, end), anchor };
+    }
+
+    function getFullScrubBounds(duration, clipNumber) {
+        const inOut = clipInOutPoints[clipNumber];
+        const inPoint = Number.isFinite(inOut?.inPoint) ? Math.max(0, Math.min(duration, inOut.inPoint)) : 0;
+        const outPoint = Number.isFinite(inOut?.outPoint) ? Math.max(0, Math.min(duration, inOut.outPoint)) : duration;
+        return inPoint < outPoint ? { start: inPoint, end: outPoint } : { start: 0, end: duration };
+    }
+
     function getScrubBounds() {
         const duration = getScrubDuration();
         if (scrubMode === 'back-forward' && scrubConfig.fullRange && selectedClipSlot) {
             const clipNumber = selectedClipSlot.dataset.clipNumber;
-            const inOut = clipInOutPoints[clipNumber];
-            const inPoint = Number.isFinite(inOut?.inPoint) ? Math.max(0, Math.min(duration, inOut.inPoint)) : 0;
-            const outPoint = Number.isFinite(inOut?.outPoint) ? Math.max(0, Math.min(duration, inOut.outPoint)) : duration;
-            if (inPoint < outPoint) return { start: inPoint, end: outPoint };
-            return { start: 0, end: duration };
+            return getFullScrubBounds(duration, clipNumber);
         }
-        const halfRange = scrubConfig.range / 2;
-        const start = Math.max(0, scrubCentreTime - halfRange);
-        const end = Math.min(duration, scrubCentreTime + halfRange);
-        return { start, end: Math.max(start, end) };
+        return calculatePositionedScrubBounds(
+            scrubCentreTime,
+            scrubConfig.range,
+            scrubConfig.rangePlacement,
+            duration
+        );
     }
 
     function setScrubPlaybackRate(rate) {
@@ -3755,7 +3804,7 @@ document.addEventListener('DOMContentLoaded', function() {
         scheduleManualScrubSeek();
     }
 
-    // Map CC value 0-127 to a position within the scrub range around the centre
+    // Map CC value 0-127 to a position within the configured scrub bounds.
     function handleCCFaderScrub(ccValue) {
         const { start, end } = getScrubBounds();
         const normalised = Math.max(0, Math.min(127, ccValue)) / 127;
@@ -4125,7 +4174,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 container.scrollLeft = Math.max(0, scrollPosition);
             }
         }
-
         const displayTime = currentTime;
 
         // [OUTPUT WINDOW PERFORMANCE FIX] Only update text every 10 frames (6fps) to reduce DOM manipulation
@@ -6342,6 +6390,21 @@ document.addEventListener('DOMContentLoaded', function() {
             renderScrubSettingsEditor();
         });
     }
+
+    document.querySelectorAll('.scrub-range-placement-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const context = getScrubSettingsEditorContext();
+            const rangePlacement = this.dataset.placement;
+            if (!context || this.disabled || !VALID_SCRUB_RANGE_PLACEMENTS.has(rangePlacement)) return;
+
+            persistActiveScrubConfiguration({ rangePlacement });
+            if (context.type === 'clip' && !accentScrubOverride) {
+                scrubConfig.rangePlacement = rangePlacement;
+                if (scrubModeActive) configureActiveScrubMode(scrubMode);
+            }
+            renderScrubSettingsEditor();
+        });
+    });
 
     const scrubFullRangeToggle = document.getElementById('scrubFullRangeToggle');
     if (scrubFullRangeToggle) {

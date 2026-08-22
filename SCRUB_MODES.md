@@ -4,13 +4,15 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 
 ## Core Model
 
-- Scrub is centered on the last cue point reached through cue navigation. If no cue has been navigated to for the selected clip, it uses the current playhead position.
-- **Range** is the total duration around the center, not the duration on each side.
+- Scrub is anchored to the last cue point reached through cue navigation. If no cue has been navigated to for the selected clip, it uses the current playhead position.
+- **Range** is the total scrub duration, not the duration on each side.
+- **Cue position in range** controls where the anchor sits: **Start** makes the cue/accent the exact range start, **Centre** divides the range evenly around it (the default and legacy behavior), and **End** makes it the exact range end.
+- At the beginning or end of a video, the range is shortened instead of moving the selected anchor away from the cue/accent.
 - Range limits: **0.1–10 seconds**, in **0.05-second** increments.
 - Speed limits: **0.1×–4×**.
 - Scrub playback temporarily owns play, pause, seeking, and playback rate. Deactivation restores the play/pause state and speed that existed before activation.
 - New video slots default to Fader mode with scrub ON, a 2-second range, and 1× scrub speed.
-- Enabled state, mode, range, speed, and B/F options are independent for every video slot; selecting a loaded slot restores and, when enabled, activates its saved scrub behavior.
+- Enabled state, mode, range, cue position, speed, and B/F options are independent for every video slot; selecting a loaded slot restores and, when enabled, activates its saved scrub behavior.
 - Changing clip or tab safely deactivates scrub and clears stale cue-center state.
 - The embedded preview and pop-out projection window must exhibit the same behavior.
 - The Scrub Modes panel has an explicit **Clip / A1 / A2 / A3 / A4** settings target. This controls only which saved configuration is being edited; it does not activate playback.
@@ -35,7 +37,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - **Auto-reverse at boundaries** is ON by default. Reaching either boundary reverses direction automatically, so playback keeps bouncing until scrub mode is deactivated.
 - Turning **Auto-reverse at boundaries** OFF restores stop-and-wait behavior: playback stops at the reached boundary until the next trigger reverses it away from that boundary.
 - A trigger can reverse playback immediately at any point in either boundary mode.
-- B/F alone can use **Full video / In-Out** instead of the centered 0.1–10 second range. Its boundaries are the clip's valid In/Out points when set, otherwise `00:00` and the complete video duration.
+- B/F alone can use **Full video / In-Out** instead of the positioned 0.1–10 second range. Its boundaries are the clip's valid In/Out points when set, otherwise `00:00` and the complete video duration. Cue position is disabled and ignored while Full range is selected.
 - While B/F is active it temporarily disables the clip's native loop setting so a full-video boundary cannot restart at `00:00` before B/F reverses or stops. The clip's normal loop setting is restored afterward.
 - Forward strokes use normal video playback. Backward strokes use decoder-paced frame seeks because Chromium does not reliably support a negative playback rate.
 
@@ -91,13 +93,14 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 
 ## Session Persistence
 
-Scrub settings are retained in the application's session format **v1.16**.
+Scrub settings are retained in the application's session format **v1.17**.
 
 Saved per video slot:
 
 - Enabled/disabled state
 - Selected scrub mode
 - Range
+- Cue position in range (Start/Centre/End)
 - Speed
 - B/F Full video / In-Out selection
 - B/F Auto-reverse at boundaries selection
@@ -138,7 +141,8 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - Embedded and pop-out playback behavior
 - Dense 128-message fader bursts without decoder seek backlogs
 - Cross-platform file URL encoding for spaces and reserved characters
-- Per-slot mode/range/speed/B-F-options/ON-OFF restoration, Range/Speed CC mappings, and session v1.16 round-tripping
+- Start/Centre/End range anchoring, clip/accent separation, and media-edge clamping
+- Per-slot mode/range/cue-position/speed/B-F-options/ON-OFF restoration, Range/Speed CC mappings, and session v1.17 round-tripping
 
 ## Hardware Acceptance Checks
 

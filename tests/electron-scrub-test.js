@@ -241,7 +241,7 @@ async function run() {
   collectedSessionData = null;
   await click(window, '#collectAllBtn');
   await waitForNode(() => collectedSessionData !== null, 'Collect All & Save renderer request');
-  assert.equal(collectedSessionData.version, '1.16');
+  assert.equal(collectedSessionData.version, '1.17');
   await waitFor(window, `document.getElementById('collectAllBtn').disabled === false && document.getElementById('collectAllBtn').textContent === 'Collect All & Save'`, 'Collect All & Save button restoration');
   assert.match(await window.webContents.executeJavaScript(`window.__lastAlert`), /unique video file\(s\) collected/);
   // The default U shortcut operates the same saved per-clip toggle as the UI.
@@ -564,6 +564,43 @@ async function run() {
   assert.equal(state.paused, true);
   assert.equal(state.rate, 1);
 
+  // Range placement keeps the current cue as an exact Start, Centre, or End
+  // anchor without adding another overlay to the timeline.
+  const placementRange = Number(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`));
+  await click(window, '.scrub-range-placement-btn[data-placement="start"]');
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('videoPlayer').paused`, 'Start-positioned B/F waiting state');
+  const startPositionedRangeStart = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+
+  await click(window, '.scrub-range-placement-btn[data-placement="end"]');
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('videoPlayer').paused`, 'End-positioned B/F waiting state');
+  const endPositionedRangeStart = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
+  assert.ok(Math.abs((startPositionedRangeStart - placementRange) - endPositionedRangeStart) < 0.05);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+
+  await click(window, '.scrub-range-placement-btn[data-placement="center"]');
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('videoPlayer').paused`, 'Centre-positioned B/F waiting state');
+  const centrePositionedRangeStart = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime`);
+  assert.ok(Math.abs((startPositionedRangeStart - (placementRange / 2)) - centrePositionedRangeStart) < 0.05);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+
+  // Accent placement is stored in the accent scope and must not overwrite the
+  // ordinary clip setting.
+  await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
+  await click(window, '.scrub-range-placement-btn[data-placement="end"]');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn.selected').dataset.placement`), 'end');
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn.selected').dataset.placement`), 'center');
+  await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
+  await click(window, '.scrub-range-placement-btn[data-placement="center"]');
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
+
   // Range and Speed learn continuous MIDI CC mappings and mirror the visible
   // sliders without processing every intermediate value in a dense burst.
   const originalScrubParameters = await window.webContents.executeJavaScript(`({
@@ -592,6 +629,7 @@ async function run() {
 
   await click(window, '#scrubFullRangeToggle');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn').disabled`), true);
   window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 15, value: 0 });
   await new Promise(resolve => setTimeout(resolve, 50));
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '10', 'Full range should ignore Range MIDI');
@@ -888,7 +926,7 @@ async function run() {
   }, 'pop-out B/F stop-and-wait at range start', 3000);
   await click(window, '#scrubAutoReverseToggle');
 
-  // Per-slot scrub/accent settings restore independently and serialize in session v1.16.
+  // Per-slot scrub/accent settings restore independently and serialize in session v1.17.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub disabled');
@@ -902,6 +940,7 @@ async function run() {
   await setSlider(window, '#scrubRangeSlider', 0.65);
   await setSlider(window, '#scrubSpeedSlider', 1.7);
   await click(window, '.scrub-mode-btn[data-mode="hold"]');
+  await click(window, '.scrub-range-placement-btn[data-placement="start"]');
   assert.equal(
     await window.webContents.executeJavaScript(`document.querySelector('.clip-slot[data-clip-number="1"] .clip-scrub-indicator').classList.contains('off')`),
     true
@@ -936,12 +975,18 @@ async function run() {
   assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-mode-btn.selected').dataset.mode`), 'hold');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '0.65');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1.7');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn.selected').dataset.placement`), 'start');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubActiveBadge').style.display`), 'none');
+  await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
+  await click(window, '.scrub-range-placement-btn[data-placement="end"]');
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
 
   await click(window, '.clip-slot[data-clip-number="2"]');
   await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'drift' && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'slot two restore', 10000);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '1.25');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1.5');
+  await click(window, '.scrub-range-placement-btn[data-placement="end"]');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn.selected').dataset.placement`), 'end');
   await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
   await click(window, '#scrubFullRangeToggle');
   await click(window, '#scrubAutoReverseToggle');
@@ -952,7 +997,7 @@ async function run() {
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
-  assert.equal(savedSessionData.version, '1.16');
+  assert.equal(savedSessionData.version, '1.17');
   assert.deepEqual(savedSessionData.midiMappings.accent2, { type: 'noteon', channel: 1, note: 62 });
   assert.deepEqual(savedSessionData.midiMappings.toggleScrubMode, { type: 'noteon', channel: 1, note: 63 });
   assert.deepEqual(savedSessionData.midiMappings.outputFade, { type: 'cc', channel: 1, controller: 21 });
@@ -967,15 +1012,17 @@ async function run() {
     {
       mode: savedSessionData.tabs.accentPoints['0']['1']['3'].scrubMode,
       range: savedSessionData.tabs.accentPoints['0']['1']['3'].scrubRange,
+      placement: savedSessionData.tabs.accentPoints['0']['1']['3'].scrubRangePlacement,
       speed: savedSessionData.tabs.accentPoints['0']['1']['3'].scrubSpeed
     },
-    { mode: 'manual-stutter', range: 0.8, speed: 1.5 }
+    { mode: 'manual-stutter', range: 0.8, placement: 'end', speed: 1.5 }
   );
   assert.deepEqual(savedSessionData.tabs.scrubSettings['0']['1'], {
     enabled: false,
     mode: 'hold',
     range: 0.65,
     speed: 1.7,
+    rangePlacement: 'start',
     fullRange: false,
     autoReverse: true
   });
@@ -984,6 +1031,7 @@ async function run() {
     mode: 'back-forward',
     range: 1.25,
     speed: 1.5,
+    rangePlacement: 'end',
     fullRange: true,
     autoReverse: false
   });
@@ -992,7 +1040,7 @@ async function run() {
   await setSlider(window, '#scrubRangeSlider', 3);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await click(window, '#loadSessionBtn');
-  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.16 reload', 10000);
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.17 reload', 10000);
   assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeMIDIDisplay').textContent`), /CC 15/);
   assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedMIDIDisplay').textContent`), /CC 16/);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('outputFadeReverse').checked`), true);
@@ -1007,8 +1055,10 @@ async function run() {
   assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-mode-btn.selected').dataset.mode`), 'manual-stutter');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '0.8');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1.5');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn.selected').dataset.placement`), 'end');
   await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '0.65');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn.selected').dataset.placement`), 'start');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubActiveBadge').style.display`), 'none');
   await click(window, '.clip-slot[data-clip-number="2"]');
   await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'back-forward' && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'reloaded slot two', 10000);
@@ -1017,6 +1067,7 @@ async function run() {
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubFullRangeToggle').checked`), true);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').checked`), false);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn.selected').dataset.placement`), 'end');
 
   // v1.12 accents did not have their own scrub settings. They migrate to None
   // with the default 2-second range and 1x speed.
@@ -1025,6 +1076,7 @@ async function run() {
   const legacyAccent = sessionDataToLoad.tabs.accentPoints['0']['1']['1'];
   delete legacyAccent.scrubMode;
   delete legacyAccent.scrubRange;
+  delete legacyAccent.scrubRangePlacement;
   delete legacyAccent.scrubSpeed;
   await window.webContents.executeJavaScript(`document.getElementById('sessionStatus').textContent = 'Loading v1.12 accent test…'`);
   await click(window, '#loadSessionBtn');
@@ -1035,14 +1087,18 @@ async function run() {
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubNoneModeBtn').classList.contains('selected')`), true);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '2');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn.selected').dataset.placement`), 'center');
 
-  // v1.10 per-slot sessions did not have autoReverse. They must migrate to
-  // the new continuous/default behavior rather than unexpectedly stopping.
+  // v1.10 per-slot sessions did not have autoReverse or range placement. They
+  // migrate to continuous boundaries and the legacy Centre range behavior.
   sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));
   sessionDataToLoad.version = '1.10';
   delete sessionDataToLoad.tabs.accentPoints;
   Object.values(sessionDataToLoad.tabs.scrubSettings).forEach(tabSettings => {
-    Object.values(tabSettings).forEach(settings => delete settings.autoReverse);
+    Object.values(tabSettings).forEach(settings => {
+      delete settings.autoReverse;
+      delete settings.rangePlacement;
+    });
   });
   await window.webContents.executeJavaScript(`document.getElementById('sessionStatus').textContent = 'Loading v1.10 test…'`);
   await click(window, '#loadSessionBtn');
@@ -1050,6 +1106,7 @@ async function run() {
   await click(window, '.clip-slot[data-clip-number="2"]');
   await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'back-forward'`, 'v1.10 slot restore', 10000);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubAutoReverseToggle').checked`), true);
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn.selected').dataset.placement`), 'center');
 
   // v1.8 global scrub values migrate to each loaded slot with scrub ON.
   sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));

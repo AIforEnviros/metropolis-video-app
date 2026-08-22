@@ -1481,6 +1481,35 @@
             height: 4px;
             accent-color: #0088ff;
         }
+        .scrub-range-placement-row {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .scrub-range-placement-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            flex: 1;
+        }
+        .scrub-range-placement-btn {
+            border: 1px solid #555;
+            border-radius: 3px;
+            background: #303030;
+            color: #aaa;
+            padding: 4px 5px;
+            font-size: 10px;
+            cursor: pointer;
+        }
+        .scrub-range-placement-btn.selected {
+            border-color: #ff9900;
+            background: #5a3700;
+            color: #fff;
+        }
+        .scrub-range-placement-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.35;
+        }
         .scrub-full-range-option {
             display: flex;
             align-items: center;
@@ -2206,7 +2235,7 @@
                     <!-- Activate / Deactivate -->
                     <div class="scrub-activate-row">
                         <button class="scrub-activate-btn" id="scrubActivateBtn" disabled>Scrub: ON (waiting)</button>
-                        <span class="scrub-centre-display" id="scrubCentreDisplay">Centre: --:--</span>
+                        <span class="scrub-centre-display" id="scrubCentreDisplay">Anchor: --:--</span>
                     </div>
                     <div id="scrubSettingsHelp" style="font-size:10px; color:#888; margin-bottom:6px;">Editing the selected clip. Mode, range, speed, B/F options and ON/OFF save with this video slot.</div>
 
@@ -2217,6 +2246,14 @@
                     <div class="scrub-param-row">
                         <label class="scrub-label">Range: <span id="scrubRangeValue">2.0s</span></label>
                         <input type="range" id="scrubRangeSlider" min="0.1" max="10" step="0.05" value="2.0">
+                    </div>
+                    <div class="scrub-range-placement-row">
+                        <span class="scrub-label">Cue position:</span>
+                        <div class="scrub-range-placement-buttons" role="group" aria-label="Cue position within scrub range">
+                            <button type="button" class="scrub-range-placement-btn" data-placement="start" title="The cue or accent is the exact start of the range">Start</button>
+                            <button type="button" class="scrub-range-placement-btn selected" data-placement="center" title="The range is divided evenly around the cue or accent">Centre</button>
+                            <button type="button" class="scrub-range-placement-btn" data-placement="end" title="The cue or accent is the exact end of the range">End</button>
+                        </div>
                     </div>
                     <div class="scrub-midi-row">
                         <span class="scrub-label">Range MIDI:</span>

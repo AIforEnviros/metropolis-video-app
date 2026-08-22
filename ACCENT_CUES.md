@@ -8,7 +8,7 @@ This document defines the behavior of accent cue points. Accents are direct-trig
 - An accent stores one timestamp in the same video as the slot's normal cue points. It does not create a nested clip or a second video.
 - Pressing **Set A1-A4** records the current preview position. Setting an occupied accent replaces its timestamp while retaining its scrub settings.
 - The timeline shows accents as purple labelled markers. Double-click a marker, or use its clear button, to remove it.
-- Click and drag a purple marker to reposition the accent while previewing the destination frame. Its scrub mode, range, speed, and trigger assignment remain attached to it.
+- Click and drag a purple marker to reposition the accent while previewing the destination frame. Its scrub mode, range, cue position, speed, and trigger assignment remain attached to it.
 - Accent points move and swap with the rest of their video-slot data.
 
 ## Trigger Behavior
@@ -23,13 +23,13 @@ This document defines the behavior of accent cue points. Accents are direct-trig
 
 ## Optional Per-Accent Scrub
 
-- Every assigned accent has its own optional scrub mode, range, and speed.
+- Every assigned accent has its own optional scrub mode, range, cue position (Start/Centre/End), and speed.
 - Use the **Settings for: Clip / A1 / A2 / A3 / A4** selector at the top of the main Scrub Modes panel to choose exactly which settings are being edited.
 - Triggering an accent never changes the selected editor target. The separate **ACTIVE** line identifies whether clip scrub or a particular accent effect is actually running.
-- Accent cards show a compact saved summary such as `M.Stut · 0.8s · 1.5x`; the active accent card is highlighted purple.
+- Accent cards show a compact saved summary such as `M.Stut · 0.8s · Start · 1.5x`; the active accent card is highlighted purple.
 - **None** preserves the direct jump-and-play behavior.
 - Accent scrub settings temporarily override the selected clip's ordinary scrub controls. Ending the accent effect restores the clip's saved mode, range, speed, enabled state, and B/F options.
-- Triggering a configured accent always recenters its scrub range at the accent timestamp.
+- Triggering a configured accent always anchors its scrub range at the accent timestamp using its saved Start/Centre/End position.
 - Repeated accent triggers restart the configured effect from that accent instead of inheriting its previous position or direction.
 - **Fader** selects the accent-centered range and waits for the learned CC controller.
 - **B/F** starts a new forward stroke and automatically reverses at the accent-centered range boundaries. Accent B/F does not use the clip's Full Range or stop-and-wait options.
@@ -48,7 +48,7 @@ This document defines the behavior of accent cue points. Accents are direct-trig
 
 ## Session Persistence
 
-Session format **v1.16** retains each accent's timestamp, optional scrub mode, range, and speed per tab and video slot in `tabs.accentPoints`. v1.12 accents migrate to **None**, a 2-second range, and 1x speed. Older sessions without accent data load with all four accent positions unset.
+Session format **v1.17** retains each accent's timestamp, optional scrub mode, range, cue position, and speed per tab and video slot in `tabs.accentPoints`. Older accents without cue-position data migrate to **Centre**; v1.12 accents also migrate to **None**, a 2-second range, and 1x speed. Older sessions without accent data load with all four accent positions unset.
 
 ## Verification
 

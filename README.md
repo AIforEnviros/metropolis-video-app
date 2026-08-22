@@ -226,7 +226,7 @@ The compact **Master Output** slider fades both the embedded preview and pop-out
 
 ### Accent Cue Points
 
-Each video slot has four direct-trigger accents, A1-A4. Set them at useful visual hits such as a clap, impact, or machine movement, then map each Accent action to a keyboard key or MIDI note in **Keyboard Shortcuts**. Triggering an accent jumps to it immediately without losing your position in the normal cue sequence; the next normal cue command continues from where that sequence left off. Each accent can optionally start its own scrub mode with an independent range and speed, temporarily overriding—but never overwriting—the clip's ordinary scrub settings.
+Each video slot has four direct-trigger accents, A1-A4. Set them at useful visual hits such as a clap, impact, or machine movement, then map each Accent action to a keyboard key or MIDI note in **Keyboard Shortcuts**. Triggering an accent jumps to it immediately without losing your position in the normal cue sequence; the next normal cue command continues from where that sequence left off. Each accent can optionally start its own scrub mode with an independent range, Start/Centre/End cue position, and speed, temporarily overriding—but never overwriting—the clip's ordinary scrub settings.
 
 Choose **Clip**, **A1**, **A2**, **A3**, or **A4** at the top of the Scrub Modes panel before editing. The EDITING label always names the saved configuration shown by the controls, while the separate ACTIVE label names the effect currently running. Triggering playback does not change the editor selection. Accent scrub states run only from their dedicated A1-A4 triggers; the general scrub trigger always runs the clip's saved state and returns ownership to it if an accent is active.
 
@@ -244,6 +244,8 @@ All detected MIDI inputs are connected automatically. Mappings are device-indepe
 The selected clip's Scrub On/Off button is available as **Toggle Clip Scrub On/Off** in the same mapping window. Its default keyboard shortcut is `U`, and a MIDI note, CC, or program-change message can be learned for it.
 
 The Scrub Modes panel also provides direct **Range MIDI** and **Speed MIDI** Learn controls. These continuous CC mappings mirror the visible sliders and edit whichever Clip or Accent scope is selected. B/F Full range keeps Range MIDI disabled until Full range is turned off.
+
+Use **Cue position in range** to align a scrub range precisely: **Start** begins at the cue/accent, **Centre** keeps the original evenly divided behavior, and **End** finishes at the cue/accent.
 
 ---
 
