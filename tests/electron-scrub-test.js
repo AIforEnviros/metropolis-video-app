@@ -8,6 +8,7 @@ let mainWindow = null;
 let previewWindow = null;
 let savedSessionData = null;
 let sessionDataToLoad = null;
+let collectedSessionData = null;
 
 function registerRendererStubs() {
   const connectedMIDIDevices = [
@@ -17,6 +18,25 @@ function registerRendererStubs() {
   const handlers = {
     'get-midi-devices': () => ({ success: true, devices: connectedMIDIDevices, connectedCount: 2 }),
     'reinitialize-midi': () => ({ success: true, devices: connectedMIDIDevices, connectedCount: 2 }),
+    'collect-all-and-save': (_event, sessionData) => {
+      collectedSessionData = JSON.parse(JSON.stringify(sessionData));
+      const uniquePaths = new Set();
+      Object.values(sessionData.tabs.videos).forEach(tabVideos => {
+        Object.values(tabVideos || {}).forEach(videoData => {
+          if (videoData?.filePath) uniquePaths.add(videoData.filePath);
+        });
+      });
+      return {
+        success: true,
+        sessionData: collectedSessionData,
+        sessionFilePath: path.join(projectRoot, 'portable-test', 'test-session.json'),
+        files: [...uniquePaths].map(sourcePath => ({
+          sourcePath,
+          collectedPath: sourcePath,
+          relativePath: `Media/${path.basename(sourcePath)}`
+        }))
+      };
+    },
     'is-preview-popout-open': () => Boolean(previewWindow && !previewWindow.isDestroyed()),
     'save-session': (_event, sessionData) => {
       savedSessionData = sessionData;
@@ -196,6 +216,13 @@ async function run() {
     await window.webContents.executeJavaScript(`document.querySelector('.clip-slot[data-clip-number="1"] .clip-scrub-indicator').textContent`),
     'Fader'
   );
+  await window.webContents.executeJavaScript(`window.alert = message => { window.__lastAlert = message; }; true`);
+  collectedSessionData = null;
+  await click(window, '#collectAllBtn');
+  await waitForNode(() => collectedSessionData !== null, 'Collect All & Save renderer request');
+  assert.equal(collectedSessionData.version, '1.14');
+  await waitFor(window, `document.getElementById('collectAllBtn').disabled === false && document.getElementById('collectAllBtn').textContent === 'Collect All & Save'`, 'Collect All & Save button restoration');
+  assert.match(await window.webContents.executeJavaScript(`window.__lastAlert`), /unique video file\(s\) collected/);
   // The default U shortcut operates the same saved per-clip toggle as the UI.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
@@ -749,7 +776,7 @@ async function run() {
   }, 'pop-out B/F stop-and-wait at range start', 3000);
   await click(window, '#scrubAutoReverseToggle');
 
-  // Per-slot scrub/accent settings restore independently and serialize in session v1.13.
+  // Per-slot scrub/accent settings restore independently and serialize in session v1.14.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub disabled');
@@ -809,7 +836,7 @@ async function run() {
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
-  assert.equal(savedSessionData.version, '1.13');
+  assert.equal(savedSessionData.version, '1.14');
   assert.deepEqual(savedSessionData.midiMappings.accent2, { type: 'noteon', channel: 1, note: 62 });
   assert.deepEqual(savedSessionData.midiMappings.toggleScrubMode, { type: 'noteon', channel: 1, note: 63 });
   assert.equal(savedSessionData.tabs.accentPoints['0']['1']['1'].time, 1.25);
@@ -845,7 +872,7 @@ async function run() {
   await setSlider(window, '#scrubRangeSlider', 3);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await click(window, '#loadSessionBtn');
-  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.13 reload', 10000);
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.14 reload', 10000);
   await click(window, '.clip-slot[data-clip-number="1"]');
   await waitFor(window, `document.getElementById('videoPlayer').duration > 0 && document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'hold'`, 'reloaded slot one', 10000);
   await waitFor(window, `document.querySelectorAll('.accent-marker').length === 4`, 'reloaded slot one accents');

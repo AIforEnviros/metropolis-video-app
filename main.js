@@ -5,6 +5,11 @@ const fs = require('fs').promises;
 const midi = require('@julusian/midi');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
+const {
+  collectPortableSession,
+  findMissingMedia,
+  resolvePortableSessionPaths
+} = require('./portable-session');
 
 // Set FFmpeg binary path
 ffmpeg.setFfmpegPath(ffmpegStatic);
@@ -207,6 +212,23 @@ ipcMain.handle('save-session', async (event, sessionData) => {
   }
 });
 
+// IPC: Copy all referenced media into a self-contained portable show folder
+// and write a session whose media paths are relative to that folder.
+ipcMain.handle('collect-all-and-save', async (event, sessionData) => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose a New Folder or Existing Portable Show Package',
+      properties: ['openDirectory', 'createDirectory', 'promptToCreate']
+    });
+    if (result.canceled) return { canceled: true };
+
+    const collected = await collectPortableSession(sessionData, result.filePaths[0]);
+    return { success: true, ...collected };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 // IPC: Load session file
 ipcMain.handle('load-session', async () => {
   try {
@@ -223,8 +245,39 @@ ipcMain.handle('load-session', async () => {
     }
 
     const fileContent = await fs.readFile(result.filePaths[0], 'utf-8');
-    const sessionData = JSON.parse(fileContent);
-    return { success: true, sessionData, filePath: result.filePaths[0] };
+    const rawSessionData = JSON.parse(fileContent);
+    let sessionData = resolvePortableSessionPaths(rawSessionData, result.filePaths[0]);
+    let missingMedia = await findMissingMedia(sessionData);
+
+    if (rawSessionData.portableSession && missingMedia.length > 0) {
+      const choice = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Portable Session Media Not Found',
+        message: `${missingMedia.length} media file(s) could not be found beside this session.`,
+        detail: 'Locate the package Media folder, load without the missing files, or cancel.',
+        buttons: ['Locate Media Folder', 'Load Without Missing Media', 'Cancel'],
+        defaultId: 0,
+        cancelId: 2
+      });
+
+      if (choice.response === 2) return { canceled: true };
+      if (choice.response === 0) {
+        const folderResult = await dialog.showOpenDialog(mainWindow, {
+          title: 'Locate the Portable Session Media Folder',
+          properties: ['openDirectory']
+        });
+        if (folderResult.canceled) return { canceled: true };
+        sessionData = resolvePortableSessionPaths(rawSessionData, result.filePaths[0], folderResult.filePaths[0]);
+        missingMedia = await findMissingMedia(sessionData);
+      }
+    }
+
+    return {
+      success: true,
+      sessionData,
+      filePath: result.filePaths[0],
+      missingMedia
+    };
   } catch (error) {
     return { success: false, error: error.message };
   }

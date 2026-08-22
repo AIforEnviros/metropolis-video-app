@@ -336,6 +336,14 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentlyPlayingClipNumber = null;
 
     // Session management functions
+    function ensureCurrentSessionName() {
+        if (!currentSessionName) {
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            currentSessionName = `metropolis-session-${timestamp}`;
+        }
+        return currentSessionName;
+    }
+
     function createSessionData() {
         // Create a clean copy of video data with thumbnails and file paths
         const cleanVideos = {};
@@ -353,7 +361,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.13',
+            version: '1.14',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -388,18 +396,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function saveSession() {
         try {
+            ensureCurrentSessionName();
             const sessionData = createSessionData();
 
             console.log('=== SAVING SESSION ===');
             console.log('Current folder path being saved:', currentFolderPath);
             console.log('Current tab data:', tabClipVideos);
             console.log('Session data being saved:', sessionData);
-
-            // Create a default session name if none exists
-            if (!currentSessionName) {
-                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-                currentSessionName = `metropolis-session-${timestamp}`;
-            }
 
             // Save using Electron API
             const result = await window.electronAPI.saveSession(sessionData);
@@ -420,6 +423,60 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Error saving session:', error);
             alert('Error saving session: ' + error.message);
+        }
+    }
+
+    async function collectAllAndSave() {
+        const collectButton = document.getElementById('collectAllBtn');
+        try {
+            const videos = Object.values(tabClipVideos).flatMap(tabVideos => Object.values(tabVideos || {}));
+            if (!videos.some(videoData => videoData?.filePath)) {
+                alert('No video clips with file paths are loaded.');
+                return;
+            }
+
+            ensureCurrentSessionName();
+            // Cross the Electron IPC boundary with the exact JSON-safe shape
+            // that will be written to disk, never renderer-owned objects.
+            const sessionData = JSON.parse(JSON.stringify(createSessionData()));
+            if (collectButton) {
+                collectButton.disabled = true;
+                collectButton.textContent = 'Collecting…';
+            }
+
+            const result = await window.electronAPI.collectAllAndSave(sessionData);
+            if (result.canceled) return;
+            if (!result.success) throw new Error(result.error || 'Failed to collect the portable session');
+
+            const pathKey = value => {
+                const normalised = String(value || '').replace(/\\/g, '/');
+                return window.electronAPI.platform === 'win32' ? normalised.toLowerCase() : normalised;
+            };
+            const collectedBySource = new Map(
+                result.files.map(file => [pathKey(file.sourcePath), file])
+            );
+
+            Object.values(tabClipVideos).forEach(tabVideos => {
+                Object.values(tabVideos || {}).forEach(videoData => {
+                    const collected = collectedBySource.get(pathKey(videoData?.filePath));
+                    if (!collected) return;
+                    videoData.filePath = collected.collectedPath;
+                    videoData.url = window.electronAPI.pathToFileURL(collected.collectedPath);
+                    videoData.file = { name: videoData.name, path: collected.collectedPath };
+                });
+            });
+
+            sessionModified = false;
+            updateSessionStatus(`Collected: ${currentSessionName}`);
+            alert(`${result.files.length} unique video file(s) collected.\n\nPortable session saved to:\n${result.sessionFilePath}`);
+        } catch (error) {
+            console.error('Collect All & Save error:', error);
+            alert('Collect All & Save failed: ' + error.message);
+        } finally {
+            if (collectButton) {
+                collectButton.disabled = false;
+                collectButton.textContent = 'Collect All & Save';
+            }
         }
     }
 
@@ -6279,6 +6336,9 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Error loading session: ' + error.message);
         }
     });
+
+    const collectAllBtn = document.getElementById('collectAllBtn');
+    if (collectAllBtn) collectAllBtn.addEventListener('click', collectAllAndSave);
 
     // Keyboard shortcuts modal event listeners
     shortcutsBtn.addEventListener('click', openShortcutsModal);

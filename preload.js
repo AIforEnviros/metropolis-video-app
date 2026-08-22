@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Session management
   saveSession: (sessionData) => ipcRenderer.invoke('save-session', sessionData),
+  collectAllAndSave: (sessionData) => ipcRenderer.invoke('collect-all-and-save', sessionData),
   loadSession: () => ipcRenderer.invoke('load-session'),
 
   // Video reversal for bounce mode

@@ -24,7 +24,7 @@ This is now an Electron-based desktop application for production live performanc
 **Current active development (2026-08-22):**
 - Branch: `codex/performance-test-updates`
 - Electron is the only active application architecture; `src/` is legacy
-- Session format v1.13 saves scrub settings plus four direct-trigger accents with optional per-accent mode/range/speed per video slot
+- Session format v1.14 adds portable Collect All & Save packages while retaining scrub settings and four direct-trigger accents per video slot
 - All detected MIDI inputs connect simultaneously; mappings remain device-independent so identical messages from different controllers share an action
 - The selected clip's scrub On/Off control is keyboard and MIDI mappable through the standard shortcuts window
 - Run the app with `npm start` (`npm.cmd start` in restricted Windows PowerShell)
@@ -32,6 +32,7 @@ This is now an Electron-based desktop application for production live performanc
 - Treat `SCRUB_MODES.md` as the authoritative scrub behavior contract
 - Treat `ACCENT_CUES.md` as the authoritative accent cue behavior contract
 - Treat `VIDEO_COMPATIBILITY.md` as the playback format and macOS troubleshooting guide
+- Treat `PORTABLE_SESSIONS.md` as the Collect All & Save and portable-session behavior contract
 - Treat `Development_plan.md` as project history/roadmap, not as current run instructions
 
 **Legacy Code:**
@@ -753,7 +754,7 @@ Complete MIDI mapping and MIDI learn functionality has been implemented for all 
 }
 ```
 
-**Original MIDI session format (v1.4; current application format is v1.13):**
+**Original MIDI session format (v1.4; current application format is v1.14):**
 ```json
 {
   "version": "1.4",

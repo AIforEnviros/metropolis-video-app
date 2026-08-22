@@ -213,6 +213,11 @@ npm.cmd run test:scrub
 See `SCRUB_MODES.md` for the current scrub behavior contract and hardware acceptance checklist.
 See `ACCENT_CUES.md` for direct-trigger Accent 1-4 behavior, mappings, and normal-cue progression rules.
 See `VIDEO_COMPATIBILITY.md` for supported codecs, macOS troubleshooting, and encoding footage for responsive fader scrubbing.
+See `PORTABLE_SESSIONS.md` for collecting all show media into a portable Windows/macOS session package.
+
+### Portable Show Packages
+
+Click **Collect All & Save** to copy every referenced video into a package containing the session JSON and a `Media` folder. Choose an empty destination for the first collection, or select the same package folder again to update it safely. Reused source files are copied once, filename collisions are renamed safely, and the resulting folder can be moved between Windows and macOS as one unit.
 
 ### Accent Cue Points
 
