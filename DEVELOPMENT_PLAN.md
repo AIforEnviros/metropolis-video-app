@@ -802,7 +802,7 @@ Do not treat Bounce as pending work or reintroduce it without a new product deci
 - ✅ Created preload.js for secure IPC bridge (55 lines)
 - ✅ Exposed safe APIs to renderer via contextBridge.exposeInMainWorld('electronAPI')
 - ✅ Provided file system access methods (selectFolder, readDirectory, getFilePath)
-- ✅ Provided MIDI API bridge (getMIDIDevices, selectMIDIDevice, getCurrentMIDIDevice, onMIDIMessage)
+- ✅ Provided MIDI API bridge (getMIDIDevices, refreshMIDI, onMIDIMessage)
 - ✅ Provided output window control methods (open, close, isOpen, sendToOutputWindow, onOutputWindowClosed)
 - ✅ Provided session management methods (saveSession, loadSession)
 - ✅ Exposed platform info and version details
@@ -886,7 +886,7 @@ Do not treat Bounce as pending work or reintroduce it without a new product deci
 
 **Phase 1: Infrastructure (Commit 9da93c4)**
 - ✅ Integrated @julusian/midi in main.js (Electron 28 compatible)
-- ✅ MIDI device enumeration and auto-connect to first device
+- ✅ MIDI device enumeration and auto-connect to every available input
 - ✅ MIDI message parsing (Note On/Off, CC, Program Change)
 - ✅ IPC bridge forwarding MIDI messages to renderer (main → renderer)
 - ✅ Real-time MIDI message logging for debugging
@@ -900,7 +900,7 @@ Do not treat Bounce as pending work or reintroduce it without a new product deci
 
 **Phase 3: UI & Learn Workflow (Commit 07b3cd6)**
 - ✅ Updated shortcuts modal with 3-column layout (Action | Keyboard | MIDI)
-- ✅ MIDI device selector dropdown in modal
+- ✅ Compact connected MIDI inputs status in modal
 - ✅ "Learn MIDI" button per action with visual feedback (green when mapped)
 - ✅ "Clear" button to remove individual mappings
 - ✅ MIDI learn mode with real-time capture

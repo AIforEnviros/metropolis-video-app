@@ -22,9 +22,10 @@ This is now an Electron-based desktop application for production live performanc
 - All core features validated in web version
 
 **Current active development (2026-08-09):**
-- Branch: `codex/accent-cue-points`
+- Branch: `codex/multi-midi-controllers`
 - Electron is the only active application architecture; `src/` is legacy
 - Session format v1.13 saves scrub settings plus four direct-trigger accents with optional per-accent mode/range/speed per video slot
+- All detected MIDI inputs connect simultaneously; mappings remain device-independent so identical messages from different controllers share an action
 - Run the app with `npm start` (`npm.cmd start` in restricted Windows PowerShell)
 - Run scrub regression coverage with `npm run test:scrub` (`npm.cmd run test:scrub` on Windows)
 - Treat `SCRUB_MODES.md` as the authoritative scrub behavior contract
@@ -637,7 +638,7 @@ Complete MIDI mapping and MIDI learn functionality has been implemented for all 
 
 **Phase 1: Infrastructure (Commit 9da93c4)**
 - ✅ MIDI device detection and enumeration
-- ✅ Auto-connect to first available MIDI device on startup
+- ✅ Auto-connect to every available MIDI input on startup
 - ✅ MIDI message parsing (Note On/Off, CC, Program Change)
 - ✅ IPC communication bridge (main ↔ renderer)
 - ✅ Real-time MIDI message forwarding
@@ -651,7 +652,7 @@ Complete MIDI mapping and MIDI learn functionality has been implemented for all 
 
 **Phase 3: UI & Learn Workflow (Commit 07b3cd6)**
 - ✅ Updated shortcuts modal with 3-column layout (Action | Keyboard | MIDI)
-- ✅ MIDI device selector dropdown
+- ✅ Compact connected MIDI inputs status
 - ✅ "Learn MIDI" button per action with visual feedback
 - ✅ "Clear" button to remove mappings
 - ✅ Color-coded display (green when mapped)
@@ -665,7 +666,7 @@ Complete MIDI mapping and MIDI learn functionality has been implemented for all 
 ### How to Use MIDI Mapping
 
 1. **Open Shortcuts Modal**: Click "Keyboard Shortcuts" button in header
-2. **Select MIDI Device**: Choose from dropdown (auto-detects connected devices)
+2. **Check MIDI Inputs**: Confirm the status lists every connected controller
 3. **Learn Mapping**: Click "Learn" button next to any action
 4. **Press MIDI Key**: Hit a key/pad on your MIDI device
 5. **Mapping Saved**: Displays format like "Ch1 Note 60" or "Ch1 CC 14"
