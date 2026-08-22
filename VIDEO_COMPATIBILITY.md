@@ -13,6 +13,8 @@ For the most predictable Windows/macOS playback, use:
 - No audio track (the performance audio comes from Ableton Live)
 - Frequent keyframes for responsive fader scrubbing
 
+`yuv420p` does **not** mean 420p video resolution. The `420` describes 4:2:0 colour subsampling, while the final `p` means planar pixel storage. A 1920x1080 source remains 1920x1080: its luminance/detail channel stays at full resolution, while only the colour channels use lower resolution. This is especially suitable for the predominantly black-and-white *Metropolis* footage and gives H.264 the broadest hardware-decoder compatibility across Windows, macOS, and Electron/Chromium.
+
 The app now reports whether a failure is a file-access problem, a decoder failure, or an unsupported source. The message appears directly below the preview.
 
 ## Why the Fader Depends on Encoding
@@ -28,6 +30,8 @@ This is a balanced performance conversion for 24 fps material, using a keyframe 
 ```bash
 ffmpeg -i input.mov -an -c:v libx264 -pix_fmt yuv420p -preset medium -crf 18 -g 12 -keyint_min 12 -sc_threshold 0 -movflags +faststart output-performance.mp4
 ```
+
+The command does not contain a scaling option, so it preserves the input video's frame dimensions. For example, a 1080p input remains 1080p. `-crf 18` provides a high-quality H.264 encode; the frequent keyframes trade some additional file size for more responsive interactive seeking.
 
 For other frame rates, set `-g` and `-keyint_min` to roughly half the frame rate. For example, use `15` at 30 fps.
 
