@@ -2218,6 +2218,12 @@
                         <label class="scrub-label">Range: <span id="scrubRangeValue">2.0s</span></label>
                         <input type="range" id="scrubRangeSlider" min="0.1" max="10" step="0.05" value="2.0">
                     </div>
+                    <div class="scrub-midi-row">
+                        <span class="scrub-label">Range MIDI:</span>
+                        <span class="scrub-midi-display" id="scrubRangeMIDIDisplay">Not mapped</span>
+                        <button class="scrub-midi-learn-btn" id="scrubRangeMIDILearnBtn">Learn</button>
+                        <button class="scrub-midi-clear-btn" id="scrubRangeMIDIClearBtn">✕</button>
+                    </div>
                     <label class="scrub-full-range-option disabled" id="scrubFullRangeOption" title="Available only in B/F mode; uses the clip In/Out points or the full video">
                         <input type="checkbox" id="scrubFullRangeToggle" disabled>
                         Full video / In-Out (B/F only)
@@ -2231,6 +2237,12 @@
                     <div class="scrub-param-row">
                         <label class="scrub-label">Speed: <span id="scrubSpeedValue">1.0x</span></label>
                         <input type="range" id="scrubSpeedSlider" min="0.1" max="4" step="0.1" value="1.0">
+                    </div>
+                    <div class="scrub-midi-row">
+                        <span class="scrub-label">Speed MIDI:</span>
+                        <span class="scrub-midi-display" id="scrubSpeedMIDIDisplay">Not mapped</span>
+                        <button class="scrub-midi-learn-btn" id="scrubSpeedMIDILearnBtn">Learn</button>
+                        <button class="scrub-midi-clear-btn" id="scrubSpeedMIDIClearBtn">✕</button>
                     </div>
 
                     <!-- CC Fader MIDI assignment -->

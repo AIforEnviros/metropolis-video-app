@@ -82,13 +82,16 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 ## MIDI and Keyboard Learn
 
 - **CC Fader** accepts MIDI Control Change messages.
+- **Range MIDI** maps CC 0–127 across the visible Range slider's 0.1–10 second limits and edits the currently displayed Clip or Accent scope. It is ignored while B/F Full range has disabled the slider.
+- **Speed MIDI** maps CC 0–127 across the visible Speed slider's 0.1×–4× limits and edits the currently displayed Clip or Accent scope.
+- Dense Range and Speed CC streams are coalesced to the newest value once per animation frame.
 - **Drum (MIDI)** accepts Note On messages with velocity greater than zero.
 - **Drum (Key)** accepts a keyboard key or modified key combination.
 - Scrub mappings are stored separately from the standard keyboard/MIDI action mappings.
 
 ## Session Persistence
 
-Scrub settings are retained in the application's session format **v1.15**.
+Scrub settings are retained in the application's session format **v1.16**.
 
 Saved per video slot:
 
@@ -102,6 +105,8 @@ Saved per video slot:
 Saved globally because they describe the physical controls:
 
 - Learned CC controller
+- Learned Range CC controller
+- Learned Speed CC controller
 - Learned MIDI drum note
 - Learned keyboard drum trigger
 
@@ -133,7 +138,7 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - Embedded and pop-out playback behavior
 - Dense 128-message fader bursts without decoder seek backlogs
 - Cross-platform file URL encoding for spaces and reserved characters
-- Per-slot mode/range/speed/B-F-options/ON-OFF restoration and session v1.15 round-tripping
+- Per-slot mode/range/speed/B-F-options/ON-OFF restoration, Range/Speed CC mappings, and session v1.16 round-tripping
 
 ## Hardware Acceptance Checks
 

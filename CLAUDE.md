@@ -24,7 +24,7 @@ This is now an Electron-based desktop application for production live performanc
 **Current active development (2026-08-22):**
 - Branch: `codex/performance-test-updates`
 - Electron is the only active application architecture; `src/` is legacy
-- Session format v1.15 adds a global MIDI output fade while retaining portable packages, scrub settings, and four direct-trigger accents per video slot
+- Session format v1.16 adds scrub Range/Speed CC mappings while retaining the global output fade, portable packages, and per-slot scrub/accent settings
 - All detected MIDI inputs connect simultaneously; mappings remain device-independent so identical messages from different controllers share an action
 - The selected clip's scrub On/Off control is keyboard and MIDI mappable through the standard shortcuts window
 - Run the app with `npm start` (`npm.cmd start` in restricted Windows PowerShell)
@@ -755,7 +755,7 @@ Complete MIDI mapping and MIDI learn functionality has been implemented for all 
 }
 ```
 
-**Original MIDI session format (v1.4; current application format is v1.15):**
+**Original MIDI session format (v1.4; current application format is v1.16):**
 ```json
 {
   "version": "1.4",

@@ -389,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.15',
+            version: '1.16',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -418,6 +418,8 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             scrubSettings: {
                 ccController: scrubConfig.ccController,
+                rangeController: scrubConfig.rangeController,
+                speedController: scrubConfig.speedController,
                 drumPadNote: scrubConfig.drumPadNote,
                 drumPadKey: scrubConfig.drumPadKey,
                 defaults: DEFAULT_CLIP_SCRUB_SETTINGS
@@ -708,6 +710,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // are restored from tabs.scrubSettings in session v1.9+.
             if (sessionData.scrubSettings) {
                 scrubConfig.ccController = sessionData.scrubSettings.ccController || null;
+                scrubConfig.rangeController = sessionData.scrubSettings.rangeController || null;
+                scrubConfig.speedController = sessionData.scrubSettings.speedController || null;
                 scrubConfig.drumPadNote  = sessionData.scrubSettings.drumPadNote  || null;
                 scrubConfig.drumPadKey   = sessionData.scrubSettings.drumPadKey   || null;
                 scrubConfig.range = legacyScrubDefaults.range;
@@ -3177,6 +3181,8 @@ document.addEventListener('DOMContentLoaded', function() {
         fullRange: false,    // B/F only: use clip In/Out points or full video
         autoReverse: true,   // B/F only: turn around automatically at boundaries
         ccController: null,  // { type:'cc', channel, controller } or null
+        rangeController: null, // continuous CC mapped to the visible Range slider
+        speedController: null, // continuous CC mapped to the visible Speed slider
         drumPadNote: null,   // { type:'noteon', channel, note } or null
         drumPadKey: null     // keyboard shortcut string e.g. 'Space', 'x', 'Shift+x'
     };
@@ -3186,6 +3192,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // CC fader: last received value (0-127), used when switching to manual-cc mode
     let scrubCCLastValue = 63;
+
+    // Dense hardware CC streams are reduced to the latest Range/Speed value
+    // once per animation frame, avoiding repeated scrub reconfiguration.
+    const pendingScrubParameterCC = {};
+    let scrubParameterCCFrame = null;
+
+    function scaleCCToSlider(slider, ccValue) {
+        const minimum = Number(slider.min);
+        const maximum = Number(slider.max);
+        const step = Number(slider.step) || 1;
+        const normalised = Math.max(0, Math.min(127, Number(ccValue) || 0)) / 127;
+        const unrounded = minimum + ((maximum - minimum) * normalised);
+        const stepped = minimum + (Math.round((unrounded - minimum) / step) * step);
+        return Math.max(minimum, Math.min(maximum, stepped));
+    }
+
+    function queueScrubParameterCC(target, ccValue) {
+        pendingScrubParameterCC[target] = ccValue;
+        if (scrubParameterCCFrame !== null) return;
+        scrubParameterCCFrame = requestAnimationFrame(() => {
+            scrubParameterCCFrame = null;
+            for (const [parameter, latestValue] of Object.entries(pendingScrubParameterCC)) {
+                delete pendingScrubParameterCC[parameter];
+                const slider = document.getElementById(parameter === 'range' ? 'scrubRangeSlider' : 'scrubSpeedSlider');
+                if (!slider || slider.disabled) continue;
+                slider.value = String(scaleCCToSlider(slider, latestValue));
+                slider.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        });
+    }
 
     // Automated-mode directions (+1 forward, -1 backward).
     let scrubOscillationDir = 1;
@@ -3502,6 +3538,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Update the CC fader, drum pad MIDI and drum pad keyboard displays
     function updateScrubMIDIDisplays() {
         const ccDisplay      = document.getElementById('scrubCCDisplay');
+        const rangeDisplay   = document.getElementById('scrubRangeMIDIDisplay');
+        const speedDisplay   = document.getElementById('scrubSpeedMIDIDisplay');
         const drumDisplay    = document.getElementById('scrubDrumDisplay');
         const drumKeyDisplay = document.getElementById('scrubDrumKeyDisplay');
         if (ccDisplay) {
@@ -3509,6 +3547,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 ? formatMIDIMapping(scrubConfig.ccController)
                 : 'Not mapped';
             ccDisplay.style.color = scrubConfig.ccController ? '#90ee90' : '#888';
+        }
+        if (rangeDisplay) {
+            rangeDisplay.textContent = scrubConfig.rangeController
+                ? formatMIDIMapping(scrubConfig.rangeController)
+                : 'Not mapped';
+            rangeDisplay.style.color = scrubConfig.rangeController ? '#90ee90' : '#888';
+        }
+        if (speedDisplay) {
+            speedDisplay.textContent = scrubConfig.speedController
+                ? formatMIDIMapping(scrubConfig.speedController)
+                : 'Not mapped';
+            speedDisplay.style.color = scrubConfig.speedController ? '#90ee90' : '#888';
         }
         if (drumDisplay) {
             drumDisplay.textContent = scrubConfig.drumPadNote
@@ -3522,7 +3572,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Start MIDI learn for a scrub-specific control ('cc' = fader, 'drum' = trigger pad)
+    // Start MIDI learn for a scrub-specific fader or trigger control.
     function startScrubMIDILearn(target, buttonElement) {
         // Cancel any existing learn state first
         if (midiLearnActive) {
@@ -5431,6 +5481,20 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // === SCRUB RANGE / SPEED CC INTERCEPTS ===
+        // These mirror the currently visible slider and are coalesced to one
+        // update per animation frame. Disabled sliders intentionally ignore CC.
+        if (scrubConfig.rangeController && message.type === 'cc' &&
+            matchesMIDIMapping(message, scrubConfig.rangeController)) {
+            queueScrubParameterCC('range', message.value);
+            return;
+        }
+        if (scrubConfig.speedController && message.type === 'cc' &&
+            matchesMIDIMapping(message, scrubConfig.speedController)) {
+            queueScrubParameterCC('speed', message.value);
+            return;
+        }
+
         // === SCRUB CC FADER INTERCEPT ===
         // Bypass the debounce/action system entirely for real-time fader control
         if (scrubModeActive && scrubMode === 'manual-cc' &&
@@ -5637,6 +5701,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // === SCRUB-SPECIFIC LEARN HANDLING ===
         // These use special action markers (_scrub_cc / _scrub_drum) rather than midiMappings
+        if (midiLearnAction === '_scrub_range' || midiLearnAction === '_scrub_speed') {
+            if (message.type !== 'cc') return;
+            const controller = {
+                type: 'cc',
+                channel: message.channel,
+                controller: message.controller
+            };
+            if (midiLearnAction === '_scrub_range') {
+                scrubConfig.rangeController = controller;
+            } else {
+                scrubConfig.speedController = controller;
+            }
+            console.log(`Scrub ${scrubLearnTarget} controller mapped:`, controller);
+            exitScrubMIDILearn();
+            updateScrubMIDIDisplays();
+            markSessionModified();
+            return;
+        }
         if (midiLearnAction === '_scrub_cc') {
             if (message.type !== 'cc') return; // CC fader must be a CC message
             scrubConfig.ccController = {
@@ -6316,7 +6398,38 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // CC fader MIDI learn / clear
+    // Range and Speed slider MIDI learn / clear
+    const scrubRangeMIDILearnBtn = document.getElementById('scrubRangeMIDILearnBtn');
+    if (scrubRangeMIDILearnBtn) {
+        scrubRangeMIDILearnBtn.addEventListener('click', function() {
+            startScrubMIDILearn('range', this);
+        });
+    }
+    const scrubRangeMIDIClearBtn = document.getElementById('scrubRangeMIDIClearBtn');
+    if (scrubRangeMIDIClearBtn) {
+        scrubRangeMIDIClearBtn.addEventListener('click', function() {
+            scrubConfig.rangeController = null;
+            updateScrubMIDIDisplays();
+            markSessionModified();
+        });
+    }
+
+    const scrubSpeedMIDILearnBtn = document.getElementById('scrubSpeedMIDILearnBtn');
+    if (scrubSpeedMIDILearnBtn) {
+        scrubSpeedMIDILearnBtn.addEventListener('click', function() {
+            startScrubMIDILearn('speed', this);
+        });
+    }
+    const scrubSpeedMIDIClearBtn = document.getElementById('scrubSpeedMIDIClearBtn');
+    if (scrubSpeedMIDIClearBtn) {
+        scrubSpeedMIDIClearBtn.addEventListener('click', function() {
+            scrubConfig.speedController = null;
+            updateScrubMIDIDisplays();
+            markSessionModified();
+        });
+    }
+
+    // Scrub-position CC fader MIDI learn / clear
     const scrubCCLearnBtn = document.getElementById('scrubCCLearnBtn');
     if (scrubCCLearnBtn) {
         scrubCCLearnBtn.addEventListener('click', function() {

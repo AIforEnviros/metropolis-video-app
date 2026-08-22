@@ -26,7 +26,7 @@ The mapping remains device-independent, consistent with the rest of the applicat
 
 ## Persistence and Startup
 
-Session format **v1.15** saves the MIDI mapping and the Reverse MIDI direction preference. It intentionally does not save the live fade position. A new application launch starts fully visible, preventing a saved session from unexpectedly reopening black.
+Session format **v1.15 and later** saves the MIDI mapping and the Reverse MIDI direction preference. It intentionally does not save the live fade position. A new application launch starts fully visible, preventing a saved session from unexpectedly reopening black.
 
 Loading another session while the app is running retains the current output level, preventing a black output from flashing visible during a show change.
 

@@ -243,6 +243,8 @@ All detected MIDI inputs are connected automatically. Mappings are device-indepe
 
 The selected clip's Scrub On/Off button is available as **Toggle Clip Scrub On/Off** in the same mapping window. Its default keyboard shortcut is `U`, and a MIDI note, CC, or program-change message can be learned for it.
 
+The Scrub Modes panel also provides direct **Range MIDI** and **Speed MIDI** Learn controls. These continuous CC mappings mirror the visible sliders and edit whichever Clip or Accent scope is selected. B/F Full range keeps Range MIDI disabled until Full range is turned off.
+
 ---
 
 *This README was written by an AI that's clearly been influenced by too much band humor and questionable life choices. Any resemblance to actual competent documentation is purely coincidental.*

@@ -220,7 +220,7 @@ async function run() {
   collectedSessionData = null;
   await click(window, '#collectAllBtn');
   await waitForNode(() => collectedSessionData !== null, 'Collect All & Save renderer request');
-  assert.equal(collectedSessionData.version, '1.15');
+  assert.equal(collectedSessionData.version, '1.16');
   await waitFor(window, `document.getElementById('collectAllBtn').disabled === false && document.getElementById('collectAllBtn').textContent === 'Collect All & Save'`, 'Collect All & Save button restoration');
   assert.match(await window.webContents.executeJavaScript(`window.__lastAlert`), /unique video file\(s\) collected/);
   // The default U shortcut operates the same saved per-clip toggle as the UI.
@@ -543,6 +543,53 @@ async function run() {
   assert.equal(state.paused, true);
   assert.equal(state.rate, 1);
 
+  // Range and Speed learn continuous MIDI CC mappings and mirror the visible
+  // sliders without processing every intermediate value in a dense burst.
+  const originalScrubParameters = await window.webContents.executeJavaScript(`({
+    range: document.getElementById('scrubRangeSlider').value,
+    speed: document.getElementById('scrubSpeedSlider').value
+  })`);
+  await click(window, '#scrubRangeMIDILearnBtn');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 65, velocity: 100 });
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeMIDILearnBtn').textContent`), 'Waiting...');
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 15, value: 64 });
+  await waitFor(window, `document.getElementById('scrubRangeMIDIDisplay').textContent.includes('CC 15')`, 'scrub range CC learn');
+  await click(window, '#scrubSpeedMIDILearnBtn');
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 16, value: 64 });
+  await waitFor(window, `document.getElementById('scrubSpeedMIDIDisplay').textContent.includes('CC 16')`, 'scrub speed CC learn');
+
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 15, value: 0 });
+  await waitFor(window, `document.getElementById('scrubRangeSlider').value === '0.1'`, 'scrub range CC low endpoint');
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 15, value: 127 });
+  await waitFor(window, `document.getElementById('scrubRangeSlider').value === '10'`, 'scrub range CC high endpoint');
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 16, value: 0 });
+  await waitFor(window, `document.getElementById('scrubSpeedSlider').value === '0.1'`, 'scrub speed CC low endpoint');
+  for (let value = 0; value <= 127; value++) {
+    window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 16, value });
+  }
+  await waitFor(window, `document.getElementById('scrubSpeedSlider').value === '4'`, 'scrub speed dense CC endpoint');
+
+  await click(window, '#scrubFullRangeToggle');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 15, value: 0 });
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '10', 'Full range should ignore Range MIDI');
+  await click(window, '#scrubFullRangeToggle');
+  await setSlider(window, '#scrubRangeSlider', originalScrubParameters.range);
+  await setSlider(window, '#scrubSpeedSlider', originalScrubParameters.speed);
+
+  await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 15, value: 0 });
+  window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 16, value: 0 });
+  await waitFor(window, `document.getElementById('scrubRangeSlider').value === '0.1' && document.getElementById('scrubSpeedSlider').value === '0.1'`, 'accent scope scrub parameter CC');
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), originalScrubParameters.range);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), originalScrubParameters.speed);
+  await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
+  await setSlider(window, '#scrubRangeSlider', 0.8);
+  await setSlider(window, '#scrubSpeedSlider', 1.5);
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
+
   // Manual CC owns playback, learns from MIDI, and maps exact endpoints.
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 2`);
   await click(window, '.scrub-mode-btn[data-mode="manual-cc"]');
@@ -820,7 +867,7 @@ async function run() {
   }, 'pop-out B/F stop-and-wait at range start', 3000);
   await click(window, '#scrubAutoReverseToggle');
 
-  // Per-slot scrub/accent settings restore independently and serialize in session v1.15.
+  // Per-slot scrub/accent settings restore independently and serialize in session v1.16.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub disabled');
@@ -884,11 +931,13 @@ async function run() {
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
-  assert.equal(savedSessionData.version, '1.15');
+  assert.equal(savedSessionData.version, '1.16');
   assert.deepEqual(savedSessionData.midiMappings.accent2, { type: 'noteon', channel: 1, note: 62 });
   assert.deepEqual(savedSessionData.midiMappings.toggleScrubMode, { type: 'noteon', channel: 1, note: 63 });
   assert.deepEqual(savedSessionData.midiMappings.outputFade, { type: 'cc', channel: 1, controller: 21 });
   assert.deepEqual(savedSessionData.outputFadeSettings, { reversed: true });
+  assert.deepEqual(savedSessionData.scrubSettings.rangeController, { type: 'cc', channel: 1, controller: 15 });
+  assert.deepEqual(savedSessionData.scrubSettings.speedController, { type: 'cc', channel: 1, controller: 16 });
   assert.equal(savedSessionData.tabs.accentPoints['0']['1']['1'].time, 1.25);
   assert.equal(savedSessionData.tabs.accentPoints['0']['2']['1'].time, 0.8);
   assert.equal(savedSessionData.tabs.accentPoints['0']['1']['2'].time, 3.4);
@@ -922,7 +971,9 @@ async function run() {
   await setSlider(window, '#scrubRangeSlider', 3);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await click(window, '#loadSessionBtn');
-  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.15 reload', 10000);
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.16 reload', 10000);
+  assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeMIDIDisplay').textContent`), /CC 15/);
+  assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedMIDIDisplay').textContent`), /CC 16/);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('outputFadeReverse').checked`), true);
   window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 127, deviceId: 1, deviceName: 'DJ Controller' });
   await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '1'`, 'reloaded reversed fade mapping');

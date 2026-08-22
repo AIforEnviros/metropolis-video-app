@@ -48,7 +48,7 @@ This document defines the behavior of accent cue points. Accents are direct-trig
 
 ## Session Persistence
 
-Session format **v1.15** retains each accent's timestamp, optional scrub mode, range, and speed per tab and video slot in `tabs.accentPoints`. v1.12 accents migrate to **None**, a 2-second range, and 1x speed. Older sessions without accent data load with all four accent positions unset.
+Session format **v1.16** retains each accent's timestamp, optional scrub mode, range, and speed per tab and video slot in `tabs.accentPoints`. v1.12 accents migrate to **None**, a 2-second range, and 1x speed. Older sessions without accent data load with all four accent positions unset.
 
 ## Verification
 
