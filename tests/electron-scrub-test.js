@@ -171,6 +171,27 @@ async function run() {
     'playback and cue controls should expand when requested'
   );
 
+  await window.webContents.executeJavaScript(`(() => {
+    window.__unexpectedAlertCount = 0;
+    window.alert = () => { window.__unexpectedAlertCount += 1; };
+  })()`);
+  for (const selector of [
+    '#recordCuePointBtn',
+    '#setInPointBtn',
+    '#setOutPointBtn',
+    '#clearInOutBtn',
+    '#restartClipBtn',
+    '#prevCuePointBtn',
+    '#nextCuePointBtn'
+  ]) {
+    await click(window, selector);
+  }
+  assert.equal(
+    await window.webContents.executeJavaScript(`window.__unexpectedAlertCount`),
+    0,
+    'clip controls should be silent when no clip is selected'
+  );
+
   console.log('Dropping test video');
   const dropResult = await window.webContents.executeJavaScript(`(() => {
     try {

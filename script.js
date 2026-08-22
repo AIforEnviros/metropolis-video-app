@@ -1861,7 +1861,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add a cue point for the current clip at the current video time
     function recordCuePoint() {
         if (!selectedClipSlot) {
-            alert('Please select a clip first');
             return;
         }
 
@@ -2157,7 +2156,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // In/Out point functions
     function setInPoint() {
         if (!selectedClipSlot) {
-            alert('Please select a clip first');
             return;
         }
 
@@ -2197,7 +2195,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function setOutPoint() {
         if (!selectedClipSlot) {
-            alert('Please select a clip first');
             return;
         }
 
@@ -2237,7 +2234,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function clearInOutPoints() {
         if (!selectedClipSlot) {
-            alert('Please select a clip first');
             return;
         }
 
@@ -2519,7 +2515,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Jump to the first cue point of the current clip, or beginning if no cue points
     function restartClip() {
         if (!selectedClipSlot) {
-            alert('Please select a clip first');
             return;
         }
 
@@ -2598,7 +2593,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Navigate to the previous cue point
     function navigateToPreviousCuePoint() {
         if (!selectedClipSlot) {
-            alert('Please select a clip first');
             return;
         }
 
@@ -2747,7 +2741,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Navigate to the next cue point (mode-aware)
     function navigateToNextCuePoint() {
         if (!selectedClipSlot) {
-            alert('Please select a clip first');
             return;
         }
 
@@ -5087,7 +5080,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function loadVideoFromFile(file) {
         if (!selectedClipSlot) {
-            alert('Please select a clip slot first');
             return;
         }
 
