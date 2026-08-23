@@ -1197,6 +1197,81 @@ async function run() {
   }))()`);
   assert.deepEqual(migratedState, { mode: 'hold', range: '0.8', speed: '2.2', fullRange: false, autoReverse: true, active: true });
 
+  // Cue progression is based on cue identity, not the clamped range start.
+  // A first cue inside the old 0.1s time-search tolerance was previously
+  // skipped when a centred range extended before 00:00.
+  const edgeDropResult = await window.webContents.executeJavaScript(`(() => {
+    try {
+      const slot = document.querySelector('.clip-slot[data-clip-number="4"]');
+      window.draggedFile = {
+        name: 'test-video-edge-cues.mp4',
+        type: 'video/mp4',
+        path: ${JSON.stringify(testVideoPath)}
+      };
+      slot.dispatchEvent(new Event('drop', { bubbles: true }));
+      window.draggedFile = null;
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error.stack || error.message };
+    }
+  })()`);
+  assert.equal(edgeDropResult.ok, true, edgeDropResult.error);
+  await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="4"]').classList.contains('selected') && document.getElementById('videoPlayer').duration > 0 && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'edge cue test clip load', 10000);
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'edge cue setup scrub disabled');
+
+  const edgeDuration = await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').duration`);
+  const edgeCueTimes = [0.05, edgeDuration / 2, edgeDuration - 0.05];
+  for (const cueTime of edgeCueTimes) {
+    await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = ${cueTime}`);
+    await click(window, '#recordCuePointBtn');
+  }
+  await waitFor(window, `document.querySelectorAll('.cue-marker').length === 3`, 'edge cue markers');
+  await setSlider(window, '#scrubRangeSlider', 10);
+  await click(window, '.scrub-range-placement-btn[data-placement="center"]');
+  await click(window, '.scrub-mode-btn[data-mode="hold"]');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0`);
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('videoPlayer').paused`, 'edge cue hold activation');
+
+  for (const cueTime of [...edgeCueTimes, edgeCueTimes[0]]) {
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
+    await waitFor(window, `Math.abs(document.getElementById('videoPlayer').currentTime - ${cueTime}) < 0.025`, `edge cue progression to ${cueTime.toFixed(3)}`);
+  }
+
+  // In B/F, W must visibly jump to the selected cue anchor. Oversized ranges
+  // can give several cues the same clamped 00:00 range start, so restarting at
+  // that boundary makes correct internal progression look completely stuck.
+  await setSlider(window, '#scrubSpeedSlider', 0.1);
+  await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime >= ${edgeCueTimes[1]} - 0.025`, 'embedded B/F edge cue anchor jump');
+  await click(window, '.scrub-mode-btn[data-mode="hold"]');
+
+  // Re-selecting the clip resets its media position but must retain the same
+  // Cue 1 -> Cue 2 -> Cue 3 -> Cue 1 order when the pop-out owns playback.
+  await click(window, '.clip-slot[data-clip-number="1"]');
+  await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="1"]').classList.contains('selected')`, 'leave edge cue clip');
+  await click(window, '.clip-slot[data-clip-number="4"]');
+  await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="4"]').classList.contains('selected') && document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'reselect edge cue clip', 10000);
+  await click(window, '#outputWindowBtn');
+  await waitForNode(() => previewWindow && !previewWindow.isDestroyed(), 'edge cue pop-out open');
+  await waitFor(previewWindow, `document.getElementById('previewVideo').duration > 0`, 'edge cue pop-out video load', 10000);
+  for (const cueTime of [...edgeCueTimes, edgeCueTimes[0]]) {
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
+    await waitFor(previewWindow, `Math.abs(document.getElementById('previewVideo').currentTime - ${cueTime}) < 0.025`, `pop-out edge cue progression to ${cueTime.toFixed(3)}`);
+  }
+  await setSlider(window, '#scrubSpeedSlider', 0.1);
+  await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
+  await waitFor(previewWindow, `document.getElementById('previewVideo').currentTime >= ${edgeCueTimes[1]} - 0.025`, 'pop-out B/F edge cue anchor jump');
+  await click(window, '#outputWindowBtn');
+  await waitForNode(() => !previewWindow || previewWindow.isDestroyed(), 'edge cue pop-out close');
+
   const relevantErrors = rendererErrors.filter(message => !message.includes('MIDI') && !message.includes('favicon'));
   assert.deepEqual(relevantErrors, []);
   window.destroy();
