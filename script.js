@@ -2748,6 +2748,30 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Navigate to the next cue point (mode-aware)
+    function getCurrentScrubCueIndex(clipNumber, cuePoints) {
+        const lastNavigationMatchesSelection = (
+            lastNavigatedCueTab === currentTab &&
+            lastNavigatedCueClipNumber === clipNumber &&
+            Number.isInteger(lastNavigatedCueIndex) &&
+            lastNavigatedCueIndex >= 0 &&
+            lastNavigatedCueIndex < cuePoints.length
+        );
+        if (lastNavigationMatchesSelection) {
+            const trackedCue = cuePoints[lastNavigatedCueIndex];
+            if (Math.abs(trackedCue.time - lastNavigatedCueTime) <= 0.001) {
+                return lastNavigatedCueIndex;
+            }
+        }
+
+        const storedIndex = clipCurrentCueIndex[clipNumber];
+        if (Number.isInteger(storedIndex) && storedIndex >= 0 && storedIndex < cuePoints.length) {
+            const storedCue = cuePoints[storedIndex];
+            if (Math.abs(storedCue.time - scrubCentreTime) <= 0.02) return storedIndex;
+        }
+
+        return cuePoints.findIndex(cuePoint => Math.abs(cuePoint.time - scrubCentreTime) <= 0.02);
+    }
+
     function navigateToNextCuePoint() {
         if (!selectedClipSlot) {
             return;
@@ -2846,13 +2870,15 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Scrub mode owns cue progression. Always move to the first cue after
-        // the scrub centre, wrapping from the last cue back to the first. This
-        // bypasses normal clip-mode play/resume behavior, which can otherwise
-        // reselect the current cue or send playback to the In Point.
+        // Scrub mode owns cue progression. Advance by cue identity rather than
+        // searching for a time greater than the range anchor. Range clamping at
+        // the media edges and the former 0.1s search tolerance could otherwise
+        // skip a cue near 00:00 or make overlapping ranges appear off by one.
         if (scrubModeActive) {
-            let targetIndex = cuePoints.findIndex(cuePoint => cuePoint.time > scrubCentreTime + 0.1);
-            if (targetIndex === -1) targetIndex = 0;
+            const currentScrubCueIndex = getCurrentScrubCueIndex(clipNumber, cuePoints);
+            const targetIndex = currentScrubCueIndex >= 0
+                ? (currentScrubCueIndex + 1) % cuePoints.length
+                : 0;
             const targetCuePoint = cuePoints[targetIndex];
 
             clipCurrentCueIndex[clipNumber] = targetIndex;
@@ -4028,9 +4054,10 @@ document.addEventListener('DOMContentLoaded', function() {
     function recenterActiveScrubForNextCue(time) {
         recenterActiveScrub(time);
         if (scrubModeActive && scrubMode === 'back-forward') {
-            const { start } = getScrubBounds();
-            startBackForwardForward(start);
-            console.log('B/F next cue: started forward playback immediately');
+            const { start, end } = getScrubBounds();
+            const cuePosition = Math.max(start, Math.min(end, scrubCentreTime));
+            startBackForwardForward(cuePosition);
+            console.log('B/F next cue: started forward playback from the cue anchor');
         }
     }
 

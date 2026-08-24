@@ -141,7 +141,7 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - First-hit activation
 - Current-position B/F reversals, automatic boundary turnarounds, and optional stop-and-wait boundaries
 - Decoder-completed reverse frames
-- Cue advancement, focused-control priority, and last-to-first wrapping
+- Cue advancement by cue identity, focused-control priority, media-edge range clamping, and last-to-first wrapping
 - Pre-scrub state restoration
 - Embedded and pop-out playback behavior
 - Cue-less Fader armed playback, momentary scratching, decoder-safe idle resumption, and paused-state retention
