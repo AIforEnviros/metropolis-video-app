@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
+const { performance } = require('node:perf_hooks');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const fs = require('fs').promises;
@@ -28,6 +29,8 @@ const isDev = process.argv.includes('--dev');
 
 // MIDI debug mode (enable with: npm start -- --midi-debug)
 const MIDI_DEBUG = process.argv.includes('--midi-debug');
+const LATENCY_DEBUG = process.argv.includes('--latency-debug');
+let latencyTraceSequence = 0;
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -455,6 +458,13 @@ function forwardMIDIMessage(device, deltaTime, message) {
     deviceId: device.id,
     deviceName: device.name
   };
+
+  if (LATENCY_DEBUG) {
+    midiMessage.latencyTrace = {
+      id: ++latencyTraceSequence,
+      mainReceivedAt: performance.timeOrigin + performance.now()
+    };
+  }
 
   if (midiMessage.type === 'noteon' || midiMessage.type === 'noteoff') {
     midiMessage.note = data1;

@@ -75,6 +75,67 @@
             return activeElement === 'reverse' ? videoReverse : video;
         }
 
+        function latencyEpochNow() {
+            return performance.timeOrigin + performance.now();
+        }
+
+        function latencyFrameMatches(trace, mediaTime) {
+            if (Number.isFinite(trace.targetTime)) {
+                return Math.abs(mediaTime - trace.targetTime) <= 0.12;
+            }
+            if (trace.direction < 0) return mediaTime < trace.baselineMediaTime - 0.001;
+            if (trace.direction > 0) return mediaTime > trace.baselineMediaTime + 0.001;
+            return Math.abs(mediaTime - trace.baselineMediaTime) > 0.001;
+        }
+
+        function measureLatencyFrame(trace) {
+            const activeVideo = getActiveVideo();
+            // The main renderer receives pop-out time updates at only ~10fps.
+            // Capture the playback owner's exact time here so direction changes
+            // are measured from the frame that was actually visible.
+            const localTrace = {
+                ...trace,
+                baselineMediaTime: activeVideo.currentTime
+            };
+            if (!activeVideo.requestVideoFrameCallback) {
+                window.electronAPI.sendPreviewUpdate({
+                    type: 'latency-unavailable',
+                    trace: localTrace,
+                    output: 'pop-out'
+                });
+                return;
+            }
+            let settled = false;
+            const timeoutId = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                window.electronAPI.sendPreviewUpdate({
+                    type: 'latency-timeout',
+                    trace: localTrace,
+                    output: 'pop-out'
+                });
+            }, 2000);
+            const checkFrame = (now, metadata) => {
+                if (settled) return;
+                if (latencyFrameMatches(localTrace, metadata.mediaTime)) {
+                    settled = true;
+                    clearTimeout(timeoutId);
+                    window.electronAPI.sendPreviewUpdate({
+                        type: 'latency-result',
+                        trace: localTrace,
+                        frameData: {
+                            output: 'pop-out',
+                            presentedAt: performance.timeOrigin + metadata.expectedDisplayTime,
+                            processingDuration: metadata.processingDuration
+                        }
+                    });
+                    return;
+                }
+                activeVideo.requestVideoFrameCallback(checkFrame);
+            };
+            activeVideo.requestVideoFrameCallback(checkFrame);
+        }
+
         // Send time updates back to main window for timeline scrubber (throttled to ~10fps)
         let lastReportedTime = -1;
         let lastReportTimestamp = 0;
@@ -180,6 +241,10 @@
                     case 'setSpeed':
                         video.playbackRate = command.rate;
                         videoReverse.playbackRate = command.rate;
+                        break;
+
+                    case 'measureLatencyFrame':
+                        measureLatencyFrame(command.trace);
                         break;
 
                     case 'setOutputFade':

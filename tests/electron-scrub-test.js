@@ -139,7 +139,9 @@ async function run() {
   mainWindow = window;
 
   const rendererErrors = [];
+  const rendererMessages = [];
   window.webContents.on('console-message', (_event, level, message) => {
+    rendererMessages.push(message);
     if (level >= 3) rendererErrors.push(message);
   });
   console.log('Loading renderer');
@@ -787,9 +789,20 @@ async function run() {
   await click(window, '#scrubDrumLearnBtn');
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
   await waitFor(window, `document.getElementById('scrubDrumDisplay').textContent.includes('Note 60')`, 'drum MIDI learn');
-  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  window.webContents.send('midi-message', {
+    type: 'noteon',
+    channel: 1,
+    note: 60,
+    velocity: 100,
+    latencyTrace: { id: 9001, mainReceivedAt: performance.timeOrigin + performance.now() }
+  });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'MIDI first-hit activation');
   await waitFor(window, `!document.getElementById('videoPlayer').paused`, 'MIDI back-forward trigger');
+  await waitForNode(
+    () => rendererMessages.some(message =>
+      message.includes('[LATENCY] #9001') && message.includes('[forward]')),
+    'embedded MIDI latency result'
+  );
 
   // Exercise the same controller with the pop-out as the playback owner.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
@@ -914,12 +927,23 @@ async function run() {
       window.__popoutMidReverseMax = Math.max(window.__popoutMidReverseMax, document.getElementById('previewVideo').currentTime);
     });
   })()`);
-  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  window.webContents.send('midi-message', {
+    type: 'noteon',
+    channel: 1,
+    note: 60,
+    velocity: 100,
+    latencyTrace: { id: 9002, mainReceivedAt: performance.timeOrigin + performance.now() }
+  });
   await waitForNode(async () => {
     const status = await window.webContents.executeJavaScript(`document.getElementById('scrubStatusLine').textContent`);
     const time = await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').currentTime`);
     return status.includes('Playing: Back') && time < popoutTurnTime - 0.04;
   }, 'pop-out mid-stroke direction reversal', 3000);
+  await waitForNode(
+    () => rendererMessages.some(message =>
+      message.includes('[LATENCY] #9002') && message.includes('[reverse] (pop-out)')),
+    'pop-out MIDI latency result'
+  );
   const popoutMidReverseMax = await previewWindow.webContents.executeJavaScript(`window.__popoutMidReverseMax`);
   assert.ok(popoutMidReverseMax <= popoutTurnTime + 0.08, `pop-out reversal jumped from ${popoutTurnTime} to ${popoutMidReverseMax}`);
 

@@ -4197,7 +4197,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     pauseScrubOutput();
                     scrubVirtualPosition = video.currentTime;
                     scrubReverseElapsedSeconds = 0;
-                    scrubLastDecoderSeekTimestamp = performance.now();
+                    // Make only the first manually triggered reverse seek
+                    // eligible immediately. Subsequent seeks remain paced.
+                    scrubLastDecoderSeekTimestamp = performance.now() - SCRUB_PENDULUM_SEEK_INTERVAL_MS;
                     scrubEffectRunning = true;
                 }
                 updateScrubStatus();
@@ -5570,6 +5572,85 @@ document.addEventListener('DOMContentLoaded', function() {
     // MIDI MESSAGE HANDLING
     // ==============================================================
 
+    function latencyEpochNow() {
+        return performance.timeOrigin + performance.now();
+    }
+
+    function beginMIDILatencyTrace(message, action) {
+        if (!message.latencyTrace) return null;
+        return {
+            ...message.latencyTrace,
+            action,
+            rendererReceivedAt: message.latencyTrace.rendererReceivedAt || latencyEpochNow(),
+            actionIssuedAt: latencyEpochNow(),
+            baselineMediaTime: previewPopoutOpen ? popoutCurrentTime : (video.currentTime || 0)
+        };
+    }
+
+    function latencyFrameMatches(trace, mediaTime) {
+        if (Number.isFinite(trace.targetTime)) {
+            return Math.abs(mediaTime - trace.targetTime) <= 0.12;
+        }
+        if (trace.direction < 0) return mediaTime < trace.baselineMediaTime - 0.001;
+        if (trace.direction > 0) return mediaTime > trace.baselineMediaTime + 0.001;
+        return Math.abs(mediaTime - trace.baselineMediaTime) > 0.001;
+    }
+
+    function logLatencyResult(trace, frameData) {
+        const presentedAt = frameData.presentedAt;
+        const ipcMs = trace.rendererReceivedAt - trace.mainReceivedAt;
+        const dispatchMs = trace.actionIssuedAt - trace.rendererReceivedAt;
+        const frameMs = presentedAt - trace.actionIssuedAt;
+        const totalMs = presentedAt - trace.mainReceivedAt;
+        const decodeMs = Number.isFinite(frameData.processingDuration)
+            ? frameData.processingDuration * 1000
+            : null;
+        const directionText = trace.direction < 0
+            ? ' [reverse]'
+            : (trace.direction > 0 ? ' [forward]' : '');
+        const decodeText = decodeMs === null ? '' : ` | decode ${decodeMs.toFixed(1)}ms`;
+        console.log(
+            `[LATENCY] #${trace.id} ${trace.action}${directionText} (${frameData.output})` +
+            ` | IPC ${ipcMs.toFixed(1)}ms` +
+            ` | dispatch ${dispatchMs.toFixed(1)}ms` +
+            ` | action→frame ${frameMs.toFixed(1)}ms` +
+            ` | total ${totalMs.toFixed(1)}ms${decodeText}`
+        );
+    }
+
+    function measureEmbeddedLatencyFrame(trace) {
+        if (!video.requestVideoFrameCallback) {
+            console.log(`[LATENCY] #${trace.id} ${trace.action}: requestVideoFrameCallback unavailable`);
+            return;
+        }
+        const deadline = latencyEpochNow() + 2000;
+        const checkFrame = (now, metadata) => {
+            if (latencyFrameMatches(trace, metadata.mediaTime)) {
+                logLatencyResult(trace, {
+                    output: 'embedded',
+                    presentedAt: performance.timeOrigin + metadata.expectedDisplayTime,
+                    processingDuration: metadata.processingDuration
+                });
+                return;
+            }
+            if (latencyEpochNow() < deadline) video.requestVideoFrameCallback(checkFrame);
+            else console.log(`[LATENCY] #${trace.id} ${trace.action}: no changed embedded frame within 2000ms`);
+        };
+        video.requestVideoFrameCallback(checkFrame);
+    }
+
+    function finishMIDILatencyTrace(trace, options = {}) {
+        if (!trace) return;
+        trace.direction = Number(options.direction) || 0;
+        if (Number.isFinite(options.targetTime)) trace.targetTime = options.targetTime;
+
+        if (previewPopoutOpen) {
+            sendToPopout({ type: 'measureLatencyFrame', trace });
+        } else {
+            measureEmbeddedLatencyFrame(trace);
+        }
+    }
+
     // Debounce configuration for MIDI triggers (prevents double-triggers from controller noise)
     const MIDI_DEBOUNCE_MS = 15; // 15ms debounce - allows rapid drumming while preventing noise
     const midiLastTriggerTime = {}; // Track last trigger time per action
@@ -5615,6 +5696,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Handle incoming MIDI messages
     function handleMIDIMessage(message) {
+        if (message.latencyTrace) {
+            message.latencyTrace.rendererReceivedAt = latencyEpochNow();
+        }
         // Display MIDI activity (always show, even during learn mode)
         displayMIDIActivity(message);
 
@@ -5673,8 +5757,12 @@ document.addEventListener('DOMContentLoaded', function() {
             message.velocity > 0 &&
             message.channel === scrubConfig.drumPadNote.channel &&
             message.note === scrubConfig.drumPadNote.note) {
+            const trace = beginMIDILatencyTrace(message, `scrub trigger: ${scrubMode || selectedScrubMode || 'activate'}`);
             flashScrubHit();
             triggerClipScrubHit();
+            finishMIDILatencyTrace(trace, {
+                direction: scrubMode === 'back-forward' ? scrubBackForwardActiveDirection : 0
+            });
             return;
         }
 
@@ -5694,7 +5782,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update last trigger time and execute action
                 midiLastTriggerTime[action] = now;
                 console.log(`MIDI triggered action: ${action}`, message);
+                const trace = beginMIDILatencyTrace(message, action);
                 executeMappedAction(action);
+                finishMIDILatencyTrace(trace, {
+                    direction: scrubMode === 'back-forward' ? scrubBackForwardActiveDirection : 0,
+                    targetTime: action === 'nextCuePoint' && lastNavigatedCueIndex >= 0
+                        ? lastNavigatedCueTime
+                        : undefined
+                });
                 return;
             }
         }
@@ -7075,7 +7170,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     update.reason === 'back-forward-reverse') {
                     scrubBackForwardAwaitingReverseStart = false;
                     scrubReverseElapsedSeconds = 0;
-                    scrubLastDecoderSeekTimestamp = performance.now();
+                    // The pop-out has now reported its exact paused position,
+                    // so its first manual reverse seek can start immediately.
+                    scrubLastDecoderSeekTimestamp = performance.now() - SCRUB_PENDULUM_SEEK_INTERVAL_MS;
                     scrubEffectRunning = true;
                 }
                 updateTimeline();
@@ -7086,6 +7183,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (update.currentTime !== undefined) popoutCurrentTime = update.currentTime;
                 completeManualScrubSeek();
                 updateTimeline();
+                return;
+            }
+            if (update.type === 'latency-result') {
+                logLatencyResult(update.trace, update.frameData);
+                return;
+            }
+            if (update.type === 'latency-unavailable') {
+                console.log(`[LATENCY] #${update.trace.id} ${update.trace.action}: requestVideoFrameCallback unavailable in ${update.output}`);
+                return;
+            }
+            if (update.type === 'latency-timeout') {
+                console.log(`[LATENCY] #${update.trace.id} ${update.trace.action}: no changed frame in ${update.output} within 2000ms`);
                 return;
             }
             if (update.type === 'timeupdate') {
