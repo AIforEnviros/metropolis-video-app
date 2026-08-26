@@ -56,6 +56,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 ### Stutter (`stutter`)
 
 - Plays forward from range start to range end, then jumps back to range start and repeats.
+- Waits for each restart seek to finish before requesting another, preventing short ranges from overwhelming the decoder.
 - The drum/key trigger pauses or resumes the effect.
 
 ### Manual Stutter (`manual-stutter`)

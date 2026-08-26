@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const projectRoot = path.resolve(__dirname, '..');
 const testVideoPath = path.join(projectRoot, 'test-videos', 'test-video.mp4');
+const runShortRangeDiagnostics = process.argv.includes('--short-range-diagnostics');
 let mainWindow = null;
 let previewWindow = null;
 let savedSessionData = null;
@@ -123,6 +124,119 @@ async function setSlider(window, selector, value) {
     slider.value = ${JSON.stringify(String(value))};
     slider.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
+}
+
+async function measureVideoActivity(window, selector, durationMs = 650) {
+  return window.webContents.executeJavaScript(`(() => new Promise(resolve => {
+    const video = document.querySelector(${JSON.stringify(selector)});
+    let seeking = 0;
+    let seeked = 0;
+    let callbackId = null;
+    let previousWallTime = null;
+    let maximumFrameGap = 0;
+    const mediaTimes = [];
+    const onSeeking = () => { seeking += 1; };
+    const onSeeked = () => { seeked += 1; };
+    const onFrame = (now, metadata) => {
+      mediaTimes.push(metadata.mediaTime);
+      if (previousWallTime !== null) maximumFrameGap = Math.max(maximumFrameGap, now - previousWallTime);
+      previousWallTime = now;
+      callbackId = video.requestVideoFrameCallback(onFrame);
+    };
+    video.addEventListener('seeking', onSeeking);
+    video.addEventListener('seeked', onSeeked);
+    callbackId = video.requestVideoFrameCallback(onFrame);
+    setTimeout(() => {
+      if (callbackId !== null && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(callbackId);
+      video.removeEventListener('seeking', onSeeking);
+      video.removeEventListener('seeked', onSeeked);
+      let directionChanges = 0;
+      let previousDirection = 0;
+      for (let index = 1; index < mediaTimes.length; index += 1) {
+        const delta = mediaTimes[index] - mediaTimes[index - 1];
+        const direction = Math.abs(delta) < 0.0005 ? 0 : Math.sign(delta);
+        if (direction && previousDirection && direction !== previousDirection) directionChanges += 1;
+        if (direction) previousDirection = direction;
+      }
+      resolve({
+        frames: mediaTimes.length,
+        uniqueFrames: new Set(mediaTimes.map(time => time.toFixed(4))).size,
+        seeking,
+        seeked,
+        pendingSeeks: Math.max(0, seeking - seeked),
+        directionChanges,
+        maximumFrameGapMs: Number(maximumFrameGap.toFixed(1)),
+        minimumTime: mediaTimes.length ? Number(Math.min(...mediaTimes).toFixed(4)) : null,
+        maximumTime: mediaTimes.length ? Number(Math.max(...mediaTimes).toFixed(4)) : null,
+        paused: video.paused,
+        stillSeeking: video.seeking
+      });
+    }, ${Number(durationMs)});
+  }))()`);
+}
+
+async function runShortRangeModeDiagnostics(controlWindow, playbackWindow, videoSelector, outputLabel) {
+  const results = [];
+  await setSlider(controlWindow, '#scrubRangeSlider', 0.1);
+  for (const speed of [1, 2, 4]) {
+    await setSlider(controlWindow, '#scrubSpeedSlider', speed);
+    await click(controlWindow, '.scrub-mode-btn[data-mode="stutter"]');
+    await waitFor(playbackWindow, `!document.querySelector(${JSON.stringify(videoSelector)}).paused`, `${outputLabel} 0.1s stutter ${speed}x start`);
+    results.push({
+      output: outputLabel,
+      mode: 'stutter',
+      range: 0.1,
+      speed,
+      ...(await measureVideoActivity(playbackWindow, videoSelector))
+    });
+
+    await click(controlWindow, '.scrub-mode-btn[data-mode="pendulum"]');
+    await waitFor(playbackWindow, `document.querySelector(${JSON.stringify(videoSelector)}).paused`, `${outputLabel} 0.1s pendulum ${speed}x start`);
+    results.push({
+      output: outputLabel,
+      mode: 'pendulum',
+      range: 0.1,
+      speed,
+      ...(await measureVideoActivity(playbackWindow, videoSelector))
+    });
+  }
+  results.filter(result => result.mode === 'stutter').forEach(result => {
+    assert.ok(
+      result.pendingSeeks <= 1,
+      `${outputLabel} ${result.speed}x Stutter queued ${result.pendingSeeks} decoder seeks`
+    );
+    assert.ok(
+      result.seeked > 0,
+      `${outputLabel} ${result.speed}x Stutter completed no decoder seeks`
+    );
+  });
+  results.forEach(result => console.log(`SHORT_RANGE ${JSON.stringify(result)}`));
+
+  // Stop the seek-heavy diagnostic before restoring the normal test state.
+  await click(controlWindow, '#scrubActivateBtn');
+  await waitFor(controlWindow, `document.getElementById('scrubActiveBadge').style.display === 'none'`, `${outputLabel} short-range diagnostic stop`);
+  await setSlider(controlWindow, '#scrubRangeSlider', 0.5);
+  await setSlider(controlWindow, '#scrubSpeedSlider', 4);
+  await playbackWindow.webContents.executeJavaScript(`(() => {
+    const video = document.querySelector(${JSON.stringify(videoSelector)});
+    video.pause();
+    video.load();
+  })()`);
+  await waitFor(
+    playbackWindow,
+    `document.querySelector(${JSON.stringify(videoSelector)}).duration > 0 && document.querySelector(${JSON.stringify(videoSelector)}).readyState >= 2`,
+    `${outputLabel} short-range decoder reload`,
+    10000
+  );
+  await playbackWindow.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(videoSelector)}).currentTime = 2`);
+  await waitFor(
+    playbackWindow,
+    `!document.querySelector(${JSON.stringify(videoSelector)}).seeking && Math.abs(document.querySelector(${JSON.stringify(videoSelector)}).currentTime - 2) < 0.04`,
+    `${outputLabel} short-range decoder recovery`
+  );
+  await click(controlWindow, '#scrubActivateBtn');
+  await waitFor(controlWindow, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, `${outputLabel} short-range mode restore`);
+  return results;
 }
 
 async function run() {
@@ -752,6 +866,11 @@ async function run() {
   const localCompletedSeeks = await window.webContents.executeJavaScript(`window.__localPendulumSeeked`);
   assert.ok(localCompletedSeeks >= 3, `pendulum decoded ${localCompletedSeeks} frames`);
 
+  if (runShortRangeDiagnostics) {
+    console.log('Running embedded 0.1s Pendulum/Stutter diagnostics');
+    await runShortRangeModeDiagnostics(window, window, '#videoPlayer', 'embedded');
+  }
+
   await click(window, '.scrub-mode-btn[data-mode="drift"]');
   await waitFor(window, `!document.getElementById('videoPlayer').paused`, 'drift start');
   state = await readState(window);
@@ -894,6 +1013,11 @@ async function run() {
   assert.ok(popoutDeltas.some(value => value < -0.01), 'pop-out pendulum moved backward');
   const popoutCompletedSeeks = await previewWindow.webContents.executeJavaScript(`window.__popoutPendulumSeeked`);
   assert.ok(popoutCompletedSeeks >= 3, `pop-out pendulum decoded ${popoutCompletedSeeks} frames`);
+
+  if (runShortRangeDiagnostics) {
+    console.log('Running pop-out 0.1s Pendulum/Stutter diagnostics');
+    await runShortRangeModeDiagnostics(window, previewWindow, '#previewVideo', 'pop-out');
+  }
 
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });

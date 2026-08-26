@@ -4140,7 +4140,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         } else if (scrubMode === 'stutter' && scrubEffectRunning && currentPos >= end) {
-            seekScrubPosition(start);
+            const decoderReady = previewPopoutOpen ? !scrubPopoutSeekPending : !video.seeking;
+            if (decoderReady) {
+                seekScrubPosition(start);
+                // Time reports from the pop-out are throttled, so explicitly
+                // hold the gate until its seeked acknowledgement arrives.
+                if (previewPopoutOpen) scrubPopoutSeekPending = true;
+            }
         } else if (scrubMode === 'manual-stutter' && scrubEffectRunning && currentPos >= end) {
             pauseScrubOutput();
             seekScrubPosition(end);

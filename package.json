@@ -10,6 +10,7 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "test:scrub": "electron tests/electron-scrub-test.js",
+    "test:short-range": "electron tests/electron-scrub-test.js --short-range-diagnostics",
     "test:portable": "node tests/portable-session-test.js",
     "build": "electron-builder --win --mac",
     "build:win": "electron-builder --win",
