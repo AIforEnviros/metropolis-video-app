@@ -3938,11 +3938,43 @@ document.addEventListener('DOMContentLoaded', function() {
     function syncScrubNativeLoopSetting(activeScrubMode = scrubMode) {
         const clipNumber = selectedClipSlot ? selectedClipSlot.dataset.clipNumber : null;
         const clipUsesLoop = clipNumber ? (clipModes[clipNumber] || 'loop') === 'loop' : false;
-        // B/F owns both range boundaries. Native looping can wrap a full-video
-        // clip to 00:00 before the scrub controller sees its final frame.
-        const shouldLoop = activeScrubMode === 'back-forward' ? false : clipUsesLoop;
+        // Every scrub effect owns its boundaries. Native looping can wrap a
+        // range that touches the video end before the controller sees it.
+        const shouldLoop = activeScrubMode ? false : clipUsesLoop;
         video.loop = shouldLoop;
         if (previewPopoutOpen) sendToPopout({ type: 'setLoop', loop: shouldLoop });
+    }
+
+    function handleActiveScrubEnded() {
+        const { start, end } = getScrubBounds();
+        if (scrubMode === 'back-forward' && scrubConfig.fullRange) {
+            if (scrubBackForwardActiveDirection > 0) {
+                if (scrubConfig.autoReverse) startBackForwardReverse(end);
+                else stopBackForwardAtBoundary(end);
+            }
+            return;
+        }
+
+        switch (scrubMode) {
+            case 'stutter':
+                seekScrubPosition(start);
+                setScrubPlaybackRate(scrubConfig.speed);
+                playScrubOutput();
+                break;
+            case 'manual-stutter':
+                pauseScrubOutput();
+                seekScrubPosition(end);
+                updateScrubStatus();
+                break;
+            case 'drift':
+                pauseScrubOutput();
+                updateScrubStatus();
+                break;
+            case 'pendulum':
+            case 'hold':
+            case 'manual-cc':
+                break;
+        }
     }
 
     function startBackForwardForward(position = null) {
@@ -4342,7 +4374,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             }
-        } else if (scrubMode === 'stutter' && scrubEffectRunning && currentPos >= end) {
+        } else if (scrubMode === 'stutter' && scrubEffectRunning &&
+            (currentPos >= end || currentPos >= getScrubDuration() - 0.02)) {
             const decoderReady = previewPopoutOpen ? !scrubPopoutSeekPending : !video.seeking;
             if (decoderReady) {
                 seekScrubPosition(start);
@@ -4350,7 +4383,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 // hold the gate until its seeked acknowledgement arrives.
                 if (previewPopoutOpen) scrubPopoutSeekPending = true;
             }
-        } else if (scrubMode === 'manual-stutter' && scrubEffectRunning && currentPos >= end) {
+        } else if (scrubMode === 'manual-stutter' && scrubEffectRunning &&
+            (currentPos >= end || currentPos >= getScrubDuration() - 0.02)) {
             pauseScrubOutput();
             seekScrubPosition(end);
             updateScrubStatus();
@@ -7172,12 +7206,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     video.addEventListener('ended', function() {
-        if (scrubModeActive && scrubMode === 'back-forward' && scrubConfig.fullRange) {
-            if (scrubBackForwardActiveDirection > 0) {
-                const { end } = getScrubBounds();
-                if (scrubConfig.autoReverse) startBackForwardReverse(end);
-                else stopBackForwardAtBoundary(end);
-            }
+        if (scrubModeActive) {
+            handleActiveScrubEnded();
             return;
         }
         console.log('Video ended - handling based on playback mode');
@@ -7372,7 +7402,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             src: video.src || '',
                             currentTime: activeVideo.currentTime,
                             rate: activeVideo.playbackRate,
-                            loop: scrubModeActive && scrubMode === 'back-forward' ? false : (mode === 'loop'),
+                            loop: scrubModeActive ? false : (mode === 'loop'),
                             outputFadeLevel: outputFadeLevel,
                             playing: wasPlaying
                         });
@@ -7436,13 +7466,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 );
                 return;
             }
-            if (update.type === 'ended' && scrubModeActive &&
-                scrubMode === 'back-forward' && scrubConfig.fullRange) {
-                if (scrubBackForwardActiveDirection > 0) {
-                    const { end } = getScrubBounds();
-                    if (scrubConfig.autoReverse) startBackForwardReverse(end);
-                    else stopBackForwardAtBoundary(end);
-                }
+            if (update.type === 'ended' && scrubModeActive) {
+                handleActiveScrubEnded();
                 return;
             }
             if (update.type === 'paused') {

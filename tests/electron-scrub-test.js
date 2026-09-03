@@ -834,9 +834,28 @@ async function run() {
   const burstSeekCount = await window.webContents.executeJavaScript(`window.__faderSeekCount`);
   assert.ok(burstSeekCount <= 8, `CC burst caused ${burstSeekCount} decoder seeks`);
 
-  // Live mode switching must initialize each distinct behavior.
-  await setSlider(window, '#scrubSpeedSlider', 2);
+  // A scrub range ending at the video duration must stay under scrub control
+  // instead of the clip's native Loop mode wrapping it to 00:00.
+  await click(window, '.scrub-range-placement-btn[data-placement="start"]');
+  await setSlider(window, '#scrubRangeSlider', 10);
+  await setSlider(window, '#scrubSpeedSlider', 4);
+  await window.webContents.executeJavaScript(`(() => {
+    const video = document.getElementById('videoPlayer');
+    window.__stutterEndMin = video.currentTime;
+    video.addEventListener('timeupdate', () => {
+      window.__stutterEndMin = Math.min(window.__stutterEndMin, video.currentTime);
+    });
+  })()`);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
+  await waitFor(window, `document.getElementById('videoPlayer').loop === false`, 'Stutter native-loop ownership');
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  const stutterEndMin = await window.webContents.executeJavaScript(`window.__stutterEndMin`);
+  assert.ok(stutterEndMin >= 1.95, `end-aligned Stutter wrapped below its range start: ${stutterEndMin}`);
+
+  // Live mode switching must initialize each distinct behavior.
+  await click(window, '.scrub-range-placement-btn[data-placement="center"]');
+  await setSlider(window, '#scrubRangeSlider', 0.5);
+  await setSlider(window, '#scrubSpeedSlider', 2);
   await waitFor(window, `!document.getElementById('videoPlayer').paused`, 'stutter start');
   await waitFor(window, `document.getElementById('videoPlayer').playbackRate === 2`, 'stutter owns 2x playback rate');
   await click(window, '.speed-preset-btn[data-speed="0.5"]');
