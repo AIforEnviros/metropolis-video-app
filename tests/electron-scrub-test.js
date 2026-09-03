@@ -58,7 +58,11 @@ function registerRendererStubs() {
   ipcMain.handle('create-preview-popout', async () => {
     if (!previewWindow || previewWindow.isDestroyed()) {
       previewWindow = new BrowserWindow({
-        show: false,
+        show: true,
+        width: 320,
+        height: 180,
+        x: 1000,
+        y: 0,
         webPreferences: {
           preload: path.join(projectRoot, 'preload.js'),
           contextIsolation: true,
@@ -244,7 +248,11 @@ async function runShortRangeModeDiagnostics(controlWindow, playbackWindow, video
 async function run() {
   registerRendererStubs();
   const window = new BrowserWindow({
-    show: false,
+    show: true,
+    width: 960,
+    height: 720,
+    x: 0,
+    y: 0,
     webPreferences: {
       preload: path.join(projectRoot, 'preload.js'),
       contextIsolation: true,
