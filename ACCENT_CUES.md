@@ -45,7 +45,7 @@ This document defines the behavior of accent cue points. Accents are direct-trig
 - The next **Previous Cue Point** command goes to the normal cue before the one active before the accent, or to the clip's In point when already before/at the first cue.
 - The preserved normal position is tied to the cue's identity and timestamp, so moving, sorting, or deleting cue markers does not silently redirect the post-accent navigation to an unrelated array index.
 - Restarting, changing clips, changing tabs, or clearing the clip clears any temporary accent-return context.
-- While scrub mode is active, an accent recenters the active scrub range at the accent timestamp. The next normal cue command still resumes from the preserved normal sequence position; if the active mode is B/F, that cue jump immediately begins a forward stroke.
+- While scrub mode is active, an accent recenters the active scrub range at the accent timestamp. While clip B/F is active, a plain accent starts a forward stroke from the accent timestamp. The next normal cue command still resumes from the preserved normal sequence position; if the active mode is B/F, that cue jump immediately begins a forward stroke.
 
 ## Session Persistence
 

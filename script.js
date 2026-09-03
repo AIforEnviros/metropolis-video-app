@@ -2228,7 +2228,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         lastTimeupdateTime = accent.time;
         if (scrubModeActive) {
-            recenterActiveScrub(accent.time);
+            recenterActiveScrubForNextCue(accent.time);
             console.log(`Accent ${slot}: recentered scrub at ${formatTime(accent.time)}`);
             return;
         }

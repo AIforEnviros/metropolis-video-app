@@ -662,6 +662,11 @@ async function run() {
   assert.ok(backwardCompletedSeeks >= 2, `automatic backward stroke decoded ${backwardCompletedSeeks} frames`);
   await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Forward') && !document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime < 1.95`, 'automatic forward turn at range start', 3000);
 
+  await window.webContents.executeJavaScript(`document.activeElement && document.activeElement.blur()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime >= 1.25 && document.getElementById('videoPlayer').currentTime < 1.55 && document.getElementById('scrubStatusLine').textContent.includes('Playing: Forward')`, 'plain accent starts B/F forward from accent', 300);
+
   await setSlider(window, '#scrubSpeedSlider', 1);
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'W' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'W' });
