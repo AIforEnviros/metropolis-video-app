@@ -2233,6 +2233,18 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        const cuePoints = clipCuePoints[clipNumber] || [];
+        const coincidentCueIndex = cuePoints.findIndex(cuePoint =>
+            Math.abs(cuePoint.time - accent.time) <= 0.15
+        );
+        if (coincidentCueIndex >= 0) {
+            justNavigatedToCue = true;
+            lastNavigatedCueIndex = coincidentCueIndex;
+            lastNavigatedCueTime = cuePoints[coincidentCueIndex].time;
+            lastNavigatedCueClipNumber = clipNumber;
+            lastNavigatedCueTab = currentTab;
+        }
+
         if (previewPopoutOpen) {
             popoutCurrentTime = accent.time;
             sendToPopout({ type: 'seek', time: accent.time });

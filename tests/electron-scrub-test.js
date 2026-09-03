@@ -464,6 +464,33 @@ async function run() {
   await waitFor(window, `document.querySelectorAll('.accent-marker').length === 2`, 'accent point setup');
   assert.equal(await window.webContents.executeJavaScript(`document.querySelectorAll('.cue-marker').length`), 2);
 
+  // A direct accent coincident with a normal cue must be treated as an
+  // intentional jump, not immediately stopped by Forward & Stop detection.
+  await window.webContents.executeJavaScript(`(() => {
+    const slot = document.querySelector('.clip-slot[data-clip-number="1"]');
+    slot.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }));
+  })()`);
+  await click(window, '#clipContextMenu .context-menu-item[data-mode="forward-stop"]');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 2`);
+  await click(window, '.accent-set-btn[data-accent-slot="1"]');
+  await window.webContents.executeJavaScript(`document.activeElement && document.activeElement.blur()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').paused`),
+    false,
+    'coincident accent must keep playing in Forward & Stop mode'
+  );
+  await window.webContents.executeJavaScript(`(() => {
+    const slot = document.querySelector('.clip-slot[data-clip-number="1"]');
+    slot.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }));
+  })()`);
+  await click(window, '#clipContextMenu .context-menu-item[data-mode="loop"]');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 1.25`);
+  await click(window, '.accent-set-btn[data-accent-slot="1"]');
+  await click(window, '#restartClipBtn');
+
   await window.webContents.executeJavaScript(`(() => {
     const video = document.getElementById('videoPlayer');
     video.pause();
