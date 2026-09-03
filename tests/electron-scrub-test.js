@@ -1325,6 +1325,40 @@ async function run() {
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '2');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1');
 
+  // With the pop-out owning playback, a newly selected clip must activate its
+  // saved scrub only after that clip reports its own loaded start position.
+  await click(window, '.scrub-mode-btn[data-mode="hold"]');
+  await click(window, '#outputWindowBtn');
+  await waitForNode(() => previewWindow && !previewWindow.isDestroyed(), 'pop-out anchor regression window creation');
+  await waitFor(previewWindow, `document.getElementById('previewVideo').duration > 0`, 'pop-out anchor regression metadata', 10000);
+  await click(window, '.clip-slot[data-clip-number="1"]');
+  await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="1"]').classList.contains('selected') && document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one ready for pop-out anchor regression', 10000);
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'slot one Hold saved ON');
+  await previewWindow.webContents.executeJavaScript(`(() => {
+    const video = document.getElementById('previewVideo');
+    video.currentTime = 3;
+    window.electronAPI.sendPreviewUpdate({
+      type: 'timeupdate',
+      currentTime: 3,
+      duration: video.duration
+    });
+  })()`);
+  await click(window, '.clip-slot[data-clip-number="2"]');
+  await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="2"]').classList.contains('selected') && document.getElementById('scrubCentreDisplay').textContent.includes('00:00')`, 'slot two pop-out scrub anchor reset', 10000);
+  await waitFor(previewWindow, `Math.abs(document.getElementById('previewVideo').currentTime) < 0.05`, 'slot two pop-out loaded at In point', 10000);
+
+  // Restore slot one's pre-test OFF preference; slot two remains enabled and
+  // is configured by the persistence scenarios below.
+  await click(window, '.clip-slot[data-clip-number="1"]');
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'slot one Hold restored after pop-out anchor regression', 10000);
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub OFF restored');
+  await click(window, '.clip-slot[data-clip-number="2"]');
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'slot two Hold restored', 10000);
+  await click(window, '#outputWindowBtn');
+  await waitForNode(() => !previewWindow || previewWindow.isDestroyed(), 'pop-out anchor regression close');
+
   await setSlider(window, '#scrubRangeSlider', 1.25);
   await setSlider(window, '#scrubSpeedSlider', 1.5);
   await click(window, '.scrub-mode-btn[data-mode="drift"]');

@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Pop-out preview state
     let previewPopoutOpen = false;
     let popoutCurrentTime = 0;
+    let pendingPopoutScrubActivationClipNumber = null;
 
     // Global output level, independent of playback and the opacity used when
     // the forward/reverse video elements exchange ownership.
@@ -1661,6 +1662,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const inOut = clipInOutPoints[clipNumber];
                 const startTime = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
                 video.currentTime = startTime;
+                popoutCurrentTime = startTime;
+                scrubVirtualPosition = startTime;
                 // Reset cue-detection timestamp so cues at the start of this clip aren't missed
                 // (stale value from the previous clip would cause crossedPast checks to fail)
                 lastTimeupdateTime = startTime;
@@ -1670,28 +1673,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const savedScrubSettings = ensureClipScrubSettings(clipNumber);
 
+                if (previewPopoutOpen) {
+                    pendingPopoutScrubActivationClipNumber = clipNumber;
+                    sendToPopout({
+                        type: 'loadClip',
+                        src: video.src,
+                        currentTime: startTime
+                    });
+                }
+
                 // When scrub is ON it owns playback from the outset. Starting
                 // normal autoplay first would race against pausing modes such as
                 // Fader/Hold and reject the superseded play() promise.
                 if (savedScrubSettings.enabled) {
                     globalPlayIntent = isClipAutoPlay(clipNumber);
-                    if (previewPopoutOpen) {
-                        sendToPopout({
-                            type: 'loadClip',
-                            src: video.src,
-                            currentTime: startTime
-                        });
-                    }
                     console.log('Clip loaded with saved scrub mode owning playback');
                 } else if (isClipAutoPlay(clipNumber)) {
                     globalPlayIntent = true;
                     if (previewPopoutOpen) {
-                        // Route to pop-out - load clip there and play
-                        sendToPopout({
-                            type: 'loadClip',
-                            src: video.src,
-                            currentTime: startTime
-                        });
+                        // The clip load was sent above; play after it has had a
+                        // chance to establish its initial frame.
                         setTimeout(() => sendToPopout({ type: 'play' }), 200);
                         console.log('Auto-playing clip on selection (sent to pop-out)');
                     } else {
@@ -1707,17 +1708,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 } else {
                     globalPlayIntent = false;
-                    if (previewPopoutOpen) {
-                        sendToPopout({
-                            type: 'loadClip',
-                            src: video.src,
-                            currentTime: startTime
-                        });
-                    }
                     console.log('Clip loaded but not playing (auto-play disabled)');
                 }
 
-                activateSavedScrubForSelectedClip(clipNumber);
+                if (!previewPopoutOpen) activateSavedScrubForSelectedClip(clipNumber);
             }, { once: true });
         } else {
             // No video in this slot
@@ -7155,7 +7149,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         ? loopInOut.inPoint : 0;
                     video.currentTime = loopInPoint;
                     if (globalPlayIntent) {
-                        video.play().catch(e => console.error('[loop] Error restarting video:', e));
+                        video.play().catch(e => {
+                            if (e?.name !== 'AbortError') console.error('[loop] Error restarting video:', e);
+                        });
                     }
                     console.log(`[loop] Restarting at ${loopInPoint.toFixed(2)}s`);
                 }
@@ -7429,6 +7425,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             await window.electronAPI.closePreviewPopout();
             previewPopoutOpen = false;
+            pendingPopoutScrubActivationClipNumber = null;
             popoutBtn.textContent = 'Pop Out Preview';
 
             // Restore main window video opacity
@@ -7444,6 +7441,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (window.electronAPI && window.electronAPI.onPreviewPopoutClosed) {
         window.electronAPI.onPreviewPopoutClosed(() => {
             previewPopoutOpen = false;
+            pendingPopoutScrubActivationClipNumber = null;
             popoutBtn.textContent = 'Pop Out Preview';
 
             // Restore main window video opacity
@@ -7464,6 +7462,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     `Ignored stale pop-out ${update.type} from scrub navigation ` +
                     `${update.navigationGeneration}; current is ${scrubNavigationGeneration}`
                 );
+                return;
+            }
+            if (update.type === 'loaded') {
+                scrubPopoutSeekPending = false;
+                if (update.currentTime !== undefined) {
+                    popoutCurrentTime = update.currentTime;
+                    scrubVirtualPosition = update.currentTime;
+                }
+                if (update.duration && update.duration > 0) videoDuration = update.duration;
+
+                const pendingClipNumber = pendingPopoutScrubActivationClipNumber;
+                if (pendingClipNumber !== null && selectedClipSlot &&
+                    selectedClipSlot.dataset.clipNumber === pendingClipNumber) {
+                    pendingPopoutScrubActivationClipNumber = null;
+                    activateSavedScrubForSelectedClip(pendingClipNumber);
+                }
+                updateTimeline();
                 return;
             }
             if (update.type === 'ended' && scrubModeActive) {

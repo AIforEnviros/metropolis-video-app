@@ -220,6 +220,11 @@
                         if (command.currentTime !== undefined) {
                             video.addEventListener('loadeddata', function onLoad() {
                                 video.currentTime = command.currentTime;
+                                window.electronAPI.sendPreviewUpdate(withNavigationGeneration({
+                                    type: 'loaded',
+                                    currentTime: video.currentTime,
+                                    duration: video.duration
+                                }));
                                 video.removeEventListener('loadeddata', onLoad);
                             });
                         }
