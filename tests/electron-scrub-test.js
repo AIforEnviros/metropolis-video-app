@@ -963,6 +963,27 @@ async function run() {
   assert.equal(state.paused, true, 'Space must not play raw video during Hold');
   assert.ok(Math.abs(state.time - holdTimeBeforeSpace) < 0.04, `Space moved Hold from ${holdTimeBeforeSpace} to ${state.time}`);
 
+  savedSessionData = null;
+  await click(window, '#saveSessionBtn');
+  await waitForNode(() => savedSessionData !== null, 'clean session before Hold trigger persistence test');
+  const cleanHoldSessionStatus = await window.webContents.executeJavaScript(`document.getElementById('sessionStatus').textContent`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'Hold trigger deactivation');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'Hold trigger reactivation');
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.querySelector('.clip-slot[data-clip-number="1"] .clip-scrub-indicator').classList.contains('off')`),
+    false,
+    'Hold trigger must preserve the slot scrub ON setting'
+  );
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.getElementById('sessionStatus').textContent`),
+    cleanHoldSessionStatus,
+    'Hold triggers must not mark the session modified'
+  );
+
   // The remappable next-cue key gets priority even while a scrub slider has
   // focus, and wraps from the final cue back to the first.
   await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').focus()`);

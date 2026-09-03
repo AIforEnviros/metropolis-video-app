@@ -76,6 +76,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 
 - Pauses and holds the exact scrub-center frame.
 - The next drum/key trigger deactivates scrub and restores the pre-scrub playback state.
+- The trigger deactivates the effect but leaves the slot's Scrub On/Off setting unchanged.
 
 ## Cue Navigation and Priority
 

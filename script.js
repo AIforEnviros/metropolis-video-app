@@ -4463,7 +4463,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 playScrubOutput();
                 break;
             case 'hold':
-                deactivateScrubMode();
+                deactivateScrubMode(true);
                 break;
         }
     }
@@ -4483,7 +4483,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!scrubModeActive) {
             const clipNumber = selectedClipSlot.dataset.clipNumber;
             const settings = applyClipScrubSettings(clipNumber);
-            const activated = activateScrubMode(settings.mode);
+            const activated = activateScrubMode(settings.mode, !settings.enabled);
             if (!activated) return false;
 
             // B/F waits for its first direction trigger. Other drum-driven
@@ -4654,7 +4654,7 @@ document.addEventListener('DOMContentLoaded', function() {
             video.play().then(() => {
                 console.log('Video playing (spacebar)');
             }).catch(e => {
-                console.error('Error playing video:', e);
+                if (e?.name !== 'AbortError') console.error('Error playing video:', e);
             });
         } else {
             // Video is playing, pause it
