@@ -297,6 +297,47 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function getNavigationPlaybackTime() {
+        return previewPopoutOpen ? popoutCurrentTime : (video.currentTime || 0);
+    }
+
+    function getVerifiedStoredCueIndex(clipNumber, cuePoints, position, tolerance = 0.1) {
+        const storedIndex = Number(clipCurrentCueIndex[clipNumber]);
+        if (!Number.isInteger(storedIndex) || storedIndex < 0 || storedIndex >= cuePoints.length) return -1;
+        const cuePoint = cuePoints[storedIndex];
+        const nextCuePoint = cuePoints[storedIndex + 1];
+        const followsStoredCue = position >= cuePoint.time - tolerance;
+        const precedesNextCue = !nextCuePoint || position < nextCuePoint.time - tolerance;
+        return followsStoredCue && precedesNextCue ? storedIndex : -1;
+    }
+
+    function getLogicalCueIndexAtPosition(clipNumber, cuePoints, position) {
+        const verifiedStoredIndex = getVerifiedStoredCueIndex(clipNumber, cuePoints, position);
+        if (verifiedStoredIndex >= 0) return verifiedStoredIndex;
+        let logicalIndex = -1;
+        cuePoints.forEach((cuePoint, index) => {
+            if (cuePoint.time <= position + 0.1) logicalIndex = index;
+        });
+        return logicalIndex;
+    }
+
+    function getPreviousCueTargetIndex(cuePoints, position, tolerance = 0.1) {
+        // When exactly on a cue, Previous means the cue before it. Between cue
+        // points, Previous means the nearest cue behind the visible playhead.
+        // Subtracting from the nearest-behind cue in both cases skipped a cue
+        // and commonly turned Q into the same In-point jump as R.
+        const exactIndex = cuePoints.findIndex(cuePoint =>
+            Math.abs(cuePoint.time - position) <= tolerance
+        );
+        if (exactIndex >= 0) return exactIndex - 1;
+
+        let previousIndex = -1;
+        cuePoints.forEach((cuePoint, index) => {
+            if (cuePoint.time < position - tolerance) previousIndex = index;
+        });
+        return previousIndex;
+    }
+
     function resolveAccentMainCueIndex(context, cuePoints) {
         if (!context) return -1;
         const cueIdIndex = getCueIndexById(cuePoints, context.mainCueId);
@@ -2168,13 +2209,18 @@ document.addEventListener('DOMContentLoaded', function() {
             accentNavigationContext.clipNumber === clipNumber
             ? accentNavigationContext
             : null;
-        accentNavigationContext = {
-            tabIndex: currentTab,
-            clipNumber,
-            mainCueIndex: existingContext
-                ? existingContext.mainCueIndex
-                : (clipCurrentCueIndex[clipNumber] ?? -1)
-        };
+        if (!existingContext) {
+            const cuePoints = clipCuePoints[clipNumber] || [];
+            const navigationTime = scrubModeActive ? scrubCentreTime : getNavigationPlaybackTime();
+            const mainCueIndex = getLogicalCueIndexAtPosition(clipNumber, cuePoints, navigationTime);
+            accentNavigationContext = {
+                tabIndex: currentTab,
+                clipNumber,
+                mainCueIndex,
+                mainCueId: mainCueIndex >= 0 ? cuePoints[mainCueIndex]?.id : null,
+                mainCueTime: mainCueIndex >= 0 ? cuePoints[mainCueIndex]?.time : navigationTime
+            };
+        }
 
         const accentScrubSettings = normaliseAccentScrubSettings(accent);
         if (accentScrubSettings.scrubMode) {
@@ -2225,12 +2271,12 @@ document.addEventListener('DOMContentLoaded', function() {
         selectScrubModeUI(settings.scrubMode);
         syncScrubParameterUI();
 
-        const activated = activateScrubMode(settings.scrubMode, false);
+        beginScrubNavigation();
+        const activated = activateScrubMode(settings.scrubMode, false, accent.time);
         if (!activated) {
             restoreClipScrubSettingsAfterAccent();
             return;
         }
-        recenterActiveScrub(accent.time);
         if (settings.scrubMode === 'back-forward') handleScrubDrumHit();
         console.log(`Accent ${slot}: started ${settings.scrubMode} at ${formatTime(accent.time)}`);
     }
@@ -2247,7 +2293,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (scrubModeActive) {
             if (directionLabel === 'next') recenterActiveScrubForNextCue(targetCuePoint.time);
-            else recenterActiveScrub(targetCuePoint.time);
+            else recenterActiveScrubForPreviousCue(targetCuePoint.time);
         } else {
             if (previewPopoutOpen) {
                 popoutCurrentTime = targetCuePoint.time;
@@ -2634,6 +2680,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const clipNumber = selectedClipSlot.dataset.clipNumber;
         accentNavigationContext = null;
+        const wasAccentScrub = Boolean(scrubModeActive && accentScrubOverride);
+
+        // An accent owns temporary scrub settings. End that override first so
+        // Restart can return to the clip's own saved scrub mode at its In point.
+        if (wasAccentScrub) deactivateScrubMode(true, false);
 
         if (!clipVideos[clipNumber]) {
             alert('Please load a video into the selected clip first');
@@ -2645,37 +2696,44 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const cuePoints = clipCuePoints[clipNumber] || [];
         const inOut = clipInOutPoints[clipNumber];
 
         // Get In Point (default to 0 if not set)
         const inPoint = (inOut && inOut.inPoint !== undefined && inOut.inPoint !== null) ? inOut.inPoint : 0;
 
-        // Jump to In Point
+        // Restart is before the normal cue sequence. Do not label the first
+        // cue as already visited; that stale index made Q/R appear inconsistent.
+        clipCurrentCueIndex[clipNumber] = -1;
+
+        // Clear navigation flag — restart should stop at the first cue point it reaches
+        justNavigatedToCue = false;
+        lastNavigatedCueIndex = -1;
+        lastNavigatedCueTime = inPoint;
+        lastNavigatedCueClipNumber = clipNumber;
+        lastNavigatedCueTab = currentTab;
+        lastTimeupdateTime = inPoint;
+
+        if (wasAccentScrub) {
+            const settings = applyClipScrubSettings(clipNumber);
+            if (settings.enabled) {
+                beginScrubNavigation();
+            }
+            if (settings.enabled && activateScrubMode(settings.mode, false, inPoint)) {
+                return;
+            }
+        } else if (scrubModeActive) {
+            recenterActiveScrub(inPoint);
+            return;
+        }
+
+        // With no active scrub owner, one ordinary seek is sufficient.
         if (previewPopoutOpen) {
             popoutCurrentTime = inPoint;
             sendToPopout({ type: 'seek', time: inPoint });
         } else {
             video.currentTime = inPoint;
         }
-        lastTimeupdateTime = inPoint; // Reset so we don't falsely detect cues between old position and In Point
         updateTimeline();
-
-        // Find the cue index at or after In Point
-        let cueIndex = -1;
-        if (cuePoints.length > 0) {
-            for (let i = 0; i < cuePoints.length; i++) {
-                if (cuePoints[i].time >= inPoint - 0.1) { // 0.1s tolerance
-                    cueIndex = i;
-                    break;
-                }
-            }
-        }
-        clipCurrentCueIndex[clipNumber] = cueIndex;
-
-        // Clear navigation flag — restart should stop at the first cue point it reaches
-        justNavigatedToCue = false;
-        lastNavigatedCueIndex = -1;
 
         // Restart - only auto-play if per-clip auto-play is enabled
         if (isClipAutoPlay(clipNumber)) {
@@ -2758,31 +2816,42 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Get current cue index (default to 0 if not set)
-        const currentIndex = clipCurrentCueIndex[clipNumber] !== undefined ? clipCurrentCueIndex[clipNumber] : 0;
-
-        // Calculate previous index
-        const prevIndex = currentIndex - 1;
+        const scrubAnchorCueIndex = scrubModeActive
+            ? getCurrentScrubCueIndex(clipNumber, cuePoints)
+            : -1;
+        const navigationTime = scrubModeActive ? getScrubCurrentTime() : getNavigationPlaybackTime();
+        const prevIndex = scrubAnchorCueIndex >= 0
+            ? scrubAnchorCueIndex - 1
+            : getPreviousCueTargetIndex(cuePoints, navigationTime);
 
         if (prevIndex < 0) {
-            // Go to beginning if we're before first cue
-            if (previewPopoutOpen) {
-                popoutCurrentTime = 0;
-                sendToPopout({ type: 'seek', time: 0 });
-            } else {
-                video.currentTime = 0;
-            }
-            lastTimeupdateTime = 0; // Reset so we don't falsely detect cues between old position and beginning
+            const inOut = clipInOutPoints[clipNumber];
+            const inPoint = Number.isFinite(inOut?.inPoint) ? inOut.inPoint : 0;
+            // Go to the clip's In point if we're before the first cue.
+            lastTimeupdateTime = inPoint; // Reset so we don't falsely detect cues between old position and beginning
             // Update timeline immediately to move scrubber
             updateTimeline();
             clipCurrentCueIndex[clipNumber] = -1;
 
             // Set flag to allow playing through first cue
             justNavigatedToCue = true;
-            lastNavigatedCueTime = 0;
+            lastNavigatedCueTime = inPoint;
             lastNavigatedCueIndex = -1;
             lastNavigatedCueClipNumber = clipNumber;
             lastNavigatedCueTab = currentTab;
+
+            if (scrubModeActive) {
+                recenterActiveScrub(inPoint);
+                return;
+            }
+
+            if (previewPopoutOpen) {
+                popoutCurrentTime = inPoint;
+                sendToPopout({ type: 'seek', time: inPoint });
+            } else {
+                video.currentTime = inPoint;
+            }
+            updateTimeline();
 
             // Auto-play only if per-clip auto-play is enabled
             if (isClipAutoPlay(clipNumber)) {
@@ -2809,13 +2878,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update current cue index to the target
         clipCurrentCueIndex[clipNumber] = prevIndex;
 
-        // Jump backwards to the previous cue point
-        if (previewPopoutOpen) {
-            popoutCurrentTime = targetCuePoint.time;
-            sendToPopout({ type: 'seek', time: targetCuePoint.time });
-        } else {
-            video.currentTime = targetCuePoint.time;
-        }
         lastTimeupdateTime = targetCuePoint.time; // Reset so we don't falsely detect cues between old position and target
         // Update timeline immediately to move scrubber
         updateTimeline();
@@ -2829,9 +2891,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Update scrub centre when navigating cues during scrub mode
         if (scrubModeActive) {
-            recenterActiveScrub(targetCuePoint.time);
+            recenterActiveScrubForPreviousCue(targetCuePoint.time);
             return;
         }
+
+
+        // Ordinary navigation owns a single seek when scrub is inactive.
+        if (previewPopoutOpen) {
+            popoutCurrentTime = targetCuePoint.time;
+            sendToPopout({ type: 'seek', time: targetCuePoint.time });
+        } else {
+            video.currentTime = targetCuePoint.time;
+        }
+        updateTimeline();
 
         // Pressing Q means "go back and play from previous cue" - only if per-clip auto-play enabled
         if (isClipAutoPlay(clipNumber)) {
@@ -2843,7 +2915,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 video.play().then(() => {
                     console.log(`Q key: Sequential navigation to cue ${prevIndex + 1}/${cuePoints.length} at ${formatTime(targetCuePoint.time)}`);
                 }).catch(e => {
-                    console.error('Error playing from previous cue:', e);
+                    if (e?.name !== 'AbortError') console.error('Error playing from previous cue:', e);
                 });
             }
         } else {
@@ -2863,7 +2935,8 @@ document.addEventListener('DOMContentLoaded', function() {
         );
         if (lastNavigationMatchesSelection) {
             const trackedCue = cuePoints[lastNavigatedCueIndex];
-            if (Math.abs(trackedCue.time - lastNavigatedCueTime) <= 0.001) {
+            if (Math.abs(trackedCue.time - lastNavigatedCueTime) <= 0.001 &&
+                Math.abs(trackedCue.time - scrubCentreTime) <= 0.02) {
                 return lastNavigatedCueIndex;
             }
         }
@@ -4050,7 +4123,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return cueBelongsToSelection ? lastNavigatedCueTime : getScrubCurrentTime();
     }
 
-    function configureActiveScrubMode(mode) {
+    function configureActiveScrubMode(mode, options = {}) {
         stopScrubAnimationLoop();
         resetMomentaryFaderState();
         if (mode !== 'manual-cc') resetManualScrubSeek();
@@ -4080,11 +4153,19 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'back-forward':
                 pauseScrubOutput();
                 setScrubPlaybackRate(scrubConfig.speed);
-                seekScrubPosition(start);
                 scrubBackForwardDirection = -1;
                 scrubBackForwardActiveDirection = 0;
                 scrubBackForwardAwaitingReverseStart = false;
                 startScrubAnimationLoop();
+                if (options.startBackForwardAtAnchor) {
+                    const anchor = Math.max(start, Math.min(end, scrubCentreTime));
+                    startBackForwardForward(anchor);
+                } else if (options.positionBackForwardAtAnchor) {
+                    const anchor = Math.max(start, Math.min(end, scrubCentreTime));
+                    seekScrubPosition(anchor);
+                } else {
+                    seekScrubPosition(start);
+                }
                 break;
             case 'pendulum':
                 // Chromium cannot reliably use a negative playbackRate. Drive
@@ -4123,7 +4204,7 @@ document.addEventListener('DOMContentLoaded', function() {
         updateScrubStatus();
     }
 
-    function activateScrubMode(mode, shouldPersistEnabled = true) {
+    function activateScrubMode(mode, shouldPersistEnabled = true, activationCentre = null) {
         if (!mode || !selectedClipSlot || !video.src || getScrubDuration() <= 0) {
             const statusEl = document.getElementById('scrubStatusLine');
             if (statusEl) statusEl.textContent = 'Load and select a video before activating scrub.';
@@ -4141,7 +4222,9 @@ document.addEventListener('DOMContentLoaded', function() {
         scrubSavedPlaybackRate = video.playbackRate || 1;
         scrubSavedGlobalPlayIntent = globalPlayIntent;
         scrubSavedPlayState = previewPopoutOpen ? globalPlayIntent : !video.paused;
-        scrubCentreTime = getScrubActivationCentre();
+        scrubCentreTime = Number.isFinite(activationCentre)
+            ? Math.max(0, Math.min(getScrubDuration(), activationCentre))
+            : getScrubActivationCentre();
         scrubModeActive = true;
         if (shouldPersistEnabled) updateSelectedClipScrubSettings({ enabled: true });
         configureActiveScrubMode(mode);
@@ -4149,19 +4232,25 @@ document.addEventListener('DOMContentLoaded', function() {
         return true;
     }
 
-    function recenterActiveScrub(time) {
+    function beginScrubNavigation() {
+        scrubNavigationGeneration += 1;
+        scrubPopoutSeekPending = false;
+        resetManualScrubSeek();
+        return scrubNavigationGeneration;
+    }
+
+    function recenterActiveScrub(time, options = {}) {
         if (!scrubModeActive) return;
+        beginScrubNavigation();
         scrubCentreTime = Math.max(0, Math.min(getScrubDuration(), time));
-        configureActiveScrubMode(scrubMode);
+        configureActiveScrubMode(scrubMode, options);
         console.log(`Scrub centre updated to ${formatTimeShort(scrubCentreTime)}`);
     }
 
     function recenterActiveScrubForNextCue(time) {
-        recenterActiveScrub(time);
-        if (scrubModeActive && scrubMode === 'back-forward') {
-            const { start, end } = getScrubBounds();
-            const cuePosition = Math.max(start, Math.min(end, scrubCentreTime));
-            startBackForwardForward(cuePosition);
+        const startsBackForward = scrubModeActive && scrubMode === 'back-forward';
+        recenterActiveScrub(time, { startBackForwardAtAnchor: startsBackForward });
+        if (startsBackForward) {
             console.log('B/F next cue: started forward playback from the cue anchor');
         }
     }
@@ -5541,15 +5630,23 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // While scrub is active, its next-cue shortcut must work even when a
-        // range slider still has focus. Give it priority over the generic input
-        // guard below; shortcut remapping is still respected.
-        if (scrubModeActive && keyboardShortcuts.nextCuePoint &&
-            matchesShortcut(event, keyboardShortcuts.nextCuePoint)) {
-            event.preventDefault();
-            event.stopPropagation();
-            nextCuePointBtn.click();
-            return;
+        // While scrub is active, cue navigation must work even when a range or
+        // speed slider still has focus. Give Q/W/R equivalents priority over
+        // the generic input guard; remapped shortcuts are still respected.
+        if (scrubModeActive) {
+            const priorityNavigationShortcuts = [
+                ['previousCuePoint', prevCuePointBtn],
+                ['nextCuePoint', nextCuePointBtn],
+                ['restartClip', restartClipBtn]
+            ];
+            for (const [action, button] of priorityNavigationShortcuts) {
+                if (keyboardShortcuts[action] && matchesShortcut(event, keyboardShortcuts[action])) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    button.click();
+                    return;
+                }
+            }
         }
 
         if (scrubModeActive && event.key === 'Escape') {
@@ -5763,6 +5860,16 @@ document.addEventListener('DOMContentLoaded', function() {
             sendToPopout({ type: 'measureLatencyFrame', trace });
         } else {
             measureEmbeddedLatencyFrame(trace);
+        }
+    }
+
+    function recenterActiveScrubForPreviousCue(time) {
+        const positionsBackForwardAtAnchor = scrubModeActive && scrubMode === 'back-forward';
+        recenterActiveScrub(time, {
+            positionBackForwardAtAnchor: positionsBackForwardAtAnchor
+        });
+        if (positionsBackForwardAtAnchor) {
+            console.log('B/F previous cue: stopped at the cue anchor and waiting for the next direction trigger');
         }
     }
 
