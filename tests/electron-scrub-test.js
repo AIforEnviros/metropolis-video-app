@@ -548,6 +548,28 @@ async function run() {
   await click(window, '.accent-set-btn[data-accent-slot="3"]');
   await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
   assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubSettingsScopeLabel').textContent`), /ACCENT A3/);
+
+  // Scrub-to-accent handovers must retain the play intent that existed before
+  // the first scrub activation. Exercise the full B/F → Pendulum → B/F chain.
+  await click(window, '.scrub-mode-btn[data-mode="pendulum"]');
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused`, 'pre-handover embedded playback');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: CLIP 1')`, 'embedded B/F handover start');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'D' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'D' });
+  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: ACCENT A3') && document.getElementById('scrubActiveSource').textContent.includes('PEND')`, 'embedded accent Pendulum handover');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: CLIP 1')`, 'embedded return to clip scrub');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none' && !document.getElementById('videoPlayer').paused`, 'embedded playback restored after scrub handovers');
+
+  await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
   await click(window, '.scrub-mode-btn[data-mode="manual-stutter"]');
   await setSlider(window, '#scrubRangeSlider', 0.8);
   await setSlider(window, '#scrubSpeedSlider', 1.5);
@@ -625,7 +647,9 @@ async function run() {
     });
   })()`);
   await click(window, '#restartClipBtn');
-  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' });
+  await waitFor(window, `document.getElementById('videoPlayer').paused`, 'pause before B/F state restoration test');
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 2`);
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
@@ -999,6 +1023,29 @@ async function run() {
   }
   await waitFor(previewWindow, `document.getElementById('outputFadeOverlay').style.opacity === '0'`, 'rapid pop-out fade endpoint');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('outputFadeOverlay').style.opacity`), '0');
+
+  await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
+  await click(window, '.scrub-mode-btn[data-mode="pendulum"]');
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
+  await window.webContents.executeJavaScript(`document.activeElement && document.activeElement.blur()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await waitFor(previewWindow, `!document.getElementById('previewVideo').paused`, 'pre-handover pop-out playback');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: CLIP 1')`, 'pop-out B/F handover start');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'D' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'D' });
+  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: ACCENT A3') && document.getElementById('scrubActiveSource').textContent.includes('PEND')`, 'pop-out accent Pendulum handover');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: CLIP 1')`, 'pop-out return to clip scrub');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(previewWindow, `!document.getElementById('previewVideo').paused`, 'pop-out playback restored after scrub handovers');
+  await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
+  await click(window, '.scrub-mode-btn[data-mode="manual-stutter"]');
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
 
   await window.webContents.executeJavaScript(`document.activeElement && document.activeElement.blur()`);
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });

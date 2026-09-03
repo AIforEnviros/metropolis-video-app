@@ -4256,7 +4256,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         scrubSavedPlaybackRate = video.playbackRate || 1;
         scrubSavedGlobalPlayIntent = globalPlayIntent;
-        scrubSavedPlayState = previewPopoutOpen ? globalPlayIntent : !video.paused;
+        scrubSavedPlayState = globalPlayIntent;
         scrubCentreTime = Number.isFinite(activationCentre)
             ? Math.max(0, Math.min(getScrubDuration(), activationCentre))
             : getScrubActivationCentre();
