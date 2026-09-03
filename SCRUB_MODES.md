@@ -78,13 +78,19 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 ## Cue Navigation and Priority
 
 - While scrub is active, **Next Cue Point** advances the scrub center to the first cue after the current center.
+- **Previous Cue Point** follows the active cue anchor when scrub was reached through cue navigation. If scrub was activated between cues, it selects the nearest cue behind the visible playhead; it does not skip that cue by subtracting twice. From the first cue it returns to the clip's In point (or `00:00` when no In point is set).
+- **Restart Clip** returns to the clip's In point, resets the normal cue sequence to before its first cue, and recenters an active clip scrub mode there instead of allowing the old scrub range to override the seek.
+- Active scrub navigation is atomic: each Q/W/R action stops the previous scrub transition, updates the logical anchor, and issues only the final mode-appropriate seek/play state. It does not perform an ordinary cue seek followed by a second scrub seek.
 - In B/F, that cue advance begins forward playback immediately; other modes retain their normal recenter behavior.
+- B/F **Next Cue Point** seeks directly to the cue anchor and starts forward once; it does not visit the new range start first.
+- B/F **Previous Cue Point** stops directly on the selected previous cue and waits for the next scrub trigger. This remains true with Full video / In-Out enabled; Full Range must not redirect Q to the clip's range start.
 - Advancing from the final cue wraps directly to the first cue.
-- The remapped Next Cue Point key receives priority even if a scrub slider still has focus.
+- The remapped Previous Cue Point, Next Cue Point, and Restart Clip keys receive priority even if a scrub slider still has focus.
 - `Escape` always deactivates scrub, including when a slider has focus.
 - The learned scrub drum key always controls the selected clip's saved scrub mode, regardless of whether the settings editor is displaying Clip or A1-A4. When inactive, its first hit activates the clip mode; for B/F, that same hit begins the first forward stroke.
 - If an accent scrub effect is active, the clip's scrub trigger hands playback back to the clip and performs the clip-mode trigger immediately.
 - A learned MIDI drum note follows exactly the same ownership and first-hit behavior as the keyboard scrub trigger.
+- Pop-out Q/W/R commands carry a navigation generation. Playback acknowledgements from an older generation are ignored so rapid triggers cannot restore a superseded position.
 - **Toggle Clip Scrub On/Off** is independently keyboard and MIDI mappable in **Keyboard Shortcuts**. Its default key is `U`, and it performs the same saved per-clip toggle as clicking the Scrub On/Off button.
 
 ## MIDI and Keyboard Learn
@@ -119,7 +125,7 @@ Saved globally because they describe the physical controls:
 - Learned MIDI drum note
 - Learned keyboard drum trigger
 
-Loading a session restores each slot independently. A slot saved with scrub ON activates automatically when its connected video is selected. Sessions from v1.8 and earlier migrate their former global range, speed, and last mode to every video slot with scrub ON.
+Loading a session restores each slot independently. A slot saved with scrub ON activates automatically when its connected video is selected. Missing cue identities and invalid saved cue indices from older sessions are repaired during loading. Sessions from v1.8 and earlier migrate their former global range, speed, and last mode to every video slot with scrub ON.
 
 ## Automated Verification
 
@@ -142,7 +148,7 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - First-hit activation
 - Current-position B/F reversals, automatic boundary turnarounds, and optional stop-and-wait boundaries
 - Decoder-completed reverse frames
-- Cue advancement by cue identity, focused-control priority, media-edge range clamping, and last-to-first wrapping
+- Previous/next/restart navigation by cue identity across all scrub modes, focused-control priority, single-seek B/F transitions, stale pop-out acknowledgement rejection, legacy stale-index repair, media-edge range clamping, and last-to-first wrapping
 - Pre-scrub state restoration
 - Embedded and pop-out playback behavior
 - Cue-less Fader armed playback, momentary scratching, decoder-safe idle resumption, and paused-state retention

@@ -3456,6 +3456,11 @@ document.addEventListener('DOMContentLoaded', function() {
     let scrubEffectRunning = false;
     let scrubVirtualPosition = 0;
     let scrubPopoutSeekPending = false;
+    // Incremented whenever Q/W/R or another cue/accent navigation establishes
+    // a new scrub anchor. Pop-out updates from an older navigation generation
+    // must not overwrite the latest playback position.
+    let scrubNavigationGeneration = 0;
+    const SCRUB_POPOUT_PLAYBACK_UPDATE_TYPES = new Set(['ended', 'paused', 'seeked', 'timeupdate']);
 
     // A MIDI cross-fader can emit hundreds of CC values per second. Issuing a
     // currentTime assignment for every value creates a decoder backlog and makes
@@ -7286,7 +7291,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Preview Pop-Out Functions
     function sendToPopout(command) {
         if (previewPopoutOpen && window.electronAPI) {
-            window.electronAPI.sendPreviewCommand(command);
+            const scrubCommand = scrubModeActive && command.navigationGeneration === undefined
+                ? { ...command, navigationGeneration: scrubNavigationGeneration }
+                : command;
+            window.electronAPI.sendPreviewCommand(scrubCommand);
         }
     }
 
@@ -7378,6 +7386,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Listen for time updates from pop-out to update timeline scrubber
     if (window.electronAPI && window.electronAPI.onPreviewUpdate) {
         window.electronAPI.onPreviewUpdate((update) => {
+            if (scrubModeActive &&
+                SCRUB_POPOUT_PLAYBACK_UPDATE_TYPES.has(update.type) &&
+                Number.isInteger(update.navigationGeneration) &&
+                update.navigationGeneration < scrubNavigationGeneration) {
+                console.log(
+                    `Ignored stale pop-out ${update.type} from scrub navigation ` +
+                    `${update.navigationGeneration}; current is ${scrubNavigationGeneration}`
+                );
+                return;
+            }
             if (update.type === 'ended' && scrubModeActive &&
                 scrubMode === 'back-forward' && scrubConfig.fullRange) {
                 if (scrubBackForwardActiveDirection > 0) {

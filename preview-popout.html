@@ -139,6 +139,24 @@
         // Send time updates back to main window for timeline scrubber (throttled to ~10fps)
         let lastReportedTime = -1;
         let lastReportTimestamp = 0;
+        let activeNavigationGeneration = 0;
+
+        function adoptNavigationGeneration(command) {
+            if (Number.isInteger(command?.navigationGeneration)) {
+                activeNavigationGeneration = Math.max(
+                    activeNavigationGeneration,
+                    command.navigationGeneration
+                );
+            }
+        }
+
+        function withNavigationGeneration(update) {
+            return {
+                ...update,
+                navigationGeneration: activeNavigationGeneration
+            };
+        }
+
         function reportTimeUpdate() {
             const now = performance.now();
             if (now - lastReportTimestamp > 100) { // ~10fps throttle
@@ -146,11 +164,11 @@
                 if (!activeVideo.paused && activeVideo.currentTime !== lastReportedTime) {
                     lastReportedTime = activeVideo.currentTime;
                     lastReportTimestamp = now;
-                    window.electronAPI.sendPreviewUpdate({
+                    window.electronAPI.sendPreviewUpdate(withNavigationGeneration({
                         type: 'timeupdate',
                         currentTime: activeVideo.currentTime,
                         duration: activeVideo.duration
-                    });
+                    }));
                 }
             }
             requestAnimationFrame(reportTimeUpdate);
@@ -162,33 +180,34 @@
         function reportSeekComplete(event) {
             const activeVideo = event.currentTarget;
             if (activeVideo !== getActiveVideo()) return;
-            window.electronAPI.sendPreviewUpdate({
+            window.electronAPI.sendPreviewUpdate(withNavigationGeneration({
                 type: 'seeked',
                 currentTime: activeVideo.currentTime,
                 duration: activeVideo.duration
-            });
+            }));
         }
         video.addEventListener('seeked', reportSeekComplete);
         videoReverse.addEventListener('seeked', reportSeekComplete);
 
         // Report ended events for bounce mode
         video.addEventListener('ended', () => {
-            window.electronAPI.sendPreviewUpdate({
+            window.electronAPI.sendPreviewUpdate(withNavigationGeneration({
                 type: 'ended',
                 element: 'forward'
-            });
+            }));
         });
 
         videoReverse.addEventListener('ended', () => {
-            window.electronAPI.sendPreviewUpdate({
+            window.electronAPI.sendPreviewUpdate(withNavigationGeneration({
                 type: 'ended',
                 element: 'reverse'
-            });
+            }));
         });
 
         // Listen for commands from main window
         if (window.electronAPI) {
             window.electronAPI.onPreviewCommand((command) => {
+                adoptNavigationGeneration(command);
                 switch (command.type) {
                     case 'loadClip':
                         video.src = command.src;
@@ -224,12 +243,12 @@
                         const activePause = getActiveVideo();
                         video.pause();
                         videoReverse.pause();
-                        window.electronAPI.sendPreviewUpdate({
+                        window.electronAPI.sendPreviewUpdate(withNavigationGeneration({
                             type: 'paused',
                             reason: command.reason,
                             currentTime: activePause.currentTime,
                             duration: activePause.duration
-                        });
+                        }));
                         break;
                     }
 

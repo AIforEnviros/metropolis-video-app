@@ -10,6 +10,7 @@ let previewWindow = null;
 let savedSessionData = null;
 let sessionDataToLoad = null;
 let collectedSessionData = null;
+let previewCommands = [];
 
 function registerRendererStubs() {
   const connectedMIDIDevices = [
@@ -75,6 +76,7 @@ function registerRendererStubs() {
     return { success: true };
   });
   ipcMain.on('preview-popout-command', (_event, command) => {
+    previewCommands.push(JSON.parse(JSON.stringify(command)));
     if (previewWindow && !previewWindow.isDestroyed()) previewWindow.webContents.send('preview-command', command);
   });
   ipcMain.on('preview-popout-update', (_event, update) => {
@@ -1101,6 +1103,53 @@ async function run() {
   }, 'pop-out B/F stop-and-wait at range start', 3000);
   await click(window, '#scrubAutoReverseToggle');
 
+  // Pop-out Q/W/R uses the same atomic navigation generation. Rapid commands
+  // must leave both the logical center and projection on the newest request.
+  await setSlider(window, '#scrubSpeedSlider', 1);
+  for (const [keyCode, expectedCentre, label] of [
+    ['R', '00:00', 'restart'],
+    ['W', '00:02', 'first cue'],
+    ['W', '00:03', 'second cue'],
+    ['Q', '00:02', 'previous cue'],
+    ['R', '00:00', 'final restart']
+  ]) {
+    previewCommands = [];
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+    await waitFor(
+      window,
+      `document.getElementById('scrubCentreDisplay').textContent.includes('${expectedCentre}')`,
+      `pop-out B/F ${label}`
+    );
+    await waitForNode(() => previewCommands.some(command => command.type === 'seek'), `pop-out B/F ${label} seek command`);
+    await new Promise(resolve => setTimeout(resolve, 80));
+    assert.equal(
+      previewCommands.filter(command => command.type === 'seek').length,
+      1,
+      `pop-out B/F ${label} should issue one seek`
+    );
+    assert.ok(
+      previewCommands.every(command => Number.isInteger(command.navigationGeneration)),
+      `pop-out B/F ${label} commands should carry a navigation generation`
+    );
+  }
+  await waitFor(previewWindow, `document.getElementById('previewVideo').currentTime < 0.15`, 'pop-out B/F newest navigation position');
+  const newestNavigationGeneration = Math.max(
+    ...previewCommands.map(command => command.navigationGeneration).filter(Number.isInteger)
+  );
+  mainWindow.webContents.send('preview-update', {
+    type: 'seeked',
+    currentTime: 3,
+    duration: 4,
+    navigationGeneration: newestNavigationGeneration - 1
+  });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.match(
+    await window.webContents.executeJavaScript(`document.getElementById('currentTime').textContent`),
+    /^00:00/,
+    'stale pop-out seek acknowledgement must not replace the newest navigation position'
+  );
+
   // Per-slot scrub/accent settings restore independently and serialize in session v1.17.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
@@ -1108,6 +1157,88 @@ async function run() {
   await waitFor(previewWindow, `document.getElementById('previewVideo').loop === true`, 'pop-out native loop restoration after B/F');
   await click(window, '#outputWindowBtn');
   await waitForNode(() => !previewWindow || previewWindow.isDestroyed(), 'pop-out close');
+
+  // Every active scrub mode must accept a rapid R→W→W→Q→R sequence without
+  // losing its logical cue position. Running after the timing-sensitive pop-out
+  // diagnostics keeps these extra reconfigurations out of latency measurements.
+  const navigationModes = [
+    'manual-cc',
+    'back-forward',
+    'pendulum',
+    'stutter',
+    'manual-stutter',
+    'drift',
+    'hold'
+  ];
+  for (const mode of navigationModes) {
+    await click(window, `.scrub-mode-btn[data-mode="${mode}"]`);
+    await click(window, '#scrubActivateBtn');
+    await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, `${mode} navigation activation`);
+    await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').focus()`);
+
+    for (const [keyCode, expectedCentre, label] of [
+      ['R', '00:00', 'restart'],
+      ['W', '00:02', 'first cue'],
+      ['W', '00:03', 'second cue'],
+      ['Q', '00:02', 'previous cue'],
+      ['R', '00:00', 'final restart']
+    ]) {
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+      await waitFor(
+        window,
+        `document.getElementById('scrubCentreDisplay').textContent.includes('${expectedCentre}')`,
+        `${mode} ${label}`
+      );
+    }
+
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, `${mode} navigation cleanup`);
+  }
+
+  // If scrub was activated between cues rather than by W, Q selects the
+  // nearest cue behind the visible playhead. It must not subtract twice and
+  // fall through to the same In-point behavior as R.
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 2.5`);
+  await click(window, '.scrub-mode-btn[data-mode="hold"]');
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('scrubCentreDisplay').textContent.includes('00:02')`, 'between-cue scrub activation');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Q' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Q' });
+  await waitFor(window, `Math.abs(document.getElementById('videoPlayer').currentTime - 2) < 0.05`, 'between-cue previous selects nearest cue');
+  assert.ok(
+    Math.abs((await readState(window)).time - 2) < 0.05,
+    'between-cue Q should move to the first cue rather than the clip start'
+  );
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'between-cue regression cleanup');
+
+  // B/F can move the visible frame away from its original activation anchor.
+  // In that state Q follows the frame the performer can see, not the obsolete
+  // zero-second anchor.
+  await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'B/F moving-playhead Q activation');
+  await click(window, '#scrubFullRangeToggle');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubFullRangeToggle').checked`), true);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'R' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'R' });
+  await waitFor(window, `document.getElementById('scrubCentreDisplay').textContent.includes('00:00')`, 'B/F moving-playhead anchor reset');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 2.5`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Q' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Q' });
+  await waitFor(window, `document.getElementById('scrubCentreDisplay').textContent.includes('00:02')`, 'B/F moving-playhead previous cue');
+  assert.ok(
+    Math.abs((await readState(window)).time - 2) < 0.05,
+    'Full-range B/F Q should stop on the previous cue and not behave like Restart'
+  );
+  await click(window, '#scrubFullRangeToggle');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'B/F moving-playhead regression cleanup');
+
   await click(window, '#outputFadeReverse');
   await waitFor(window, `document.getElementById('outputFadeOverlay').style.opacity === '1'`, 'reverse MIDI direction applies last CC value');
   await setSlider(window, '#outputFadeSlider', 100);
@@ -1288,6 +1419,8 @@ async function run() {
   // with the default 2-second range and 1x speed.
   sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));
   sessionDataToLoad.version = '1.12';
+  sessionDataToLoad.tabs.currentCueIndex['0']['1'] = 99;
+  sessionDataToLoad.tabs.cuePoints['0']['1'].forEach(cuePoint => delete cuePoint.id);
   const legacyAccent = sessionDataToLoad.tabs.accentPoints['0']['1']['1'];
   delete legacyAccent.scrubMode;
   delete legacyAccent.scrubRange;
@@ -1303,6 +1436,16 @@ async function run() {
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '2');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '1');
   assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-range-placement-btn.selected').dataset.placement`), 'center');
+  await click(window, '.scrub-target-btn[data-scrub-target="clip"]');
+  await window.webContents.executeJavaScript(`(() => {
+    const video = document.getElementById('videoPlayer');
+    video.pause();
+    video.currentTime = 3;
+  })()`);
+  await click(window, '#prevCuePointBtn');
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime >= 1.98 && document.getElementById('videoPlayer').currentTime < 2.25`, 'legacy stale previous-cue recovery');
+  await click(window, '#restartClipBtn');
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime < 0.15`, 'legacy restart recovery');
 
   // v1.10 per-slot sessions did not have autoReverse or range placement. They
   // migrate to continuous boundaries and the legacy Centre range behavior.

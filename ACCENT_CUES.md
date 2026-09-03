@@ -43,12 +43,13 @@ This document defines the behavior of accent cue points. Accents are direct-trig
 - Triggering an accent does not change the logical position in the normal cue sequence.
 - The next **Next Cue Point** command continues to the normal cue after the one active before the accent.
 - The next **Previous Cue Point** command goes to the normal cue before the one active before the accent, or to the clip's In point when already before/at the first cue.
+- The preserved normal position is tied to the cue's identity and timestamp, so moving, sorting, or deleting cue markers does not silently redirect the post-accent navigation to an unrelated array index.
 - Restarting, changing clips, changing tabs, or clearing the clip clears any temporary accent-return context.
 - While scrub mode is active, an accent recenters the active scrub range at the accent timestamp. The next normal cue command still resumes from the preserved normal sequence position; if the active mode is B/F, that cue jump immediately begins a forward stroke.
 
 ## Session Persistence
 
-Session format **v1.17** retains each accent's timestamp, optional scrub mode, range, cue position, and speed per tab and video slot in `tabs.accentPoints`. Older accents without cue-position data migrate to **Centre**; v1.12 accents also migrate to **None**, a 2-second range, and 1x speed. Older sessions without accent data load with all four accent positions unset.
+Session format **v1.17** retains each accent's timestamp, optional scrub mode, range, cue position, and speed per tab and video slot in `tabs.accentPoints`. Normal cue identities used to preserve post-accent navigation are repaired automatically when an older session is loaded. Older accents without cue-position data migrate to **Centre**; v1.12 accents also migrate to **None**, a 2-second range, and 1x speed. Older sessions without accent data load with all four accent positions unset.
 
 ## Verification
 
