@@ -835,8 +835,20 @@ async function run() {
   assert.ok(burstSeekCount <= 8, `CC burst caused ${burstSeekCount} decoder seeks`);
 
   // Live mode switching must initialize each distinct behavior.
+  await setSlider(window, '#scrubSpeedSlider', 2);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await waitFor(window, `!document.getElementById('videoPlayer').paused`, 'stutter start');
+  await waitFor(window, `document.getElementById('videoPlayer').playbackRate === 2`, 'stutter owns 2x playback rate');
+  await click(window, '.speed-preset-btn[data-speed="0.5"]');
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').playbackRate`),
+    2,
+    'clip speed preset must not override active scrub speed'
+  );
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('videoPlayer').playbackRate === 0.5`, 'new clip speed restored after scrub deactivation');
+  await click(window, '#scrubActivateBtn');
+  await waitFor(window, `document.getElementById('videoPlayer').playbackRate === 2`, 'saved scrub speed restored after reactivation');
   await new Promise(resolve => setTimeout(resolve, 450));
   state = await readState(window);
   assert.ok(state.time >= 1.7 && state.time <= 2.3, `stutter state: ${JSON.stringify(state)}`);

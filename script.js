@@ -2620,7 +2620,8 @@ document.addEventListener('DOMContentLoaded', function() {
             speedSlider.value = 1.0;
             speedValue.textContent = '1.0x';
             updateSpeedPresetButtons(1.0);
-            setVideoSpeed(1.0);
+            if (scrubModeActive) scrubSavedPlaybackRate = 1.0;
+            else setVideoSpeed(1.0);
             return;
         }
 
@@ -2630,7 +2631,8 @@ document.addEventListener('DOMContentLoaded', function() {
         speedSlider.value = currentSpeed;
         speedValue.textContent = `${currentSpeed}x`;
         updateSpeedPresetButtons(currentSpeed);
-        setVideoSpeed(currentSpeed);
+        if (scrubModeActive) scrubSavedPlaybackRate = currentSpeed;
+        else setVideoSpeed(currentSpeed);
     }
 
     function updateSpeedPresetButtons(currentSpeed) {
@@ -2663,8 +2665,10 @@ document.addEventListener('DOMContentLoaded', function() {
         speedValue.textContent = `${newSpeed}x`;
         updateSpeedPresetButtons(newSpeed);
 
-        // Apply to video if loaded
-        setVideoSpeed(newSpeed);
+        // Scrub owns the live playback rate. Remember the newly selected clip
+        // speed so deactivation restores it without disturbing the effect.
+        if (scrubModeActive) scrubSavedPlaybackRate = newSpeed;
+        else setVideoSpeed(newSpeed);
 
         console.log(`Changed speed for clip ${clipNumber} to ${newSpeed}x`);
     }
