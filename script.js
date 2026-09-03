@@ -216,6 +216,104 @@ document.addEventListener('DOMContentLoaded', function() {
     let accentNavigationContext = null;
     let scrubSettingsEditorTarget = 'clip';
 
+    function getCueIndexById(cuePoints, cueId) {
+        if (!cueId) return -1;
+        return cuePoints.findIndex(cuePoint => cuePoint.id === cueId);
+    }
+
+    function ensureCuePointIdentities() {
+        const usedIds = new Set();
+        Object.entries(tabClipCuePoints).forEach(([tabIndex, tabCues]) => {
+            Object.entries(tabCues || {}).forEach(([clipNumber, cuePoints]) => {
+                if (!Array.isArray(cuePoints)) {
+                    tabClipCuePoints[tabIndex][clipNumber] = [];
+                    return;
+                }
+                cuePoints.sort((a, b) => (Number(a?.time) || 0) - (Number(b?.time) || 0));
+                cuePoints.forEach((cuePoint, index) => {
+                    const existingId = typeof cuePoint?.id === 'string' ? cuePoint.id.trim() : '';
+                    if (existingId && !usedIds.has(existingId)) {
+                        cuePoint.id = existingId;
+                        usedIds.add(existingId);
+                        return;
+                    }
+                    const timestampPart = Number.isFinite(Number(cuePoint?.timestamp))
+                        ? Number(cuePoint.timestamp)
+                        : Math.round((Number(cuePoint?.time) || 0) * 1000);
+                    let generatedId = `cue_${tabIndex}_${clipNumber}_${timestampPart}_${index}`;
+                    let suffix = 1;
+                    while (usedIds.has(generatedId)) generatedId = `cue_${tabIndex}_${clipNumber}_${timestampPart}_${index}_${suffix++}`;
+                    cuePoint.id = generatedId;
+                    usedIds.add(generatedId);
+                });
+            });
+        });
+    }
+
+    function repairLoadedCueNavigationState() {
+        ensureCuePointIdentities();
+        Object.entries(tabClipCuePoints).forEach(([tabIndex, tabCues]) => {
+            if (!tabClipCurrentCueIndex[tabIndex]) tabClipCurrentCueIndex[tabIndex] = {};
+            Object.entries(tabCues || {}).forEach(([clipNumber, cuePoints]) => {
+                const storedIndex = Number(tabClipCurrentCueIndex[tabIndex][clipNumber]);
+                tabClipCurrentCueIndex[tabIndex][clipNumber] = Number.isInteger(storedIndex) &&
+                    storedIndex >= -1 && storedIndex < cuePoints.length
+                    ? storedIndex
+                    : -1;
+            });
+        });
+    }
+
+    function captureCueNavigationIdentity(clipNumber) {
+        const cuePoints = clipCuePoints[clipNumber] || [];
+        const currentIndex = Number(clipCurrentCueIndex[clipNumber]);
+        const lastMatches = lastNavigatedCueTab === currentTab &&
+            lastNavigatedCueClipNumber === clipNumber &&
+            Number.isInteger(lastNavigatedCueIndex) &&
+            lastNavigatedCueIndex >= 0 && lastNavigatedCueIndex < cuePoints.length;
+        return {
+            currentIndex: Number.isInteger(currentIndex) ? currentIndex : -1,
+            currentCueId: currentIndex >= 0 && currentIndex < cuePoints.length ? cuePoints[currentIndex].id : null,
+            lastCueId: lastMatches ? cuePoints[lastNavigatedCueIndex].id : null
+        };
+    }
+
+    function reconcileCueNavigationAfterEdit(clipNumber, snapshot) {
+        const cuePoints = clipCuePoints[clipNumber] || [];
+        const currentById = getCueIndexById(cuePoints, snapshot?.currentCueId);
+        clipCurrentCueIndex[clipNumber] = currentById >= 0
+            ? currentById
+            : Math.max(-1, Math.min(cuePoints.length - 1, (snapshot?.currentIndex ?? 0) - 1));
+
+        if (lastNavigatedCueTab === currentTab && lastNavigatedCueClipNumber === clipNumber) {
+            const lastById = getCueIndexById(cuePoints, snapshot?.lastCueId);
+            if (lastById >= 0) {
+                lastNavigatedCueIndex = lastById;
+                lastNavigatedCueTime = cuePoints[lastById].time;
+            } else {
+                lastNavigatedCueIndex = -1;
+                lastNavigatedCueTime = 0;
+            }
+        }
+    }
+
+    function resolveAccentMainCueIndex(context, cuePoints) {
+        if (!context) return -1;
+        const cueIdIndex = getCueIndexById(cuePoints, context.mainCueId);
+        if (cueIdIndex >= 0) return cueIdIndex;
+        if (Number.isFinite(context.mainCueTime)) {
+            let timeIndex = -1;
+            cuePoints.forEach((cuePoint, index) => {
+                if (cuePoint.time <= context.mainCueTime + 0.02) timeIndex = index;
+            });
+            return timeIndex;
+        }
+        return Number.isInteger(context.mainCueIndex) &&
+            context.mainCueIndex >= -1 && context.mainCueIndex < cuePoints.length
+            ? context.mainCueIndex
+            : -1;
+    }
+
     // File browser state
     let currentFolderPath = '';
     let currentFolderFiles = [];
@@ -626,6 +724,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     ensureClipScrubSettings(clipNumber, tabIndex, legacyScrubDefaults);
                 });
             });
+
+            // Older sessions may contain missing cue IDs or a cue index left
+            // behind by cue deletion/reordering. Repair that metadata before it
+            // is used by Q/W/R navigation.
+            repairLoadedCueNavigationState();
 
             console.log('After restoring - tab data:', tabClipVideos);
 
@@ -1885,6 +1988,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!clipCuePoints[clipNumber]) {
             clipCuePoints[clipNumber] = [];
         }
+        const navigationSnapshot = captureCueNavigationIdentity(clipNumber);
 
         // Create cue point object
         const cuePoint = {
@@ -1898,6 +2002,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Sort cue points by time
         clipCuePoints[clipNumber].sort((a, b) => a.time - b.time);
+        reconcileCueNavigationAfterEdit(clipNumber, navigationSnapshot);
 
         console.log(`Recorded cue point at ${formatTime(currentTime)} for clip ${clipNumber}`);
 
@@ -2627,7 +2732,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (accentNavigationContext &&
             accentNavigationContext.tabIndex === currentTab &&
             accentNavigationContext.clipNumber === clipNumber) {
-            const mainCueIndex = accentNavigationContext.mainCueIndex;
+            const mainCueIndex = resolveAccentMainCueIndex(accentNavigationContext, cuePoints);
             accentNavigationContext = null;
             if (mainCueIndex > 0) {
                 navigateToNormalCueFromAccent(clipNumber, cuePoints, mainCueIndex - 1, 'previous');
@@ -2836,7 +2941,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (accentNavigationContext &&
             accentNavigationContext.tabIndex === currentTab &&
             accentNavigationContext.clipNumber === clipNumber) {
-            const mainCueIndex = accentNavigationContext.mainCueIndex;
+            const mainCueIndex = resolveAccentMainCueIndex(accentNavigationContext, cuePoints);
             accentNavigationContext = null;
             if (scrubModeActive) {
                 const targetIndex = mainCueIndex >= cuePoints.length - 1 ? 0 : Math.max(0, mainCueIndex + 1);
@@ -4430,6 +4535,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             e.preventDefault();
             e.stopPropagation(); // Prevent timeline click
+            const navigationSnapshot = captureCueNavigationIdentity(clipNumber);
 
             // Don't set isDraggingCue yet - wait for actual mouse movement
             dragStarted = false;
@@ -4511,6 +4617,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     // Sort cue points by time after dragging
                     clipCuePoints[clipNumber].sort((a, b) => a.time - b.time);
+                    reconcileCueNavigationAfterEdit(clipNumber, navigationSnapshot);
 
                     // Refresh markers to show correct order
                     updateCueMarkersOnTimeline();
@@ -4548,8 +4655,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const confirmMsg = `Delete cue point ${cueIndex + 1} at ${formatTime(cuePoint.time)}?`;
 
             if (confirm(confirmMsg)) {
+                const navigationSnapshot = captureCueNavigationIdentity(clipNumber);
                 // Remove the cue point from the array
                 clipCuePoints[clipNumber].splice(cueIndex, 1);
+                reconcileCueNavigationAfterEdit(clipNumber, navigationSnapshot);
 
                 // Mark session as modified
                 markSessionModified();
@@ -6417,7 +6526,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const count = (clipCuePoints[clipNumber] || []).length;
         if (count === 0) return;
         if (confirm(`Delete all ${count} cue point${count !== 1 ? 's' : ''} for this clip?`)) {
+            const navigationSnapshot = captureCueNavigationIdentity(clipNumber);
             clipCuePoints[clipNumber] = [];
+            reconcileCueNavigationAfterEdit(clipNumber, navigationSnapshot);
+            selectedCuePointIds.clear();
+            updateDeleteSelectedButton();
             markSessionModified();
             updateCueMarkersOnTimeline();
             console.log(`Deleted all ${count} cue points for clip ${clipNumber}`);
@@ -6476,8 +6589,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const clipNumber = selectedClipSlot.dataset.clipNumber;
         const count = selectedCuePointIds.size;
         if (confirm(`Delete ${count} selected cue point${count !== 1 ? 's' : ''}?`)) {
+            const navigationSnapshot = captureCueNavigationIdentity(clipNumber);
             clipCuePoints[clipNumber] = (clipCuePoints[clipNumber] || [])
                 .filter(cp => !selectedCuePointIds.has(cp.id));
+            reconcileCueNavigationAfterEdit(clipNumber, navigationSnapshot);
             selectedCuePointIds.clear();
             markSessionModified();
             updateCueMarkersOnTimeline();
