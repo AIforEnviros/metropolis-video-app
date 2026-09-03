@@ -3919,7 +3919,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (previewPopoutOpen) {
             sendToPopout({ type: 'play' });
         } else if (video.src) {
-            video.play().catch(e => console.warn('Scrub play error:', e));
+            video.play().catch(e => {
+                if (e?.name !== 'AbortError') console.warn('Scrub play error:', e);
+            });
         }
     }
 
@@ -3937,7 +3939,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (previewPopoutOpen) {
             sendToPopout({ type: 'play' });
         } else if (video.src) {
-            video.play().catch(e => console.warn('Fader resume error:', e));
+            video.play().catch(e => {
+                if (e?.name !== 'AbortError') console.warn('Fader resume error:', e);
+            });
         }
     }
 
