@@ -1162,6 +1162,19 @@ async function run() {
   await new Promise(resolve => setTimeout(resolve, 450));
   popoutTime = await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').currentTime`);
   assert.ok(popoutTime >= 1.7 && popoutTime <= 2.3, `pop-out stutter stayed in range at ${popoutTime}`);
+  const commandsBeforeStutterResync = previewCommands.length;
+  window.webContents.send('preview-update', {
+    type: 'timeupdate',
+    currentTime: 2.3,
+    duration: await previewWindow.webContents.executeJavaScript(`document.getElementById('previewVideo').duration`)
+  });
+  await waitForNode(
+    () => previewCommands.slice(commandsBeforeStutterResync).some(command =>
+      command.type === 'seek' && command.time < 1.8
+    ),
+    'pop-out Stutter resync boundary restart',
+    150
+  );
 
   await setSlider(window, '#scrubSpeedSlider', 1);
   await click(window, '.scrub-mode-btn[data-mode="manual-stutter"]');

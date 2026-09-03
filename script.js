@@ -7555,6 +7555,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 // (Setting activeVideo.currentTime caused an IPC feedback loop via seeked events)
                 if (update.currentTime !== undefined) {
                     popoutCurrentTime = update.currentTime;
+                    const forwardScrubEffectRunning = scrubModeActive && scrubEffectRunning &&
+                        (scrubMode === 'stutter' || scrubMode === 'manual-stutter' ||
+                            (scrubMode === 'back-forward' && scrubBackForwardActiveDirection > 0));
+                    if (forwardScrubEffectRunning) {
+                        scrubVirtualPosition = Math.max(scrubVirtualPosition, update.currentTime);
+                    }
                 }
                 updateTimeline();
 
