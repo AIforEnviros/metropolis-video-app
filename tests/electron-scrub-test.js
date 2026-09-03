@@ -840,6 +840,12 @@ async function run() {
   await new Promise(resolve => setTimeout(resolve, 450));
   state = await readState(window);
   assert.ok(state.time >= 1.7 && state.time <= 2.3, `stutter state: ${JSON.stringify(state)}`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' });
+  await waitFor(window, `document.getElementById('videoPlayer').paused`, 'Space pauses stutter effect');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await waitFor(window, `!document.getElementById('videoPlayer').paused`, 'drum trigger resumes paused stutter effect');
 
   // Manual stutter plays one pass, waits at the end, and only restarts when
   // its learned drum/key trigger is pressed.
@@ -894,6 +900,13 @@ async function run() {
   await waitFor(window, `document.getElementById('videoPlayer').paused`, 'hold pause');
   state = await readState(window);
   assert.ok(Math.abs(state.time - 2) < 0.04, `hold froze at centre: ${state.time}`);
+  const holdTimeBeforeSpace = state.time;
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' });
+  await new Promise(resolve => setTimeout(resolve, 200));
+  state = await readState(window);
+  assert.equal(state.paused, true, 'Space must not play raw video during Hold');
+  assert.ok(Math.abs(state.time - holdTimeBeforeSpace) < 0.04, `Space moved Hold from ${holdTimeBeforeSpace} to ${state.time}`);
 
   // The remappable next-cue key gets priority even while a scrub slider has
   // focus, and wraps from the final cue back to the first.

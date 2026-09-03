@@ -4565,6 +4565,42 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        if (scrubModeActive) {
+            const allowsNormalFaderToggle = scrubMode === 'manual-cc' &&
+                scrubFaderMomentaryArmed && !scrubFaderGestureActive;
+
+            if (!allowsNormalFaderToggle) {
+                switch (scrubMode) {
+                    case 'stutter':
+                    case 'pendulum':
+                    case 'drift':
+                    case 'manual-stutter':
+                        if (scrubEffectRunning) {
+                            pauseScrubOutput();
+                        } else if (scrubMode === 'pendulum') {
+                            // Pendulum is decoder-seek driven; resuming the raw
+                            // video would make it play underneath the effect.
+                            scrubEffectRunning = true;
+                        } else {
+                            playScrubOutput();
+                        }
+                        scrubLoopLastTimestamp = performance.now();
+                        break;
+                    case 'back-forward':
+                        if (scrubEffectRunning && scrubBackForwardActiveDirection !== 0) {
+                            pauseScrubOutput();
+                            scrubBackForwardActiveDirection = 0;
+                        }
+                        break;
+                    case 'hold':
+                        break;
+                }
+                updateScrubStatus();
+                updatePlayingIndicator();
+                return;
+            }
+        }
+
         // When pop-out is open, route commands there
         if (previewPopoutOpen) {
             if (globalPlayIntent) {

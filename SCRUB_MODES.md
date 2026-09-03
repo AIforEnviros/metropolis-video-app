@@ -11,6 +11,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - Range limits: **0.1–10 seconds**, in **0.05-second** increments.
 - Speed limits: **0.1×–4×**.
 - Scrub playback temporarily owns play, pause, seeking, and playback rate. Deactivation restores the play/pause state and speed that existed before activation.
+- While scrub is active, Play/Pause pauses or resumes the running effect instead of the raw video. It never moves the playhead.
 - New video slots default to Fader mode with scrub ON, a 2-second range, and 1× scrub speed.
 - Enabled state, mode, range, cue position, speed, and B/F options are independent for every video slot; selecting a loaded slot restores and, when enabled, activates its saved scrub behavior.
 - Changing clip or tab safely deactivates scrub and clears stale cue-center state.
