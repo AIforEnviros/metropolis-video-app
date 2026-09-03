@@ -5664,6 +5664,16 @@ document.addEventListener('DOMContentLoaded', function() {
         );
     }
 
+    function isTextEntryTarget(target) {
+        if (!target) return false;
+        if (target.tagName === 'TEXTAREA') return true;
+        if (target.tagName === 'INPUT') {
+            const type = (target.getAttribute('type') || '').toLowerCase();
+            return ['', 'text', 'search', 'number', 'email', 'url', 'password'].includes(type);
+        }
+        return target.isContentEditable === true || target.getAttribute?.('contenteditable') === 'true';
+    }
+
     function handleKeyboardShortcuts(event) {
         // === SCRUB DRUM KEY — checked FIRST, before all guards ===
         // Must come before the INPUT guard so range sliders don't block it.
@@ -5693,7 +5703,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Drum key trigger — works even when a slider/button has focus
-        if (scrubConfig.drumPadKey) {
+        if (scrubConfig.drumPadKey && !isTextEntryTarget(event.target)) {
             // Build the pressed combo the same way matchesShortcut does, but without the
             // shortcutsModalOpen guard (scrub should always respond)
             const parsed = parseKeyboardShortcut(scrubConfig.drumPadKey);
@@ -5743,12 +5753,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // === Standard keyboard guard — after scrub drum key ===
         // Don't trigger shortcuts if typing in an input field or editing content
-        if (event.target.tagName === 'INPUT' ||
-            event.target.tagName === 'TEXTAREA' ||
-            event.target.isContentEditable === true ||
-            event.target.getAttribute('contenteditable') === 'true') {
-            return;
-        }
+        if (isTextEntryTarget(event.target)) return;
 
         // Escape: deactivate scrub mode if active, otherwise clear cue selection
         if (event.key === 'Escape') {
@@ -6910,6 +6915,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             renderScrubSettingsEditor();
         }, 0);
+        scrubRangeSlider.addEventListener('change', function() {
+            this.blur();
+        });
     }
 
     document.querySelectorAll('.scrub-range-placement-btn').forEach(button => {
@@ -6971,6 +6979,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 updateScrubStatus();
             }
+        });
+        scrubSpeedSliderEl.addEventListener('change', function() {
+            this.blur();
         });
     }
 

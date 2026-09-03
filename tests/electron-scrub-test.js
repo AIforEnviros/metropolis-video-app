@@ -1016,6 +1016,28 @@ async function run() {
     'Hold triggers must not mark the session modified'
   );
 
+  // Text entry alone blocks performance keys. A focused range slider must
+  // still allow accents, while typing the scrub key into a clip name must not
+  // trigger the active Hold effect.
+  await window.webContents.executeJavaScript(`(() => {
+    const label = document.querySelector('.clip-slot[data-clip-number="1"] .clip-slot-label');
+    label.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  })()`);
+  await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="1"] .clip-slot-label').isContentEditable`, 'clip rename text entry');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  assert.notEqual(
+    await window.webContents.executeJavaScript(`document.getElementById('scrubActiveBadge').style.display`),
+    'none',
+    'scrub drum key must not fire during clip rename text entry'
+  );
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').focus()`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
+  await waitFor(window, `Math.abs(document.getElementById('videoPlayer').currentTime - 1.25) < 0.05`, 'accent key while range slider focused');
+
   // The remappable next-cue key gets priority even while a scrub slider has
   // focus, and wraps from the final cue back to the first.
   await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').focus()`);

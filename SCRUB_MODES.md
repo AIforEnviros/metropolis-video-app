@@ -90,6 +90,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - Advancing from the final cue wraps directly to the first cue.
 - The remapped Previous Cue Point, Next Cue Point, and Restart Clip keys receive priority even if a scrub slider still has focus.
 - `Escape` always deactivates scrub, including when a slider has focus.
+- Range and speed sliders never capture performance keys. Only text fields block shortcuts.
 - The learned scrub drum key always controls the selected clip's saved scrub mode, regardless of whether the settings editor is displaying Clip or A1-A4. When inactive, its first hit activates the clip mode; for B/F, that same hit begins the first forward stroke.
 - If an accent scrub effect is active, the clip's scrub trigger hands playback back to the clip and performs the clip-mode trigger immediately.
 - A learned MIDI drum note follows exactly the same ownership and first-hit behavior as the keyboard scrub trigger.
