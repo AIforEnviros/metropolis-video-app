@@ -109,7 +109,7 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 
 ## Session Persistence
 
-Scrub settings are retained in the application's session format **v1.17**.
+Scrub settings are retained in the application's session format **v1.18**.
 
 Saved per video slot:
 
@@ -159,7 +159,7 @@ The suite uses `test-videos/test-video.mp4` and verifies:
 - Dense 128-message fader bursts without decoder seek backlogs
 - Cross-platform file URL encoding for spaces and reserved characters
 - Start/Centre/End range anchoring, clip/accent separation, and media-edge clamping
-- Per-slot mode/range/cue-position/speed/B-F-options/ON-OFF restoration, Range/Speed CC mappings, and session v1.17 round-tripping
+- Per-slot mode/range/cue-position/speed/B-F-options/ON-OFF restoration, Range/Speed CC mappings, and session v1.18 round-tripping
 
 ## Hardware Acceptance Checks
 

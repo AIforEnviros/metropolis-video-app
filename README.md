@@ -241,6 +241,8 @@ Choose **Clip**, **A1**, **A2**, **A3**, or **A4** at the top of the Scrub Modes
 
 All detected MIDI inputs are connected automatically. Mappings are device-independent, so the same channel/note or CC message performs the same action when sent by either controller.
 
+To restrict those shared mappings on one clip, right-click the clip and choose **MIDI Permissions…**. The matrix can independently allow or block each connected controller for cue navigation, Restart, Scrub Trigger/Fader/Range/Speed, and Accents A1-A4. Restrictions are saved with the clip; keyboard shortcuts, clip navigation, tab switching, and Master Output Fade remain global. A **MIDI 🔒** badge identifies restricted clips.
+
 The selected clip's Scrub On/Off button is available as **Toggle Clip Scrub On/Off** in the same mapping window. Its default keyboard shortcut is `U`, and a MIDI note, CC, or program-change message can be learned for it.
 
 The Scrub Modes panel also provides direct **Range MIDI** and **Speed MIDI** Learn controls. These continuous CC mappings mirror the visible sliders and edit whichever Clip or Accent scope is selected. B/F Full range keeps Range MIDI disabled until Full range is turned off.

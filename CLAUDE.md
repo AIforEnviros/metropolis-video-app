@@ -21,16 +21,17 @@ This is now an Electron-based desktop application for production live performanc
 - Now converting to Electron for production performance use
 - All core features validated in web version
 
-**Current active development (2026-08-22):**
-- Branch: `codex/performance-test-updates`
+**Current active development (2026-09-04):**
+- Branch: `codex/per-clip-midi-permissions`
 - Electron is the only active application architecture; `src/` is legacy
-- Session format v1.17 adds per-clip/per-accent Start/Centre/End scrub range positioning while retaining Range/Speed CC mappings, the global output fade, portable packages, and per-slot scrub/accent settings
-- All detected MIDI inputs connect simultaneously; mappings remain device-independent so identical messages from different controllers share an action
+- Session format v1.18 adds per-clip controller-by-action MIDI permissions while retaining range positioning, Range/Speed CC mappings, the global output fade, portable packages, and per-slot scrub/accent settings
+- All detected MIDI inputs connect simultaneously; mappings remain device-independent, with optional per-clip source-controller permissions for cue, scrub, and accent actions
 - The selected clip's scrub On/Off control is keyboard and MIDI mappable through the standard shortcuts window
 - Run the app with `npm start` (`npm.cmd start` in restricted Windows PowerShell)
 - Run scrub regression coverage with `npm run test:scrub` (`npm.cmd run test:scrub` on Windows)
 - Treat `SCRUB_MODES.md` as the authoritative scrub behavior contract
 - Treat `ACCENT_CUES.md` as the authoritative accent cue behavior contract
+- Treat `MIDI_PERMISSIONS.md` as the authoritative per-clip MIDI permission contract
 - Treat `VIDEO_COMPATIBILITY.md` as the playback format and macOS troubleshooting guide
 - Treat `PORTABLE_SESSIONS.md` as the Collect All & Save and portable-session behavior contract
 - Treat `OUTPUT_FADE.md` as the authoritative master output fade behavior contract
@@ -755,7 +756,7 @@ Complete MIDI mapping and MIDI learn functionality has been implemented for all 
 }
 ```
 
-**Original MIDI session format (v1.4; current application format is v1.17):**
+**Original MIDI session format (v1.4; current application format is v1.18):**
 ```json
 {
   "version": "1.4",

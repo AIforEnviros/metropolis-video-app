@@ -56,6 +56,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const outputFadeReverse = document.getElementById('outputFadeReverse');
     const addTabBtn = document.getElementById('addTabBtn');
     const clipContextMenu = document.getElementById('clipContextMenu');
+    const midiPermissionsModal = document.getElementById('midiPermissionsModal');
+    const midiPermissionsTitle = document.getElementById('midiPermissionsTitle');
+    const midiPermissionsStatus = document.getElementById('midiPermissionsStatus');
+    const midiPermissionsGrid = document.getElementById('midiPermissionsGrid');
+    const closeMidiPermissionsModal = document.getElementById('closeMidiPermissionsModal');
+    const closeMidiPermissionsBtn = document.getElementById('closeMidiPermissionsBtn');
+    const allowAllMidiPermissionsBtn = document.getElementById('allowAllMidiPermissionsBtn');
 
     // Pop-out preview state
     let previewPopoutOpen = false;
@@ -173,6 +180,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // Scrub behavior belongs to each video slot. Controller mappings remain
     // global, while enabled/mode/range/speed/B-F options follow the clip across sessions.
     const tabClipScrubSettings = {};
+    // Per-clip controller permissions are an allow-by-default layer over the
+    // existing device-independent MIDI mappings. Only explicit blocks are
+    // stored, keeping old sessions and new clips fully enabled.
+    const tabClipMidiPermissions = {};
+    const MIDI_PERMISSION_ACTIONS = Object.freeze([
+        { key: 'nextCuePoint', label: 'Next Cue' },
+        { key: 'previousCuePoint', label: 'Previous Cue' },
+        { key: 'restartClip', label: 'Restart' },
+        { key: 'scrubTrigger', label: 'Scrub Trigger' },
+        { key: 'scrubFader', label: 'Scrub Fader' },
+        { key: 'scrubRange', label: 'Scrub Range' },
+        { key: 'scrubSpeed', label: 'Scrub Speed' },
+        { key: 'accent1', label: 'Accent A1' },
+        { key: 'accent2', label: 'Accent A2' },
+        { key: 'accent3', label: 'Accent A3' },
+        { key: 'accent4', label: 'Accent A4' }
+    ]);
+    const MIDI_PERMISSION_ACTION_KEYS = new Set(MIDI_PERMISSION_ACTIONS.map(action => action.key));
     const DEFAULT_CLIP_SCRUB_SETTINGS = Object.freeze({
         enabled: true,
         mode: 'manual-cc',
@@ -195,6 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipInOutPoints[i] = {};
         tabClipAccentPoints[i] = {};
         tabClipScrubSettings[i] = {};
+        tabClipMidiPermissions[i] = {};
     }
 
     // Legacy references for current tab's data (for compatibility)
@@ -208,6 +234,50 @@ document.addEventListener('DOMContentLoaded', function() {
     let clipInOutPoints = tabClipInOutPoints[currentTab];
     let clipAccentPoints = tabClipAccentPoints[currentTab];
     let clipScrubSettings = tabClipScrubSettings[currentTab];
+    let clipMidiPermissions = tabClipMidiPermissions[currentTab];
+
+    function normaliseMIDIDeviceKey(deviceName) {
+        return String(deviceName || '').trim().toLocaleLowerCase();
+    }
+
+    function normaliseClipMIDIPermissions(settings) {
+        const normalised = { devices: {} };
+        Object.entries(settings?.devices || {}).forEach(([storedKey, deviceSettings]) => {
+            const name = String(deviceSettings?.name || storedKey || '').trim();
+            const key = normaliseMIDIDeviceKey(name);
+            if (!key) return;
+            const blocked = Array.isArray(deviceSettings?.blocked)
+                ? [...new Set(deviceSettings.blocked.filter(action => MIDI_PERMISSION_ACTION_KEYS.has(action)))]
+                : [];
+            if (blocked.length > 0) normalised.devices[key] = { name, blocked };
+        });
+        return normalised;
+    }
+
+    function cloneClipMIDIPermissions(settings) {
+        return normaliseClipMIDIPermissions(settings);
+    }
+
+    function ensureClipMIDIPermissions(clipNumber, tabIndex = currentTab) {
+        if (!tabClipMidiPermissions[tabIndex]) tabClipMidiPermissions[tabIndex] = {};
+        const existing = normaliseClipMIDIPermissions(tabClipMidiPermissions[tabIndex][clipNumber]);
+        tabClipMidiPermissions[tabIndex][clipNumber] = existing;
+        return existing;
+    }
+
+    function isMIDIActionAllowedForSelectedClip(action, message) {
+        if (!MIDI_PERMISSION_ACTION_KEYS.has(action) || !selectedClipSlot) return true;
+        const deviceKey = normaliseMIDIDeviceKey(message?.deviceName);
+        if (!deviceKey) return true;
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const deviceSettings = tabClipMidiPermissions[currentTab]?.[clipNumber]?.devices?.[deviceKey];
+        return !deviceSettings?.blocked?.includes(action);
+    }
+
+    function clipHasMIDIPermissionRestrictions(clipNumber, tabIndex = currentTab) {
+        return Object.values(tabClipMidiPermissions[tabIndex]?.[clipNumber]?.devices || {})
+            .some(deviceSettings => Array.isArray(deviceSettings.blocked) && deviceSettings.blocked.length > 0);
+    }
 
     // Cue point selection state (for Ctrl+drag range select and Ctrl+click toggle)
     let selectedCuePointIds = new Set();
@@ -499,6 +569,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Track if shortcuts modal is open
     let shortcutsModalOpen = false;
+    let midiPermissionsModalOpen = false;
+    let midiPermissionsTarget = null;
 
     // Track which clip the context menu is open for
     let contextMenuClipNumber = null;
@@ -532,7 +604,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.17',
+            version: '1.18',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -557,7 +629,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentCueIndex: tabClipCurrentCueIndex,
                 inOutPoints: tabClipInOutPoints,
                 accentPoints: tabClipAccentPoints,
-                scrubSettings: tabClipScrubSettings
+                scrubSettings: tabClipScrubSettings,
+                midiPermissions: tabClipMidiPermissions
             },
             scrubSettings: {
                 ccController: scrubConfig.ccController,
@@ -751,6 +824,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 });
             }
+            if (sessionData.tabs.midiPermissions) {
+                Object.keys(sessionData.tabs.midiPermissions).forEach(tabIndex => {
+                    tabClipMidiPermissions[tabIndex] = {};
+                    Object.keys(sessionData.tabs.midiPermissions[tabIndex] || {}).forEach(clipNumber => {
+                        tabClipMidiPermissions[tabIndex][clipNumber] = normaliseClipMIDIPermissions(
+                            sessionData.tabs.midiPermissions[tabIndex][clipNumber]
+                        );
+                    });
+                });
+            }
 
             // v1.8 and earlier stored one range/speed/mode for the whole session.
             // Migrate those values into every video slot and default scrub to ON.
@@ -791,6 +874,7 @@ document.addEventListener('DOMContentLoaded', function() {
             clipInOutPoints = tabClipInOutPoints[currentTab];
             clipAccentPoints = tabClipAccentPoints[currentTab];
             clipScrubSettings = tabClipScrubSettings[currentTab];
+            clipMidiPermissions = tabClipMidiPermissions[currentTab];
             console.log('Current tab video data:', clipVideos);
 
             // Restore folder path (keep for backward compatibility)
@@ -929,6 +1013,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tabClipInOutPoints[i] = {};
             tabClipAccentPoints[i] = {};
             tabClipScrubSettings[i] = {};
+            tabClipMidiPermissions[i] = {};
         }
 
         // Update current references
@@ -942,6 +1027,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipInOutPoints = tabClipInOutPoints[currentTab];
         clipAccentPoints = tabClipAccentPoints[currentTab];
         clipScrubSettings = tabClipScrubSettings[currentTab];
+        clipMidiPermissions = tabClipMidiPermissions[currentTab];
         accentNavigationContext = null;
         scrubSettingsEditorTarget = 'clip';
 
@@ -1409,6 +1495,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const sourceScrubSettings = clipScrubSettings[sourceClipNumber]
             ? { ...clipScrubSettings[sourceClipNumber] }
             : normaliseClipScrubSettings(null);
+        const sourceMidiPermissions = cloneClipMIDIPermissions(clipMidiPermissions[sourceClipNumber]);
 
         // Save target clip data (for swap)
         const targetVideo = clipVideos[targetClipNumber];
@@ -1423,6 +1510,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const targetScrubSettings = clipScrubSettings[targetClipNumber]
             ? { ...clipScrubSettings[targetClipNumber] }
             : normaliseClipScrubSettings(null);
+        const targetMidiPermissions = cloneClipMIDIPermissions(clipMidiPermissions[targetClipNumber]);
 
         // Move source to target
         if (sourceVideo) {
@@ -1435,6 +1523,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (sourceAutoPlay !== undefined) tabClipAutoPlay[currentTab][targetClipNumber] = sourceAutoPlay;
             else delete tabClipAutoPlay[currentTab][targetClipNumber];
             clipScrubSettings[targetClipNumber] = sourceScrubSettings;
+            clipMidiPermissions[targetClipNumber] = sourceMidiPermissions;
         } else {
             delete clipVideos[targetClipNumber];
             delete clipCuePoints[targetClipNumber];
@@ -1444,6 +1533,7 @@ document.addEventListener('DOMContentLoaded', function() {
             delete clipModes[targetClipNumber];
             delete tabClipAutoPlay[currentTab][targetClipNumber];
             delete clipScrubSettings[targetClipNumber];
+            delete clipMidiPermissions[targetClipNumber];
         }
 
         // Move target to source (swap)
@@ -1457,6 +1547,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (targetAutoPlay !== undefined) tabClipAutoPlay[currentTab][sourceClipNumber] = targetAutoPlay;
             else delete tabClipAutoPlay[currentTab][sourceClipNumber];
             clipScrubSettings[sourceClipNumber] = targetScrubSettings;
+            clipMidiPermissions[sourceClipNumber] = targetMidiPermissions;
         } else {
             delete clipVideos[sourceClipNumber];
             delete clipCuePoints[sourceClipNumber];
@@ -1466,6 +1557,7 @@ document.addEventListener('DOMContentLoaded', function() {
             delete clipModes[sourceClipNumber];
             delete tabClipAutoPlay[currentTab][sourceClipNumber];
             delete clipScrubSettings[sourceClipNumber];
+            delete clipMidiPermissions[sourceClipNumber];
         }
 
         // Update UI for both slots
@@ -1528,6 +1620,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Remove per-slot scrub setting
         delete clipScrubSettings[clipNumber];
+
+        // Remove per-slot MIDI permissions
+        delete clipMidiPermissions[clipNumber];
 
         // Update the clip slot UI
         const slot = document.querySelector(`[data-clip-number="${clipNumber}"]`);
@@ -1810,6 +1905,9 @@ document.addEventListener('DOMContentLoaded', function() {
             };
             const scrubModeName = scrubModeNames[savedScrub.mode] || 'Fader';
             const scrubTitle = `Scrub ${savedScrub.enabled ? 'ON' : 'OFF'}: ${scrubModeName}, ${describeClipScrubRange(savedScrub)} @ ${savedScrub.speed.toFixed(1)}x`;
+            const midiRestrictionBadge = clipHasMIDIPermissionRestrictions(clipNumber)
+                ? '<div class="midi-restriction-badge" title="This clip restricts one or more MIDI controllers">MIDI 🔒</div>'
+                : '';
 
             // Build slot content with thumbnail support
             let thumbnailHtml = '';
@@ -1826,6 +1924,7 @@ document.addEventListener('DOMContentLoaded', function() {
             slot.innerHTML = `
                 ${thumbnailHtml}
                 <div class="clip-scrub-indicator${savedScrub.enabled ? '' : ' off'}" title="${scrubTitle}">${scrubModeName}</div>
+                ${midiRestrictionBadge}
                 <div class="clip-mode-indicator" title="Playback Mode: ${clipMode}${autoPlayEnabled ? '' : ' | Auto-play: off'}">${modeIcon}${autoPlayBadge}</div>
                 <div class="clip-slot-content">
                     <div class="clip-slot-label" data-clip-number="${clipNumber}">${customName}</div>
@@ -5152,6 +5251,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Save current tab state and switch to new tab
         currentTab = tabIndex;
+        if (!tabClipMidiPermissions[currentTab]) tabClipMidiPermissions[currentTab] = {};
 
         // Update legacy references to point to new tab's data
         clipVideos = tabClipVideos[currentTab];
@@ -5164,6 +5264,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clipInOutPoints = tabClipInOutPoints[currentTab];
         clipAccentPoints = tabClipAccentPoints[currentTab];
         clipScrubSettings = tabClipScrubSettings[currentTab];
+        clipMidiPermissions = tabClipMidiPermissions[currentTab];
         accentNavigationContext = null;
 
         // Clear current selection (each tab has its own selection)
@@ -5203,6 +5304,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabClipInOutPoints[newTabIndex] = {};
         tabClipAccentPoints[newTabIndex] = {};
         tabClipScrubSettings[newTabIndex] = {};
+        tabClipMidiPermissions[newTabIndex] = {};
 
         // Create tab button
         const tabBtn = document.createElement('button');
@@ -5382,6 +5484,7 @@ document.addEventListener('DOMContentLoaded', function() {
         delete tabClipInOutPoints[tabIndex];
         delete tabClipAccentPoints[tabIndex];
         delete tabClipScrubSettings[tabIndex];
+        delete tabClipMidiPermissions[tabIndex];
         delete tabCustomNames[tabIndex];
 
         // Remove tab button from UI
@@ -5651,7 +5754,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function matchesShortcut(event, shortcut) {
-        if (shortcutsModalOpen) return false; // Don't trigger shortcuts when modal is open
+        if (shortcutsModalOpen || midiPermissionsModalOpen) return false; // Don't trigger shortcuts behind setup modals
 
         const parsed = parseKeyboardShortcut(shortcut);
 
@@ -6038,11 +6141,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // update per animation frame. Disabled sliders intentionally ignore CC.
         if (scrubConfig.rangeController && message.type === 'cc' &&
             matchesMIDIMapping(message, scrubConfig.rangeController)) {
+            if (!isMIDIActionAllowedForSelectedClip('scrubRange', message)) return;
             queueScrubParameterCC('range', message.value);
             return;
         }
         if (scrubConfig.speedController && message.type === 'cc' &&
             matchesMIDIMapping(message, scrubConfig.speedController)) {
+            if (!isMIDIActionAllowedForSelectedClip('scrubSpeed', message)) return;
             queueScrubParameterCC('speed', message.value);
             return;
         }
@@ -6054,6 +6159,7 @@ document.addEventListener('DOMContentLoaded', function() {
             message.type === 'cc' &&
             message.channel === scrubConfig.ccController.channel &&
             message.controller === scrubConfig.ccController.controller) {
+            if (!isMIDIActionAllowedForSelectedClip('scrubFader', message)) return;
             if (scrubFaderMomentaryArmed) handleMomentaryFaderScrub(message.value);
             else handleCCFaderScrub(message.value);
             return;
@@ -6062,7 +6168,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (scrubConfig.ccController &&
             message.type === 'cc' &&
             message.channel === scrubConfig.ccController.channel &&
-            message.controller === scrubConfig.ccController.controller) {
+            message.controller === scrubConfig.ccController.controller &&
+            isMIDIActionAllowedForSelectedClip('scrubFader', message)) {
             scrubCCLastValue = message.value;
             // Fall through — CC might also be mapped to another action
         }
@@ -6073,6 +6180,7 @@ document.addEventListener('DOMContentLoaded', function() {
             message.velocity > 0 &&
             message.channel === scrubConfig.drumPadNote.channel &&
             message.note === scrubConfig.drumPadNote.note) {
+            if (!isMIDIActionAllowedForSelectedClip('scrubTrigger', message)) return;
             const trace = beginMIDILatencyTrace(message, `scrub trigger: ${scrubMode || selectedScrubMode || 'activate'}`);
             flashScrubHit();
             triggerClipScrubHit();
@@ -6085,6 +6193,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Try to match message against mapped actions
         for (const [action, mapping] of Object.entries(midiMappings)) {
             if (mapping && matchesMIDIMapping(message, mapping)) {
+                if (!isMIDIActionAllowedForSelectedClip(action, message)) return;
                 // Check debounce timing
                 const now = Date.now();
                 const lastTrigger = midiLastTriggerTime[action] || 0;
@@ -6247,6 +6356,153 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         return result;
+    }
+
+    function getMIDIPermissionMapping(action) {
+        if (action === 'scrubTrigger') return scrubConfig.drumPadNote;
+        if (action === 'scrubFader') return scrubConfig.ccController;
+        if (action === 'scrubRange') return scrubConfig.rangeController;
+        if (action === 'scrubSpeed') return scrubConfig.speedController;
+        return midiMappings[action] || null;
+    }
+
+    function getMIDIPermissionModalDevices() {
+        const devicesByKey = new Map();
+        midiDevices.forEach(device => {
+            const key = normaliseMIDIDeviceKey(device.name);
+            if (key && !devicesByKey.has(key)) devicesByKey.set(key, { key, name: device.name, connected: device.connected !== false });
+        });
+        if (midiPermissionsTarget) {
+            const savedDevices = tabClipMidiPermissions[midiPermissionsTarget.tabIndex]?.[midiPermissionsTarget.clipNumber]?.devices || {};
+            Object.entries(savedDevices).forEach(([key, settings]) => {
+                if (!devicesByKey.has(key)) devicesByKey.set(key, { key, name: settings.name || key, connected: false });
+            });
+        }
+        return [...devicesByKey.values()];
+    }
+
+    function updateMIDIPermissionForTarget(device, action, allowed) {
+        if (!midiPermissionsTarget) return;
+        const { tabIndex, clipNumber } = midiPermissionsTarget;
+        const settings = ensureClipMIDIPermissions(clipNumber, tabIndex);
+        const key = normaliseMIDIDeviceKey(device.name);
+        if (!key) return;
+        const existing = settings.devices[key] || { name: device.name, blocked: [] };
+        const blocked = new Set(existing.blocked || []);
+        if (allowed) blocked.delete(action);
+        else blocked.add(action);
+
+        if (blocked.size > 0) settings.devices[key] = { name: device.name, blocked: [...blocked] };
+        else delete settings.devices[key];
+
+        if (Object.keys(settings.devices).length === 0) delete tabClipMidiPermissions[tabIndex][clipNumber];
+        markSessionModified();
+        if (tabIndex === currentTab) {
+            const slot = document.querySelector(`.clip-slot[data-clip-number="${clipNumber}"]`);
+            if (slot) updateSlotAppearance(slot, clipVideos[clipNumber]);
+        }
+    }
+
+    function renderMIDIPermissionsGrid() {
+        if (!midiPermissionsGrid || !midiPermissionsTarget) return;
+        const devices = getMIDIPermissionModalDevices();
+        const { tabIndex, clipNumber } = midiPermissionsTarget;
+        const settings = tabClipMidiPermissions[tabIndex]?.[clipNumber];
+        const connectedCount = devices.filter(device => device.connected).length;
+        midiPermissionsStatus.textContent = devices.length === 0
+            ? 'No MIDI inputs detected. Connect the controllers, then reopen this window.'
+            : `${connectedCount} of ${devices.length} listed MIDI input${devices.length === 1 ? '' : 's'} currently connected`;
+        midiPermissionsGrid.innerHTML = '';
+
+        if (devices.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'midi-permissions-empty';
+            empty.textContent = 'Permissions default to allowed until a controller is configured.';
+            midiPermissionsGrid.appendChild(empty);
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'midi-permissions-table';
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        const actionHeader = document.createElement('th');
+        actionHeader.textContent = 'Mapped action';
+        headerRow.appendChild(actionHeader);
+        devices.forEach(device => {
+            const th = document.createElement('th');
+            th.textContent = device.name;
+            if (!device.connected) {
+                const offline = document.createElement('span');
+                offline.className = 'midi-permission-mapping';
+                offline.textContent = 'Not connected';
+                th.appendChild(offline);
+            }
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        MIDI_PERMISSION_ACTIONS.forEach(action => {
+            const row = document.createElement('tr');
+            const labelCell = document.createElement('td');
+            labelCell.textContent = action.label;
+            const mapping = document.createElement('span');
+            mapping.className = 'midi-permission-mapping';
+            mapping.textContent = formatMIDIMapping(getMIDIPermissionMapping(action.key));
+            labelCell.appendChild(mapping);
+            row.appendChild(labelCell);
+
+            devices.forEach(device => {
+                const cell = document.createElement('td');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'midi-permission-checkbox';
+                checkbox.dataset.action = action.key;
+                checkbox.dataset.deviceKey = device.key;
+                checkbox.checked = !settings?.devices?.[device.key]?.blocked?.includes(action.key);
+                checkbox.title = `${checkbox.checked ? 'Allow' : 'Block'} ${device.name}: ${action.label}`;
+                checkbox.addEventListener('change', () => {
+                    updateMIDIPermissionForTarget(device, action.key, checkbox.checked);
+                    checkbox.title = `${checkbox.checked ? 'Allow' : 'Block'} ${device.name}: ${action.label}`;
+                });
+                cell.appendChild(checkbox);
+                row.appendChild(cell);
+            });
+            tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        midiPermissionsGrid.appendChild(table);
+    }
+
+    async function openMIDIPermissionsModal(clipNumber) {
+        midiPermissionsTarget = { tabIndex: currentTab, clipNumber: String(clipNumber) };
+        midiPermissionsModalOpen = true;
+        const customName = clipNames[clipNumber] || `Clip ${clipNumber}`;
+        midiPermissionsTitle.textContent = `${customName} — MIDI Permissions`;
+        midiPermissionsModal.style.display = 'block';
+        renderMIDIPermissionsGrid();
+        await loadMIDIDevices();
+        if (midiPermissionsModalOpen) renderMIDIPermissionsGrid();
+    }
+
+    function closeMIDIPermissionsModalFunc() {
+        midiPermissionsModalOpen = false;
+        midiPermissionsTarget = null;
+        midiPermissionsModal.style.display = 'none';
+    }
+
+    function allowAllMIDIForTargetClip() {
+        if (!midiPermissionsTarget) return;
+        const { tabIndex, clipNumber } = midiPermissionsTarget;
+        delete tabClipMidiPermissions[tabIndex]?.[clipNumber];
+        markSessionModified();
+        if (tabIndex === currentTab) {
+            const slot = document.querySelector(`.clip-slot[data-clip-number="${clipNumber}"]`);
+            if (slot) updateSlotAppearance(slot, clipVideos[clipNumber]);
+        }
+        renderMIDIPermissionsGrid();
     }
 
     // Capture MIDI message for learning
@@ -6655,6 +6911,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (action === 'clear') {
                     clearClip(contextMenuClipNumber);
+                } else if (action === 'midi-permissions') {
+                    openMIDIPermissionsModal(contextMenuClipNumber);
                 } else if (action === 'toggle-autoplay') {
                     toggleClipAutoPlay(contextMenuClipNumber);
                     // Don't close the menu — let user see the state change
@@ -7128,6 +7386,13 @@ document.addEventListener('DOMContentLoaded', function() {
     resetShortcutsBtn.addEventListener('click', resetShortcutsToDefaults);
 
     saveShortcutsBtn.addEventListener('click', saveShortcutsChanges);
+
+    closeMidiPermissionsModal.addEventListener('click', closeMIDIPermissionsModalFunc);
+    closeMidiPermissionsBtn.addEventListener('click', closeMIDIPermissionsModalFunc);
+    allowAllMidiPermissionsBtn.addEventListener('click', allowAllMIDIForTargetClip);
+    midiPermissionsModal.addEventListener('click', function(event) {
+        if (event.target === midiPermissionsModal) closeMIDIPermissionsModalFunc();
+    });
 
     // MIDI refresh button on home page — reconnects every detected input.
     const refreshMIDIBtn = document.getElementById('refreshMIDIBtn');

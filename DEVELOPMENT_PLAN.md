@@ -1115,8 +1115,8 @@ During development, several features were implemented that weren't in the origin
 - **Status:** ✅ Implemented
 
 ### Enhanced Session Format
-- Session file format evolved from v1.0 to v1.17, including portable packages, a global MIDI output fade, scrub Range/Speed CC mappings, and per-clip/per-accent Start/Centre/End range positioning
-- Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, per-slot scrub settings, and four per-slot accent cue points
+- Session file format evolved from v1.0 to v1.18, including portable packages, a global MIDI output fade, scrub Range/Speed CC mappings, per-clip/per-accent Start/Centre/End range positioning, and per-clip controller permissions
+- Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, per-slot scrub settings, four per-slot accent cue points, and controller-by-action MIDI restrictions
 - Comprehensive project state preservation
 - **Status:** ✅ Implemented
 
@@ -1133,7 +1133,29 @@ During development, several features were implemented that weren't in the origin
 - **Behavior contract:** `ACCENT_CUES.md`
 - **Status:** Implemented on `codex/accent-cue-points`; hardware acceptance testing remains
 
+### Per-Clip MIDI Controller Permissions
+- Right-click any clip and choose **MIDI Permissions…** to decide which connected controller may use each latency-sensitive mapped action on that clip
+- Covers Next/Previous Cue, Restart, Scrub Trigger/Fader/Range/Speed, and Accents A1-A4
+- Existing mappings remain device-independent; the permission layer only decides whether the source controller may execute the matched action on the selected clip
+- Permissions default to allowed, preserving older sessions and unrestricted clips
+- Next/Previous Clip, tab switching, keyboard shortcuts, and Master Output Fade remain global
+- A compact **MIDI 🔒** clip badge identifies clips with restrictions
+- Restrictions move with clips, survive session and portable-package round trips, and use constant-time in-memory checks in the MIDI handler
+- **Behavior contract:** `MIDI_PERMISSIONS.md`
+- **Status:** Implemented on `codex/per-clip-midi-permissions`; physical two-controller acceptance testing remains
+
+### Deferred: Embedded Audio for Long-Play Clips
+- **Status:** Design documented; no application changes currently planned
+- **Use case:** Some non-interactive, long-play video sections may be exported with their audio already embedded. When one of these clips is selected, its audio should play automatically with the video. Interactive trigger/scrub clips remain silent, with their performance audio continuing to come from Ableton on a separate computer.
+- **Recommended approach:** Add a per-clip **Clip Audio: Off / On** setting. Keep **Off** as the default so existing sessions and latency-sensitive clips retain the current video-only behavior.
+- Use the audio track already contained in the video rather than attaching and synchronising a separate audio file. Chromium then owns audio/video synchronisation through the existing media element.
+- Only the active playback owner may output audio: the embedded preview when no pop-out is open, or the pop-out video when it owns projection playback. The inactive video element must remain muted to prevent doubled or echoed audio.
+- Selecting another clip stops the previous clip and its audio together. Session save/load must preserve the per-clip audio setting, and Collect All & Save requires no additional media-copy logic because the audio is contained in the video file.
+- Scrub mode should automatically mute embedded audio while it is active. Speed changes will also affect embedded audio, so audio-enabled clips are intended for normal-speed, non-manipulated playback.
+- **Performance requirement:** Trigger and scrub paths must remain unchanged for audio-disabled clips. Before release, compare existing latency diagnostics with audio disabled and enabled, and test long-play playback on both Windows and macOS with the projection pop-out open.
+- **Trade-offs:** This gives the simplest implementation, strongest A/V synchronisation, and least session-management risk. Changing the audio requires re-exporting the video, and it does not provide independent audio timing, replacement, or mixing controls.
+
 ---
 
-**Last Updated:** 2026-08-09 - Accent cue points implemented with Electron regression coverage
-**Next Steps:** Accent/MIDI hardware acceptance testing, external-display performance testing, application icons, and packaged builds
+**Last Updated:** 2026-09-04 - Added per-clip MIDI controller permissions and documented deferred embedded audio
+**Next Steps:** Physical two-controller MIDI permission testing, external-display performance testing, application icons, and packaged builds; embedded long-play audio remains deferred

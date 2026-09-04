@@ -1837,6 +1837,100 @@
             background-color: #777;
         }
 
+        .midi-permissions-modal-content {
+            max-width: 1050px;
+        }
+
+        .midi-permissions-summary {
+            margin: 0 0 14px;
+            color: #ccc;
+            line-height: 1.45;
+        }
+
+        .midi-permissions-status {
+            margin-bottom: 12px;
+            color: #90ee90;
+            font-size: 13px;
+        }
+
+        .midi-permissions-table-wrap {
+            overflow-x: auto;
+            border: 1px solid #555;
+            border-radius: 6px;
+            margin-bottom: 18px;
+        }
+
+        .midi-permissions-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 560px;
+        }
+
+        .midi-permissions-table th,
+        .midi-permissions-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #484848;
+            border-right: 1px solid #484848;
+            text-align: center;
+        }
+
+        .midi-permissions-table th:first-child,
+        .midi-permissions-table td:first-child {
+            text-align: left;
+            min-width: 210px;
+        }
+
+        .midi-permissions-table th {
+            background: #383838;
+            color: white;
+        }
+
+        .midi-permissions-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .midi-permissions-table th:last-child,
+        .midi-permissions-table td:last-child {
+            border-right: none;
+        }
+
+        .midi-permission-mapping {
+            display: block;
+            margin-top: 3px;
+            color: #999;
+            font-family: monospace;
+            font-size: 11px;
+            font-weight: normal;
+        }
+
+        .midi-permission-checkbox {
+            width: 18px;
+            height: 18px;
+            accent-color: #1683e5;
+            cursor: pointer;
+        }
+
+        .midi-permissions-empty {
+            padding: 24px;
+            color: #aaa;
+            text-align: center;
+        }
+
+        .midi-restriction-badge {
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 4;
+            padding: 2px 6px;
+            border: 1px solid #ca8a04;
+            border-radius: 4px;
+            background: rgba(45, 32, 5, 0.92);
+            color: #facc15;
+            font-size: 10px;
+            line-height: 1.2;
+        }
+
         /* Context Menu Styles */
         .context-menu {
             position: fixed;
@@ -2343,6 +2437,28 @@
         </div>
     </div>
 
+    <!-- Per-clip MIDI controller permissions -->
+    <div id="midiPermissionsModal" class="modal">
+        <div class="modal-content midi-permissions-modal-content">
+            <div class="modal-header">
+                <h2 id="midiPermissionsTitle">Clip MIDI Permissions</h2>
+                <span class="close" id="closeMidiPermissionsModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p class="midi-permissions-summary">
+                    Choose which connected controller may perform each latency-sensitive action on this clip.
+                    Keyboard shortcuts, clip navigation, tab switching and Master Output Fade remain global.
+                </p>
+                <div id="midiPermissionsStatus" class="midi-permissions-status">Checking connected MIDI inputs…</div>
+                <div id="midiPermissionsGrid" class="midi-permissions-table-wrap"></div>
+                <div class="shortcuts-actions">
+                    <button id="allowAllMidiPermissionsBtn" class="modal-btn secondary">Allow All</button>
+                    <button id="closeMidiPermissionsBtn" class="modal-btn primary">Done</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Right-click context menu for clip playback modes -->
     <div id="clipContextMenu" class="context-menu" style="display: none;">
         <div class="context-menu-item" data-mode="forward">
@@ -2370,6 +2486,12 @@
             <span class="context-menu-icon">▷</span>
             <span class="context-menu-label">Auto-play on select</span>
             <span class="context-menu-check">✓</span>
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" data-action="midi-permissions">
+            <span class="context-menu-icon">🎹</span>
+            <span class="context-menu-label">MIDI Permissions…</span>
+            <span class="context-menu-check"></span>
         </div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item context-menu-action" data-action="clear">

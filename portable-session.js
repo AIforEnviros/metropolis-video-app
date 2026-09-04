@@ -35,7 +35,7 @@ function allocateFilename(originalName, usedNames) {
 
 function buildCollectionPlan(sessionData) {
   const portableSession = cloneSessionData(sessionData);
-  portableSession.version = '1.17';
+  portableSession.version = '1.18';
   portableSession.portableSession = {
     version: PORTABLE_SESSION_VERSION,
     mediaDirectory: MEDIA_DIRECTORY

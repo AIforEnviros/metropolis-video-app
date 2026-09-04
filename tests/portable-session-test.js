@@ -36,14 +36,15 @@ async function run() {
         },
         cuePoints: { 0: { 1: [{ id: 1, time: 1.25 }] } },
         accentPoints: { 0: { 1: { 1: { time: 0.8 } } } },
-        scrubSettings: { 0: { 1: { enabled: true, mode: 'back-forward' } } }
+        scrubSettings: { 0: { 1: { enabled: true, mode: 'back-forward' } } },
+        midiPermissions: { 0: { 1: { devices: { 'spd-20': { name: 'SPD-20', blocked: ['nextCuePoint'] } } } } }
       },
       midiMappings: { nextCuePoint: { type: 'noteon', channel: 1, note: 60 } }
     };
 
     const collected = await collectPortableSession(sessionData, destination);
     assert.equal(collected.files.length, 2, 'reused sources should only be copied once');
-    assert.equal(collected.sessionData.version, '1.17');
+    assert.equal(collected.sessionData.version, '1.18');
     assert.equal(collected.sessionData.portableSession.mediaDirectory, 'Media');
 
     const firstPath = collected.sessionData.tabs.videos[0][1].filePath;
@@ -56,6 +57,7 @@ async function run() {
     assert.equal(collected.sessionData.tabs.cuePoints[0][1][0].time, 1.25);
     assert.equal(collected.sessionData.tabs.accentPoints[0][1][1].time, 0.8);
     assert.equal(collected.sessionData.tabs.scrubSettings[0][1].mode, 'back-forward');
+    assert.deepEqual(collected.sessionData.tabs.midiPermissions[0][1].devices['spd-20'].blocked, ['nextCuePoint']);
     assert.equal(collected.sessionData.midiMappings.nextCuePoint.note, 60);
 
     const savedSession = JSON.parse(await fs.readFile(collected.sessionFilePath, 'utf8'));
