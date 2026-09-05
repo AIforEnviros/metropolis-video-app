@@ -990,9 +990,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function clearAllTabs() {
         if (scrubModeActive) deactivateScrubMode(true, false);
+        const knownTabIndexes = new Set([
+            ...allTabs.map(String),
+            ...Object.keys(tabClipVideos),
+            ...Object.keys(tabClipCuePoints),
+            ...Object.keys(tabClipSpeeds),
+            ...Object.keys(tabClipNames),
+            ...Object.keys(tabClipModes),
+            ...Object.keys(tabClipAutoPlay),
+            ...Object.keys(tabClipCurrentCueIndex),
+            ...Object.keys(tabClipInOutPoints),
+            ...Object.keys(tabClipAccentPoints),
+            ...Object.keys(tabClipScrubSettings),
+            ...Object.keys(tabClipMidiPermissions)
+        ]);
         // Memory management: Revoke all blob URLs before clearing
-        for (let i = 0; i < 5; i++) {
-            const tabVideos = tabClipVideos[i];
+        for (const tabIndex of knownTabIndexes) {
+            const tabVideos = tabClipVideos[tabIndex] || {};
             Object.keys(tabVideos).forEach(clipNumber => {
                 if (tabVideos[clipNumber] && tabVideos[clipNumber].url) {
                     URL.revokeObjectURL(tabVideos[clipNumber].url);
@@ -1002,18 +1016,18 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Revoked all blob URLs during tab clearing');
 
         // Clear all tab data
-        for (let i = 0; i < 5; i++) {
-            tabClipVideos[i] = {};
-            tabClipCuePoints[i] = {};
-            tabClipSpeeds[i] = {};
-            tabClipNames[i] = {};
-            tabClipModes[i] = {};
-            tabClipAutoPlay[i] = {};
-            tabClipCurrentCueIndex[i] = {};
-            tabClipInOutPoints[i] = {};
-            tabClipAccentPoints[i] = {};
-            tabClipScrubSettings[i] = {};
-            tabClipMidiPermissions[i] = {};
+        for (const tabIndex of knownTabIndexes) {
+            tabClipVideos[tabIndex] = {};
+            tabClipCuePoints[tabIndex] = {};
+            tabClipSpeeds[tabIndex] = {};
+            tabClipNames[tabIndex] = {};
+            tabClipModes[tabIndex] = {};
+            tabClipAutoPlay[tabIndex] = {};
+            tabClipCurrentCueIndex[tabIndex] = {};
+            tabClipInOutPoints[tabIndex] = {};
+            tabClipAccentPoints[tabIndex] = {};
+            tabClipScrubSettings[tabIndex] = {};
+            tabClipMidiPermissions[tabIndex] = {};
         }
 
         // Update current references
@@ -1068,8 +1082,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let disconnectedVideos = 0;
 
         // Count total videos and check connection status
-        for (let tabIndex = 0; tabIndex < 5; tabIndex++) {
-            const tabVideos = tabClipVideos[tabIndex];
+        for (const [tabIndex, tabVideos] of Object.entries(tabClipVideos)) {
             Object.keys(tabVideos).forEach(clipNumber => {
                 const videoData = tabVideos[clipNumber];
                 if (videoData && videoData.name) {
@@ -1106,8 +1119,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let reconnectedVideos = 0;
 
         // Loop through all tabs
-        for (let tabIndex = 0; tabIndex < 5; tabIndex++) {
-            const tabVideos = tabClipVideos[tabIndex];
+        for (const [tabIndex, tabVideos] of Object.entries(tabClipVideos)) {
 
             for (const clipNumber in tabVideos) {
                 const videoData = tabVideos[clipNumber];
@@ -1155,8 +1167,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let connectionsMade = 0;
 
         // Check all tabs for video slots that match this filename but don't have working URLs
-        for (let tabIndex = 0; tabIndex < 5; tabIndex++) {
-            const tabVideos = tabClipVideos[tabIndex];
+        for (const [tabIndex, tabVideos] of Object.entries(tabClipVideos)) {
             console.log(`Checking tab ${tabIndex} videos:`, tabVideos);
 
             Object.keys(tabVideos).forEach(clipNumber => {

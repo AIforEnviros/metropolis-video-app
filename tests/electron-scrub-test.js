@@ -1825,6 +1825,32 @@ async function run() {
   await click(window, '#outputWindowBtn');
   await waitForNode(() => !previewWindow || previewWindow.isDestroyed(), 'edge cue pop-out close');
 
+  // Portable and ordinary session reconnection must traverse the actual tab
+  // collection rather than stopping at the five original tabs.
+  sessionDataToLoad = JSON.parse(JSON.stringify(savedSessionData));
+  sessionDataToLoad.allTabs = [0, 1, 2, 3, 4, 5];
+  sessionDataToLoad.nextTabIndex = 6;
+  sessionDataToLoad.currentTab = 0;
+  sessionDataToLoad.tabCustomNames = { ...(sessionDataToLoad.tabCustomNames || {}), 5: 'Sixth Tab' };
+  const sixthTabCollections = [
+    'cuePoints', 'speeds', 'clipNames', 'clipModes', 'clipAutoPlay',
+    'currentCueIndex', 'inOutPoints', 'accentPoints', 'scrubSettings', 'midiPermissions'
+  ];
+  sixthTabCollections.forEach(collection => {
+    if (!sessionDataToLoad.tabs[collection]) sessionDataToLoad.tabs[collection] = {};
+    sessionDataToLoad.tabs[collection]['5'] = {};
+  });
+  sessionDataToLoad.tabs.videos['5'] = {
+    1: { name: 'sixth-tab-video.mp4', filePath: testVideoPath, thumbnail: null }
+  };
+  await window.webContents.executeJavaScript(`window.__lastAlert = null`);
+  await click(window, '#loadSessionBtn');
+  await waitFor(window, `document.querySelector('.tab-btn[data-tab="5"]') !== null`, 'sixth tab restored', 10000);
+  await click(window, '.tab-btn[data-tab="5"]');
+  await click(window, '.clip-slot[data-clip-number="1"]');
+  await waitFor(window, `document.getElementById('videoPlayer').duration > 0 && document.getElementById('videoPlayer').currentSrc`, 'sixth-tab video auto-reconnected', 10000);
+  assert.equal(await window.webContents.executeJavaScript(`window.__lastAlert`), null, 'sixth-tab clip must not request manual reconnection');
+
   const relevantErrors = rendererErrors.filter(message => !message.includes('MIDI') && !message.includes('favicon'));
   assert.deepEqual(relevantErrors, []);
   window.destroy();

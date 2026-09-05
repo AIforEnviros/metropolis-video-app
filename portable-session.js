@@ -45,8 +45,10 @@ function buildCollectionPlan(sessionData) {
   const usedNames = new Set();
   const files = [];
 
-  for (const { video } of getVideoEntries(portableSession)) {
-    if (!video.filePath) continue;
+  for (const { tabIndex, clipNumber, video } of getVideoEntries(portableSession)) {
+    if (!video.filePath) {
+      throw new Error(`Cannot collect unresolved video "${video.name || 'Unnamed video'}" in tab ${Number(tabIndex) + 1}, clip ${clipNumber}. Reconnect it before collecting the show.`);
+    }
     if (!path.isAbsolute(video.filePath)) {
       throw new Error(`Cannot collect unresolved media path: ${video.filePath}`);
     }

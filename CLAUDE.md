@@ -21,8 +21,8 @@ This is now an Electron-based desktop application for production live performanc
 - Now converting to Electron for production performance use
 - All core features validated in web version
 
-**Current active development (2026-09-04):**
-- Branch: `codex/per-clip-midi-permissions`
+**Current active development (2026-09-05):**
+- Branch: `codex/portable-tabs-reconnect`
 - Electron is the only active application architecture; `src/` is legacy
 - Session format v1.18 adds per-clip controller-by-action MIDI permissions while retaining range positioning, Range/Speed CC mappings, the global output fade, portable packages, and per-slot scrub/accent settings
 - All detected MIDI inputs connect simultaneously; mappings remain device-independent, with optional per-clip source-controller permissions for cue, scrub, and accent actions

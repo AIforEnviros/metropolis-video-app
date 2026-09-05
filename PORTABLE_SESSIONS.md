@@ -21,6 +21,8 @@ Portable Show/
 
 Files reused by multiple slots are copied once. Different source files with the same filename receive collision-safe names such as `scene.mp4` and `scene-2.mp4`.
 
+Every configured tab is collected and reconnected, including the sixth and all later user-created tabs. If any loaded clip has lost its source file path, collection stops and identifies that tab and clip instead of silently producing an incomplete package.
+
 For safety, collection writes into either an empty folder or the same valid portable package created earlier. Repeat collection stages the complete update before replacing the old package. Unrelated non-empty folders, unreadable packages, and unmanaged files inside `Media` are left untouched.
 
 ## Loading and Relocating
@@ -39,4 +41,4 @@ Run the portable-session file tests with:
 npm.cmd run test:portable
 ```
 
-The test covers shared media, filename collisions, relative paths, moving and updating a complete package, preservation of show data, and refusal to overwrite unrelated files.
+The tests cover shared media, filename collisions, relative paths, sixth-and-later tab reconnection, moving and updating a complete package, unresolved-clip rejection, preservation of show data, and refusal to overwrite unrelated files.

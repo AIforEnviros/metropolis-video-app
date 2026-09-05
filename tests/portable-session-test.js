@@ -32,6 +32,9 @@ async function run() {
             1: { name: 'scene #1.mp4', filePath: firstVideo },
             2: { name: 'scene #1.mp4', filePath: firstVideo },
             3: { name: 'scene #1.mp4', filePath: secondVideo }
+          },
+          5: {
+            1: { name: 'sixth-tab-scene.mp4', filePath: firstVideo }
           }
         },
         cuePoints: { 0: { 1: [{ id: 1, time: 1.25 }] } },
@@ -59,6 +62,7 @@ async function run() {
     assert.equal(collected.sessionData.tabs.scrubSettings[0][1].mode, 'back-forward');
     assert.deepEqual(collected.sessionData.tabs.midiPermissions[0][1].devices['spd-20'].blocked, ['nextCuePoint']);
     assert.equal(collected.sessionData.midiMappings.nextCuePoint.note, 60);
+    assert.match(collected.sessionData.tabs.videos[5][1].filePath, /^Media\//, 'sixth-tab media must be collected');
 
     const savedSession = JSON.parse(await fs.readFile(collected.sessionFilePath, 'utf8'));
     const movedDestination = path.join(testRoot, 'moved portable show');
@@ -67,6 +71,7 @@ async function run() {
     const resolved = resolvePortableSessionPaths(savedSession, movedSessionPath);
     assert.equal((await findMissingMedia(resolved)).length, 0, 'portable media should resolve after moving the complete package');
     assert.ok(path.isAbsolute(resolved.tabs.videos[0][1].filePath));
+    assert.ok(path.isAbsolute(resolved.tabs.videos[5][1].filePath), 'sixth-tab media must resolve after moving the package');
 
     resolved.tabs.cuePoints[0][1][0].time = 2.5;
     const updated = await collectPortableSession(resolved, movedDestination);
@@ -98,6 +103,16 @@ async function run() {
       /destination folder is not empty/
     );
     assert.equal(await fs.readFile(path.join(nonEmptyDestination, 'keep.txt'), 'utf8'), 'do not overwrite');
+
+    const unresolvedSession = structuredClone(sessionData);
+    unresolvedSession.tabs.videos[5][1] = { name: 'missing-sixth-tab.mp4', filePath: null };
+    const unresolvedDestination = path.join(testRoot, 'unresolved destination');
+    await fs.mkdir(unresolvedDestination);
+    await assert.rejects(
+      collectPortableSession(unresolvedSession, unresolvedDestination),
+      /Cannot collect unresolved video "missing-sixth-tab\.mp4" in tab 6, clip 1/,
+      'collection must not silently omit unresolved media'
+    );
 
     await fs.writeFile(path.join(movedDestination, 'Media', 'personal-file.txt'), 'keep me');
     await assert.rejects(
