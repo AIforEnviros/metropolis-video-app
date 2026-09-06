@@ -1658,10 +1658,44 @@ async function run() {
   await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="5"]').classList.contains('has-video') && document.querySelector('.clip-slot[data-clip-number="5"]').classList.contains('selected') && document.getElementById('videoPlayer').duration > 0`, 'duplicate clip into empty slot', 10000);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('clipsMatrix').classList.contains('duplicate-mode')`), false);
 
+  // Tab dragging changes only the saved display order. Stable tab IDs keep
+  // their clip collections attached, while Tab 1-5 shortcuts follow the new
+  // visible positions.
+  const reorderedTabs = await window.webContents.executeJavaScript(`(() => {
+    const source = document.querySelector('.tab-btn[data-tab="2"]');
+    const target = document.querySelector('.tab-btn[data-tab="0"]');
+    const transfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData() {},
+      getData() { return ''; }
+    };
+    const dispatchDrag = (element, type, clientX = 0) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', { value: transfer });
+      Object.defineProperty(event, 'clientX', { value: clientX });
+      element.dispatchEvent(event);
+    };
+    dispatchDrag(source, 'dragstart');
+    dispatchDrag(target, 'dragover', target.getBoundingClientRect().left + 1);
+    dispatchDrag(target, 'drop', target.getBoundingClientRect().left + 1);
+    return Array.from(document.querySelectorAll('.tab-btn')).map(button => Number(button.dataset.tab));
+  })()`);
+  assert.deepEqual(reorderedTabs, [2, 0, 1, 3, 4]);
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.tab-btn[data-tab="2"] .tab-btn-text').textContent`), 'Tab 1');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: '1' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: '1' });
+  await waitFor(window, `document.querySelector('.tab-btn.active').dataset.tab === '2'`, 'Tab 1 shortcut follows reordered position');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: '2' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: '2' });
+  await waitFor(window, `document.querySelector('.tab-btn.active').dataset.tab === '0'`, 'Tab 2 shortcut follows reordered position');
+
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
   assert.equal(savedSessionData.version, '1.18');
+  assert.deepEqual(savedSessionData.allTabs, [2, 0, 1, 3, 4]);
   assert.deepEqual(savedSessionData.midiMappings.accent2, { type: 'noteon', channel: 1, note: 62 });
   assert.deepEqual(savedSessionData.midiMappings.toggleScrubMode, { type: 'noteon', channel: 1, note: 63 });
   assert.deepEqual(savedSessionData.midiMappings.outputFade, { type: 'cc', channel: 1, controller: 21 });
@@ -1728,6 +1762,10 @@ async function run() {
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await click(window, '#loadSessionBtn');
   await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.18 reload', 10000);
+  assert.deepEqual(
+    await window.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.tab-btn')).map(button => Number(button.dataset.tab))`),
+    [2, 0, 1, 3, 4]
+  );
   assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeMIDIDisplay').textContent`), /CC 15/);
   assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedMIDIDisplay').textContent`), /CC 16/);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('outputFadeReverse').checked`), true);

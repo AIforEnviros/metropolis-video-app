@@ -124,6 +124,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Track all tabs (array of tab indices)
     let allTabs = [0, 1, 2, 3, 4];
     let nextTabIndex = 5; // Next available tab index
+    let draggedTabIndex = null;
+    let suppressTabClick = false;
 
     // Track videos loaded into each slot for each tab (tabIndex -> { clipNumber -> video data })
     const tabClipVideos = {};
@@ -5411,6 +5413,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // updatePlayButtonState() removed
     }
 
+    function switchToTabPosition(position) {
+        const tabIndex = allTabs[position];
+        if (tabIndex !== undefined) switchTab(tabIndex);
+    }
+
     // Add a new tab
     function addNewTab() {
         const newTabIndex = nextTabIndex++;
@@ -5452,8 +5459,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Setup event handlers for a tab button
     function setupTabEventHandlers(tabBtn, tabIndex) {
+        tabBtn.draggable = true;
+        tabBtn.title = 'Drag to reorder · Double-click the name to rename';
+
         // Click handler for tab switching
         tabBtn.addEventListener('click', function(e) {
+            if (suppressTabClick) {
+                e.preventDefault();
+                return;
+            }
             // Don't switch tab if clicking remove button or editing text
             if (!e.target.classList.contains('remove-tab-btn') &&
                 !e.target.classList.contains('tab-btn-text')) {
@@ -5484,6 +5498,67 @@ document.addEventListener('DOMContentLoaded', function() {
                 removeTab(tabIndex);
             });
         }
+
+        tabBtn.addEventListener('dragstart', function(e) {
+            if (e.target.classList.contains('remove-tab-btn') || textSpan?.isContentEditable) {
+                e.preventDefault();
+                return;
+            }
+            draggedTabIndex = tabIndex;
+            tabBtn.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(tabIndex));
+        });
+
+        tabBtn.addEventListener('dragover', function(e) {
+            if (draggedTabIndex === null || draggedTabIndex === tabIndex) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            clearTabDropIndicators();
+            const rect = tabBtn.getBoundingClientRect();
+            tabBtn.classList.add(e.clientX >= rect.left + rect.width / 2 ? 'drag-after' : 'drag-before');
+        });
+
+        tabBtn.addEventListener('drop', function(e) {
+            if (draggedTabIndex === null || draggedTabIndex === tabIndex) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const rect = tabBtn.getBoundingClientRect();
+            reorderTab(draggedTabIndex, tabIndex, e.clientX >= rect.left + rect.width / 2);
+        });
+
+        tabBtn.addEventListener('dragend', function() {
+            draggedTabIndex = null;
+            clearTabDragIndicators();
+        });
+    }
+
+    function clearTabDropIndicators() {
+        document.querySelectorAll('.tab-btn.drag-before, .tab-btn.drag-after').forEach(button => {
+            button.classList.remove('drag-before', 'drag-after');
+        });
+    }
+
+    function clearTabDragIndicators() {
+        clearTabDropIndicators();
+        document.querySelectorAll('.tab-btn.dragging').forEach(button => button.classList.remove('dragging'));
+    }
+
+    function reorderTab(sourceTabIndex, targetTabIndex, placeAfter) {
+        const sourcePosition = allTabs.indexOf(sourceTabIndex);
+        if (sourcePosition < 0 || !allTabs.includes(targetTabIndex) || sourceTabIndex === targetTabIndex) return false;
+
+        allTabs.splice(sourcePosition, 1);
+        const targetPosition = allTabs.indexOf(targetTabIndex);
+        allTabs.splice(targetPosition + (placeAfter ? 1 : 0), 0, sourceTabIndex);
+        draggedTabIndex = null;
+        clearTabDragIndicators();
+        suppressTabClick = true;
+        rebuildTabBar();
+        markSessionModified();
+        setTimeout(() => { suppressTabClick = false; }, 0);
+        console.log(`Moved tab ${sourceTabIndex} ${placeAfter ? 'after' : 'before'} tab ${targetTabIndex}`);
+        return true;
     }
 
     // Start editing a tab name
@@ -6071,19 +6146,19 @@ document.addEventListener('DOMContentLoaded', function() {
                         scrubActivateBtn?.click();
                         break;
                     case 'tab1':
-                        switchTab(0);
+                        switchToTabPosition(0);
                         break;
                     case 'tab2':
-                        switchTab(1);
+                        switchToTabPosition(1);
                         break;
                     case 'tab3':
-                        switchTab(2);
+                        switchToTabPosition(2);
                         break;
                     case 'tab4':
-                        switchTab(3);
+                        switchToTabPosition(3);
                         break;
                     case 'tab5':
-                        switchTab(4);
+                        switchToTabPosition(4);
                         break;
                     case 'speedPreset0.5':
                         changeSpeed(0.5);
@@ -6440,19 +6515,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 scrubActivateBtn?.click();
                 break;
             case 'tab1':
-                switchTab(0);
+                switchToTabPosition(0);
                 break;
             case 'tab2':
-                switchTab(1);
+                switchToTabPosition(1);
                 break;
             case 'tab3':
-                switchTab(2);
+                switchToTabPosition(2);
                 break;
             case 'tab4':
-                switchTab(3);
+                switchToTabPosition(3);
                 break;
             case 'tab5':
-                switchTab(4);
+                switchToTabPosition(4);
                 break;
             case 'speedPreset0.5':
                 changeSpeed(0.5);

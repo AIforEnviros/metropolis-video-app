@@ -224,6 +224,10 @@ Click **Collect All & Save** to copy every referenced video into a package conta
 
 Right-click a loaded clip and choose **Duplicate Clip**, then click an empty slot on the same tab. Press `Escape` to cancel. The new slot references the same video file but receives independent copies of the clip name, cue and accent points, In/Out points, playback settings, scrub settings, and per-controller MIDI permissions. Temporary playback position and cue-navigation progress are reset. Occupied slots are never overwritten.
 
+### Reorder Tabs
+
+Drag a tab left or right and drop it on the desired side of another tab. The new order is stored in the session without changing the tab's clips or settings. Keyboard and MIDI actions named **Switch to Tab 1-5** follow the first five visible tab positions after reordering.
+
 ### Master Output Fade
 
 The compact **Master Output** slider fades both the embedded preview and pop-out output to black while video playback and performance controls continue underneath. Assign **Master Output Fade Fader** to a MIDI CC through the Keyboard Shortcuts window. Use **Reverse MIDI direction** if the physical fader orientation is opposite to the desired movement.
