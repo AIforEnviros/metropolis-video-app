@@ -4602,14 +4602,22 @@ document.addEventListener('DOMContentLoaded', function() {
     function triggerClipScrubHit() {
         if (!selectedClipSlot || !video.src || getScrubDuration() <= 0) return false;
 
+        const clipNumber = selectedClipSlot.dataset.clipNumber;
+        const settings = ensureClipScrubSettings(clipNumber);
+
+        // The performance trigger executes an already-armed clip scrub; it
+        // must never arm a clip that has been deliberately switched OFF.
+        // Check the saved clip state before disturbing an active accent so an
+        // ignored clip trigger also leaves the accent effect untouched.
+        if (!settings.enabled) return false;
+
         if (scrubModeActive && accentScrubOverride) {
             deactivateScrubMode(true, false);
         }
 
         if (!scrubModeActive) {
-            const clipNumber = selectedClipSlot.dataset.clipNumber;
-            const settings = applyClipScrubSettings(clipNumber);
-            const activated = activateScrubMode(settings.mode, !settings.enabled);
+            applyClipScrubSettings(clipNumber);
+            const activated = activateScrubMode(settings.mode, false);
             if (!activated) return false;
 
             // B/F waits for its first direction trigger. Other drum-driven
@@ -5837,8 +5845,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (keyMatches) {
                 event.preventDefault();
                 event.stopPropagation();
-                flashScrubHit();
-                triggerClipScrubHit();
+                if (triggerClipScrubHit()) flashScrubHit();
                 return;
             }
         }
@@ -6192,9 +6199,10 @@ document.addEventListener('DOMContentLoaded', function() {
             message.channel === scrubConfig.drumPadNote.channel &&
             message.note === scrubConfig.drumPadNote.note) {
             if (!isMIDIActionAllowedForSelectedClip('scrubTrigger', message)) return;
-            const trace = beginMIDILatencyTrace(message, `scrub trigger: ${scrubMode || selectedScrubMode || 'activate'}`);
+            const trace = beginMIDILatencyTrace(message, `scrub trigger: ${scrubMode || selectedScrubMode || 'inactive'}`);
+            const triggered = triggerClipScrubHit();
+            if (!triggered) return;
             flashScrubHit();
-            triggerClipScrubHit();
             finishMIDILatencyTrace(trace, {
                 direction: scrubMode === 'back-forward' ? scrubBackForwardActiveDirection : 0
             });

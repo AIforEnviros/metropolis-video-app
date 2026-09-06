@@ -91,9 +91,10 @@ This document is the behavior contract for the scrub-mode feature. If implementa
 - The remapped Previous Cue Point, Next Cue Point, and Restart Clip keys receive priority even if a scrub slider still has focus.
 - `Escape` always deactivates scrub, including when a slider has focus.
 - Range and speed sliders never capture performance keys. Only text fields block shortcuts.
-- The learned scrub drum key always controls the selected clip's saved scrub mode, regardless of whether the settings editor is displaying Clip or A1-A4. When inactive, its first hit activates the clip mode; for B/F, that same hit begins the first forward stroke.
+- The learned scrub drum key always controls the selected clip's saved scrub mode, regardless of whether the settings editor is displaying Clip or A1-A4. It executes the effect only while that clip's saved Scrub On/Off state is ON. While the state is OFF, the trigger is ignored and does not arm or activate scrub.
 - If an accent scrub effect is active, the clip's scrub trigger hands playback back to the clip and performs the clip-mode trigger immediately.
-- A learned MIDI drum note follows exactly the same ownership and first-hit behavior as the keyboard scrub trigger.
+- A learned MIDI drum note follows exactly the same ownership and armed-state behavior as the keyboard scrub trigger.
+- Scrub On/Off state changes only through the Scrub On/Off control, its keyboard shortcut (default `U`), or its mapped MIDI action. Dedicated A1-A4 accent triggers remain independent and unchanged.
 - Pop-out Q/W/R commands carry a navigation generation. Playback acknowledgements from an older generation are ignored so rapid triggers cannot restore a superseded position.
 - **Toggle Clip Scrub On/Off** is independently keyboard and MIDI mappable in **Keyboard Shortcuts**. Its default key is `U`, and it performs the same saved per-clip toggle as clicking the Scrub On/Off button.
 

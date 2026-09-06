@@ -433,6 +433,21 @@ async function run() {
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
   await waitFor(window, `document.getElementById('scrubDrumKeyDisplay').textContent.toLowerCase() === 'x'`, 'keyboard learn');
+
+  // The performance trigger is execution-only. It must not arm a clip whose
+  // saved scrub state is OFF; only the dedicated toggle may do that.
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.getElementById('scrubActiveBadge').style.display`),
+    'none',
+    'keyboard scrub trigger must not arm an OFF clip'
+  );
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').loop`), true);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'keyboard scrub toggle arms B/F');
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
   await waitFor(window, `document.getElementById('videoPlayer').loop === false`, 'B/F native-loop ownership');
@@ -611,6 +626,9 @@ async function run() {
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' });
   await waitFor(window, `!document.getElementById('videoPlayer').paused`, 'pre-handover embedded playback');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'arm clip scrub before embedded handover');
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
   await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: CLIP 1')`, 'embedded B/F handover start');
@@ -623,6 +641,9 @@ async function run() {
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none' && !document.getElementById('videoPlayer').paused`, 'embedded playback restored after scrub handovers');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 're-arm clip scrub before editing accent');
 
   await click(window, '.scrub-target-btn[data-scrub-target="accent3"]');
   await click(window, '.scrub-mode-btn[data-mode="manual-stutter"]');
@@ -655,11 +676,21 @@ async function run() {
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'D' });
   await waitFor(window, `!document.getElementById('videoPlayer').paused && document.getElementById('videoPlayer').currentTime < 1.8`, 'accent scrub retrigger restart', 3000);
 
-  // The clip's own scrub trigger hands playback back from the accent and
-  // immediately performs the saved B/F trigger.
+  // With the clip deliberately OFF, its general trigger must neither arm the
+  // clip nor disturb an independently running accent effect.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
-  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: CLIP 1') && document.getElementById('scrubActiveSource').textContent.includes('B/F')`, 'accent-to-clip scrub handover');
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.match(
+    await window.webContents.executeJavaScript(`document.getElementById('scrubActiveSource').textContent`),
+    /ACTIVE: ACCENT A3/,
+    'OFF clip trigger must leave the active accent in control'
+  );
+
+  // The dedicated toggle explicitly arms the clip and hands playback back.
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
+  await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: CLIP 1') && document.getElementById('scrubActiveSource').textContent.includes('B/F')`, 'toggle-driven accent-to-clip scrub handover');
   assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.scrub-mode-btn.selected').dataset.mode`), 'back-forward');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').value`), '2');
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubSpeedSlider').value`), '4');
@@ -706,9 +737,11 @@ async function run() {
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' });
   await waitFor(window, `document.getElementById('videoPlayer').paused`, 'pause before B/F state restoration test');
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 2`);
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'dedicated toggle activates B/F');
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
-  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'first-hit activation');
   await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back') && document.getElementById('videoPlayer').currentTime < 2.22`, 'automatic reverse at range end', 3000);
   await waitFor(window, `window.__backwardStrokeSeeked >= 2`, 'automatic backward decoded frames', 3000);
   let state = await readState(window);
@@ -1083,12 +1116,22 @@ async function run() {
   assert.equal(state.paused, true);
   assert.ok(Math.abs(state.time - 2) < 0.04, `hold wrapped to the first cue: ${state.time}`);
 
-  // MIDI drum mapping also activates on the first hit, matching keyboard behavior.
+  // MIDI uses the same execution-only rule. The mapped scrub trigger stays
+  // inert while OFF, and the separately mapped toggle is what arms it.
   await click(window, '#scrubActivateBtn');
   await click(window, '.scrub-mode-btn[data-mode="back-forward"]');
   await click(window, '#scrubDrumLearnBtn');
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
   await waitFor(window, `document.getElementById('scrubDrumDisplay').textContent.includes('Note 60')`, 'drum MIDI learn');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(
+    await window.webContents.executeJavaScript(`document.getElementById('scrubActiveBadge').style.display`),
+    'none',
+    'MIDI scrub trigger must not arm an OFF clip'
+  );
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 63, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'mapped MIDI scrub toggle arms B/F');
   window.webContents.send('midi-message', {
     type: 'noteon',
     channel: 1,
@@ -1096,7 +1139,6 @@ async function run() {
     velocity: 100,
     latencyTrace: { id: 9001, mainReceivedAt: performance.timeOrigin + performance.now() }
   });
-  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'MIDI first-hit activation');
   await waitFor(window, `!document.getElementById('videoPlayer').paused`, 'MIDI back-forward trigger');
   await waitForNode(
     () => rendererMessages.some(message =>
@@ -1134,6 +1176,9 @@ async function run() {
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A' });
   await waitFor(previewWindow, `!document.getElementById('previewVideo').paused`, 'pre-handover pop-out playback');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'arm clip scrub before pop-out handover');
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'X' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'X' });
   await waitFor(window, `document.getElementById('scrubActiveSource').textContent.includes('ACTIVE: CLIP 1')`, 'pop-out B/F handover start');
@@ -1247,6 +1292,8 @@ async function run() {
       window.__popoutBackwardSeeked += 1;
     });
   })()`);
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 63, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('scrubActiveBadge').style.display !== 'none'`, 'mapped MIDI toggle arms pop-out B/F');
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
   await waitFor(previewWindow, `document.getElementById('previewVideo').loop === false`, 'pop-out B/F native-loop ownership');
   await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back')`, 'pop-out automatic reverse at range end', 3000);
