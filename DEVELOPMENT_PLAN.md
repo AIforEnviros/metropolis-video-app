@@ -1097,7 +1097,8 @@ During development, several features were implemented that weren't in the origin
 ### Advanced Clip Management
 - **Drag-to-Move:** Drag clips between slots to reorganize
 - **Swap Functionality:** Dropping on occupied slot swaps the two clips
-- **Context Menu:** Right-click to clear clips or set playback modes
+- **Context Menu:** Right-click to clear, duplicate, or set playback modes
+- **Duplicate to Empty Slot:** Copies all persistent clip settings while sharing the source video file and resetting transient navigation progress
 - Preserves all clip data (cue points, speed settings) when moving
 - **Status:** ✅ Implemented (Step 17)
 

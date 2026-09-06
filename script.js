@@ -502,6 +502,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Session management state
     let currentSessionName = null;
     let sessionModified = false;
+    let pendingDuplicateClipNumber = null;
+    let duplicateStatusSnapshot = null;
 
     // Keyboard shortcuts configuration
     let keyboardShortcuts = {
@@ -1350,6 +1352,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Add click handler for selection
             clipSlot.addEventListener('click', function() {
+                if (pendingDuplicateClipNumber !== null) {
+                    duplicateClip(pendingDuplicateClipNumber, i);
+                    return;
+                }
                 selectClipSlot(clipSlot);
             });
 
@@ -1396,6 +1402,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Show context menu for clip playback mode selection
     function showClipContextMenu(event, clipNumber) {
+        if (pendingDuplicateClipNumber !== null) cancelClipDuplication();
         contextMenuClipNumber = clipNumber;
 
         // Show menu first (invisible) to get dimensions
@@ -1448,6 +1455,9 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 item.classList.remove('active');
             }
+            if (action === 'duplicate') {
+                item.classList.toggle('disabled', !clipVideos[clipNumber]);
+            }
         });
     }
 
@@ -1487,6 +1497,92 @@ document.addEventListener('DOMContentLoaded', function() {
         if (slot) {
             updateSlotAppearance(slot, clipVideos[clipNumber]);
         }
+    }
+
+    function cancelClipDuplication(restoreStatus = true) {
+        pendingDuplicateClipNumber = null;
+        clipsMatrix.classList.remove('duplicate-mode');
+        document.querySelectorAll('.clip-slot.duplicate-source').forEach(slot => {
+            slot.classList.remove('duplicate-source');
+        });
+        if (restoreStatus && duplicateStatusSnapshot) {
+            sessionStatus.textContent = duplicateStatusSnapshot.text;
+            sessionStatus.style.color = duplicateStatusSnapshot.color;
+        }
+        duplicateStatusSnapshot = null;
+    }
+
+    function beginClipDuplication(clipNumber) {
+        const sourceClipNumber = String(clipNumber);
+        if (!clipVideos[sourceClipNumber]) return false;
+
+        cancelClipDuplication();
+        pendingDuplicateClipNumber = sourceClipNumber;
+        duplicateStatusSnapshot = {
+            text: sessionStatus.textContent,
+            color: sessionStatus.style.color
+        };
+        clipsMatrix.classList.add('duplicate-mode');
+        document.querySelector(`.clip-slot[data-clip-number="${sourceClipNumber}"]`)?.classList.add('duplicate-source');
+        sessionStatus.textContent = `Duplicate Clip ${sourceClipNumber}: click an empty slot (Esc cancels)`;
+        sessionStatus.style.color = '#fabd2f';
+        return true;
+    }
+
+    function cloneCuePointsForDuplicate(cuePoints, targetClipNumber) {
+        const identity = Date.now();
+        return (cuePoints || []).map((cuePoint, index) => ({
+            ...cuePoint,
+            id: `cue_${currentTab}_${targetClipNumber}_${identity}_${index}`
+        }));
+    }
+
+    function cloneAccentPointsForDuplicate(accentPoints, targetClipNumber) {
+        const identity = Date.now();
+        return Object.fromEntries(Object.entries(accentPoints || {}).map(([slot, accent]) => [slot, {
+            ...accent,
+            id: `accent_${currentTab}_${targetClipNumber}_${slot}_${identity}`
+        }]));
+    }
+
+    function duplicateClip(sourceClipNumber, targetClipNumber) {
+        const sourceKey = String(sourceClipNumber);
+        const targetKey = String(targetClipNumber);
+        if (pendingDuplicateClipNumber === null || sourceKey !== String(pendingDuplicateClipNumber)) return false;
+        if (sourceKey === targetKey || clipVideos[targetKey]) return false;
+
+        const sourceVideo = clipVideos[sourceKey];
+        if (!sourceVideo) {
+            cancelClipDuplication();
+            return false;
+        }
+
+        clipVideos[targetKey] = { ...sourceVideo };
+        clipCuePoints[targetKey] = cloneCuePointsForDuplicate(clipCuePoints[sourceKey], targetKey);
+        clipAccentPoints[targetKey] = cloneAccentPointsForDuplicate(clipAccentPoints[sourceKey], targetKey);
+        clipSpeeds[targetKey] = clipSpeeds[sourceKey] || 1.0;
+        clipModes[targetKey] = clipModes[sourceKey] || 'loop';
+        clipScrubSettings[targetKey] = normaliseClipScrubSettings(clipScrubSettings[sourceKey]);
+        clipMidiPermissions[targetKey] = cloneClipMIDIPermissions(clipMidiPermissions[sourceKey]);
+        clipCurrentCueIndex[targetKey] = -1;
+
+        if (clipNames[sourceKey] !== undefined) clipNames[targetKey] = clipNames[sourceKey];
+        else delete clipNames[targetKey];
+        if (tabClipAutoPlay[currentTab][sourceKey] !== undefined) {
+            tabClipAutoPlay[currentTab][targetKey] = tabClipAutoPlay[currentTab][sourceKey];
+        } else {
+            delete tabClipAutoPlay[currentTab][targetKey];
+        }
+        if (clipInOutPoints[sourceKey]) clipInOutPoints[targetKey] = { ...clipInOutPoints[sourceKey] };
+        else delete clipInOutPoints[targetKey];
+
+        const targetSlot = document.querySelector(`.clip-slot[data-clip-number="${targetKey}"]`);
+        updateSlotAppearance(targetSlot, clipVideos[targetKey]);
+        cancelClipDuplication();
+        markSessionModified();
+        selectClipSlot(targetSlot);
+        console.log(`Duplicated clip ${sourceKey} to ${targetKey}`);
+        return true;
     }
 
     // Move/swap clip between slots
@@ -1607,7 +1703,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (clipVideos[clipNumber]) {
             // Revoke blob URL if it exists to free memory
             if (clipVideos[clipNumber].url && clipVideos[clipNumber].url.startsWith('blob:')) {
-                URL.revokeObjectURL(clipVideos[clipNumber].url);
+                const removedURL = clipVideos[clipNumber].url;
+                const usedByAnotherClip = Object.values(tabClipVideos).some(tabVideos =>
+                    Object.entries(tabVideos || {}).some(([otherClipNumber, videoData]) =>
+                        !(tabVideos === clipVideos && String(otherClipNumber) === String(clipNumber)) &&
+                        videoData?.url === removedURL
+                    )
+                );
+                if (!usedByAnotherClip) URL.revokeObjectURL(removedURL);
             }
             delete clipVideos[clipNumber];
         }
@@ -5244,6 +5347,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Switch to a different tab
     function switchTab(tabIndex) {
+        if (pendingDuplicateClipNumber !== null) cancelClipDuplication();
         if (tabIndex === currentTab) {
             return; // Already on this tab
         }
@@ -5801,6 +5905,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleKeyboardShortcuts(event) {
+        if (pendingDuplicateClipNumber !== null && event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            cancelClipDuplication();
+            return;
+        }
+
         // === SCRUB DRUM KEY — checked FIRST, before all guards ===
         // Must come before the INPUT guard so range sliders don't block it.
         // Also before scrubKeyLearnActive so a learn capture isn't confused with a hit.
@@ -6930,6 +7041,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (action === 'clear') {
                     clearClip(contextMenuClipNumber);
+                } else if (action === 'duplicate') {
+                    if (!item.classList.contains('disabled')) beginClipDuplication(contextMenuClipNumber);
                 } else if (action === 'midi-permissions') {
                     openMIDIPermissionsModal(contextMenuClipNumber);
                 } else if (action === 'toggle-autoplay') {

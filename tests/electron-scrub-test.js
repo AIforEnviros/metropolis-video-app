@@ -1636,6 +1636,28 @@ async function run() {
   await waitFor(window, `document.querySelector('.scrub-mode-btn.selected').dataset.mode === 'back-forward' && document.getElementById('scrubFullRangeToggle').checked`, 'slot two restore after cue-less Fader pop-out', 10000);
   assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubRangeSlider').disabled`), true);
 
+  // Duplicate is an explicit two-step operation and Escape cancels it without
+  // disturbing playback. The completed copy uses an empty slot and carries
+  // every persistent clip setting while receiving independent cue identities.
+  await window.webContents.executeJavaScript(`(() => {
+    const slot = document.querySelector('.clip-slot[data-clip-number="1"]');
+    slot.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }));
+  })()`);
+  await click(window, '#clipContextMenu .context-menu-item[data-action="duplicate"]');
+  await waitFor(window, `document.getElementById('clipsMatrix').classList.contains('duplicate-mode') && document.querySelector('.clip-slot[data-clip-number="1"]').classList.contains('duplicate-source')`, 'clip duplicate target mode');
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor(window, `!document.getElementById('clipsMatrix').classList.contains('duplicate-mode') && !document.querySelector('.clip-slot[data-clip-number="5"]').classList.contains('has-video')`, 'cancel clip duplication');
+
+  await window.webContents.executeJavaScript(`(() => {
+    const slot = document.querySelector('.clip-slot[data-clip-number="1"]');
+    slot.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }));
+  })()`);
+  await click(window, '#clipContextMenu .context-menu-item[data-action="duplicate"]');
+  await click(window, '.clip-slot[data-clip-number="5"]');
+  await waitFor(window, `document.querySelector('.clip-slot[data-clip-number="5"]').classList.contains('has-video') && document.querySelector('.clip-slot[data-clip-number="5"]').classList.contains('selected') && document.getElementById('videoPlayer').duration > 0`, 'duplicate clip into empty slot', 10000);
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('clipsMatrix').classList.contains('duplicate-mode')`), false);
+
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
@@ -1681,6 +1703,25 @@ async function run() {
     fullRange: true,
     autoReverse: false
   });
+  assert.equal(savedSessionData.tabs.videos['0']['5'].filePath, savedSessionData.tabs.videos['0']['1'].filePath);
+  assert.equal(savedSessionData.tabs.speeds['0']['5'], savedSessionData.tabs.speeds['0']['1']);
+  assert.equal(savedSessionData.tabs.clipModes['0']['5'], savedSessionData.tabs.clipModes['0']['1']);
+  assert.equal(savedSessionData.tabs.clipAutoPlay['0']['5'], savedSessionData.tabs.clipAutoPlay['0']['1']);
+  assert.deepEqual(savedSessionData.tabs.inOutPoints['0']['5'], savedSessionData.tabs.inOutPoints['0']['1']);
+  assert.deepEqual(savedSessionData.tabs.scrubSettings['0']['5'], savedSessionData.tabs.scrubSettings['0']['1']);
+  assert.deepEqual(savedSessionData.tabs.midiPermissions['0']['5'], savedSessionData.tabs.midiPermissions['0']['1']);
+  assert.deepEqual(
+    savedSessionData.tabs.cuePoints['0']['5'].map(point => point.time),
+    savedSessionData.tabs.cuePoints['0']['1'].map(point => point.time)
+  );
+  assert.ok(savedSessionData.tabs.cuePoints['0']['5'].every((point, index) =>
+    point.id !== savedSessionData.tabs.cuePoints['0']['1'][index].id
+  ), 'duplicated cues must have independent identities');
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(savedSessionData.tabs.accentPoints['0']['5']).map(([slot, point]) => [slot, { ...point, id: null }])),
+    Object.fromEntries(Object.entries(savedSessionData.tabs.accentPoints['0']['1']).map(([slot, point]) => [slot, { ...point, id: null }]))
+  );
+  assert.equal(savedSessionData.tabs.currentCueIndex['0']['5'], -1);
 
   // Round-trip through the real session loader, not just the serialized object.
   await setSlider(window, '#scrubRangeSlider', 3);

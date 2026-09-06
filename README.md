@@ -220,6 +220,10 @@ See `OUTPUT_FADE.md` for the global MIDI master output fade and blackout behavio
 
 Click **Collect All & Save** to copy every referenced video into a package containing the session JSON and a `Media` folder. Choose an empty destination for the first collection, or select the same package folder again to update it safely. Reused source files are copied once, filename collisions are renamed safely, and the resulting folder can be moved between Windows and macOS as one unit.
 
+### Duplicate Clips
+
+Right-click a loaded clip and choose **Duplicate Clip**, then click an empty slot on the same tab. Press `Escape` to cancel. The new slot references the same video file but receives independent copies of the clip name, cue and accent points, In/Out points, playback settings, scrub settings, and per-controller MIDI permissions. Temporary playback position and cue-navigation progress are reset. Occupied slots are never overwritten.
+
 ### Master Output Fade
 
 The compact **Master Output** slider fades both the embedded preview and pop-out output to black while video playback and performance controls continue underneath. Assign **Master Output Fade Fader** to a MIDI CC through the Keyboard Shortcuts window. Use **Reverse MIDI direction** if the physical fader orientation is opposite to the desired movement.
