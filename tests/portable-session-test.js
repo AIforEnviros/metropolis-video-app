@@ -47,7 +47,7 @@ async function run() {
 
     const collected = await collectPortableSession(sessionData, destination);
     assert.equal(collected.files.length, 2, 'reused sources should only be copied once');
-    assert.equal(collected.sessionData.version, '1.18');
+    assert.equal(collected.sessionData.version, '1.19');
     assert.equal(collected.sessionData.portableSession.mediaDirectory, 'Media');
 
     const firstPath = collected.sessionData.tabs.videos[0][1].filePath;

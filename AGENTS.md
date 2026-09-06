@@ -24,7 +24,7 @@ This is now an Electron-based desktop application for production live performanc
 **Current active development (2026-09-05):**
 - Branch: `codex/portable-tabs-reconnect`
 - Electron is the only active application architecture; `src/` is legacy
-- Session format v1.18 adds per-clip controller-by-action MIDI permissions while retaining range positioning, Range/Speed CC mappings, the global output fade, portable packages, and per-slot scrub/accent settings
+- Session format v1.19 supports multiple mappings for discrete MIDI actions and per-clip controller-by-action permissions while retaining range positioning, single Range/Speed CC mappings, the global output fade, portable packages, and per-slot scrub/accent settings
 - All detected MIDI inputs connect simultaneously; mappings remain device-independent, with optional per-clip source-controller permissions for cue, scrub, and accent actions
 - The selected clip's scrub On/Off control is keyboard and MIDI mappable through the standard shortcuts window
 - Run the app with `npm start` (`npm.cmd start` in restricted Windows PowerShell)
@@ -756,7 +756,7 @@ Complete MIDI mapping and MIDI learn functionality has been implemented for all 
 }
 ```
 
-**Original MIDI session format (v1.4; current application format is v1.18):**
+**Original MIDI session format (v1.4; current application format is v1.19):**
 ```json
 {
   "version": "1.4",

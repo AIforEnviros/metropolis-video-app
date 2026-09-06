@@ -1770,6 +1770,10 @@
 
         .midi-mapping-display {
             flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 4px;
             background-color: #555;
             border: 2px solid #666;
             color: white;
@@ -1984,6 +1988,33 @@
         .context-menu-item:hover {
             background-color: #404040;
             color: white;
+        }
+
+        .midi-mapping-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 5px;
+            border: 1px solid rgba(144, 238, 144, 0.45);
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.22);
+            white-space: nowrap;
+        }
+        #scrubDrumDisplay {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            overflow: visible;
+            white-space: normal;
+        }
+
+        .midi-mapping-chip-remove {
+            border: 0;
+            padding: 0 2px;
+            background: transparent;
+            color: #ffb4b4;
+            cursor: pointer;
+            font-weight: bold;
         }
 
         .context-menu-item.disabled,

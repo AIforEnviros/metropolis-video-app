@@ -394,7 +394,7 @@ async function run() {
   collectedSessionData = null;
   await click(window, '#collectAllBtn');
   await waitForNode(() => collectedSessionData !== null, 'Collect All & Save renderer request');
-  assert.equal(collectedSessionData.version, '1.18');
+  assert.equal(collectedSessionData.version, '1.19');
   await waitFor(window, `document.getElementById('collectAllBtn').disabled === false && document.getElementById('collectAllBtn').textContent === 'Collect All & Save'`, 'Collect All & Save button restoration');
   assert.match(await window.webContents.executeJavaScript(`window.__lastAlert`), /unique video file\(s\) collected/);
   // The default U shortcut operates the same saved per-clip toggle as the UI.
@@ -539,6 +539,18 @@ async function run() {
   await click(window, '.midi-learn-btn[data-action="nextCuePoint"]');
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 66, velocity: 100, deviceId: 0, deviceName: 'SPD-20' });
   await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="nextCuePoint"]').textContent.includes('Note 66')`, 'next cue MIDI learn');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelector('.midi-learn-btn[data-action="nextCuePoint"]').textContent`), 'Add');
+  await click(window, '.midi-learn-btn[data-action="nextCuePoint"]');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 10, note: 1, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.querySelectorAll('.midi-mapping-display[data-action="nextCuePoint"] .midi-mapping-chip').length === 2 && document.querySelector('.midi-mapping-display[data-action="nextCuePoint"]').textContent.includes('Ch10 Note 1')`, 'second next cue MIDI mapping');
+  await click(window, '.midi-learn-btn[data-action="nextCuePoint"]');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 10, note: 1, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.querySelectorAll('.midi-mapping-display[data-action="nextCuePoint"] .midi-mapping-chip').length === 2`, 'duplicate MIDI mapping ignored');
+  await click(window, '.midi-learn-btn[data-action="nextCuePoint"]');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 69, velocity: 100, deviceId: 0, deviceName: 'SPD-20' });
+  await waitFor(window, `document.querySelectorAll('.midi-mapping-display[data-action="nextCuePoint"] .midi-mapping-chip').length === 3`, 'third temporary MIDI mapping');
+  await click(window, '.midi-mapping-display[data-action="nextCuePoint"] .midi-mapping-chip:last-child .midi-mapping-chip-remove');
+  await waitFor(window, `document.querySelectorAll('.midi-mapping-display[data-action="nextCuePoint"] .midi-mapping-chip').length === 2 && !document.querySelector('.midi-mapping-display[data-action="nextCuePoint"]').textContent.includes('Note 69')`, 'remove individual MIDI mapping');
   assert.equal(
     await window.webContents.executeJavaScript(`document.querySelector('.shortcut-input[data-action="previousTab"]').textContent`),
     'MIDI only'
@@ -587,6 +599,9 @@ async function run() {
   assert.ok(await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime < 0.2`), 'blocked SPD-20 next cue must be ignored');
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 66, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
   await waitFor(window, `document.getElementById('videoPlayer').currentTime >= 1.98`, 'allowed DJ controller next cue');
+  await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').currentTime = 0`);
+  window.webContents.send('midi-message', { type: 'noteon', channel: 10, note: 1, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('videoPlayer').currentTime >= 2.98`, 'second mapping triggers the same next cue action');
   await window.webContents.executeJavaScript(`document.getElementById('videoPlayer').pause()`);
 
   window.webContents.send('midi-message', { type: 'cc', channel: 1, controller: 21, value: 0, deviceId: 1, deviceName: 'DJ Controller' });
@@ -1133,6 +1148,10 @@ async function run() {
   await click(window, '#scrubDrumLearnBtn');
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
   await waitFor(window, `document.getElementById('scrubDrumDisplay').textContent.includes('Note 60')`, 'drum MIDI learn');
+  assert.equal(await window.webContents.executeJavaScript(`document.getElementById('scrubDrumLearnBtn').textContent`), 'Add');
+  await click(window, '#scrubDrumLearnBtn');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 10, note: 2, velocity: 100 });
+  await waitFor(window, `document.querySelectorAll('#scrubDrumDisplay .midi-mapping-chip').length === 2 && document.getElementById('scrubDrumDisplay').textContent.includes('Ch10 Note 2')`, 'second scrub trigger MIDI mapping');
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 60, velocity: 100 });
   await new Promise(resolve => setTimeout(resolve, 100));
   assert.equal(
@@ -1155,6 +1174,8 @@ async function run() {
       message.includes('[LATENCY] #9001') && message.includes('[forward]')),
     'embedded MIDI latency result'
   );
+  window.webContents.send('midi-message', { type: 'noteon', channel: 10, note: 2, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.getElementById('scrubStatusLine').textContent.includes('Playing: Back')`, 'second MIDI mapping reverses B/F');
 
   // Exercise the same controller with the pop-out as the playback owner.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
@@ -1422,7 +1443,7 @@ async function run() {
     'stale pop-out seek acknowledgement must not replace the newest navigation position'
   );
 
-  // Per-slot scrub/accent settings restore independently and serialize in session v1.18.
+  // Per-slot scrub/accent settings restore independently and serialize in session v1.19.
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor(window, `document.getElementById('scrubActiveBadge').style.display === 'none'`, 'slot one scrub disabled');
@@ -1714,12 +1735,16 @@ async function run() {
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
   await waitForNode(() => savedSessionData !== null, 'session save capture');
-  assert.equal(savedSessionData.version, '1.18');
+  assert.equal(savedSessionData.version, '1.19');
   assert.deepEqual(savedSessionData.allTabs, [2, 0, 1, 3, 4]);
-  assert.deepEqual(savedSessionData.midiMappings.accent2, { type: 'noteon', channel: 1, note: 62 });
-  assert.deepEqual(savedSessionData.midiMappings.toggleScrubMode, { type: 'noteon', channel: 1, note: 63 });
-  assert.deepEqual(savedSessionData.midiMappings.previousTab, { type: 'noteon', channel: 1, note: 67 });
-  assert.deepEqual(savedSessionData.midiMappings.nextTab, { type: 'noteon', channel: 1, note: 68 });
+  assert.deepEqual(savedSessionData.midiMappings.accent2, [{ type: 'noteon', channel: 1, note: 62 }]);
+  assert.deepEqual(savedSessionData.midiMappings.toggleScrubMode, [{ type: 'noteon', channel: 1, note: 63 }]);
+  assert.deepEqual(savedSessionData.midiMappings.previousTab, [{ type: 'noteon', channel: 1, note: 67 }]);
+  assert.deepEqual(savedSessionData.midiMappings.nextTab, [{ type: 'noteon', channel: 1, note: 68 }]);
+  assert.deepEqual(savedSessionData.midiMappings.nextCuePoint, [
+    { type: 'noteon', channel: 1, note: 66 },
+    { type: 'noteon', channel: 10, note: 1 }
+  ]);
   assert.deepEqual(savedSessionData.midiMappings.outputFade, { type: 'cc', channel: 1, controller: 21 });
   assert.deepEqual(savedSessionData.outputFadeSettings, { reversed: true });
   assert.deepEqual(savedSessionData.tabs.midiPermissions['0']['1'].devices['spd-20'], {
@@ -1728,6 +1753,10 @@ async function run() {
   });
   assert.deepEqual(savedSessionData.scrubSettings.rangeController, { type: 'cc', channel: 1, controller: 15 });
   assert.deepEqual(savedSessionData.scrubSettings.speedController, { type: 'cc', channel: 1, controller: 16 });
+  assert.deepEqual(savedSessionData.scrubSettings.drumPadNotes, [
+    { type: 'noteon', channel: 1, note: 60 },
+    { type: 'noteon', channel: 10, note: 2 }
+  ]);
   assert.equal(savedSessionData.tabs.accentPoints['0']['1']['1'].time, 1.25);
   assert.equal(savedSessionData.tabs.accentPoints['0']['2']['1'].time, 0.8);
   assert.equal(savedSessionData.tabs.accentPoints['0']['1']['2'].time, 3.4);
@@ -1783,7 +1812,7 @@ async function run() {
   await setSlider(window, '#scrubRangeSlider', 3);
   await click(window, '.scrub-mode-btn[data-mode="stutter"]');
   await click(window, '#loadSessionBtn');
-  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.18 reload', 10000);
+  await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.19 reload', 10000);
   assert.deepEqual(
     await window.webContents.executeJavaScript(`Array.from(document.querySelectorAll('.tab-btn')).map(button => Number(button.dataset.tab))`),
     [2, 0, 1, 3, 4]
@@ -1831,6 +1860,9 @@ async function run() {
   sessionDataToLoad.version = '1.12';
   sessionDataToLoad.tabs.currentCueIndex['0']['1'] = 99;
   sessionDataToLoad.tabs.cuePoints['0']['1'].forEach(cuePoint => delete cuePoint.id);
+  sessionDataToLoad.midiMappings.nextCuePoint = sessionDataToLoad.midiMappings.nextCuePoint[0];
+  sessionDataToLoad.scrubSettings.drumPadNote = sessionDataToLoad.scrubSettings.drumPadNotes[0];
+  delete sessionDataToLoad.scrubSettings.drumPadNotes;
   const legacyAccent = sessionDataToLoad.tabs.accentPoints['0']['1']['1'];
   delete legacyAccent.scrubMode;
   delete legacyAccent.scrubRange;
@@ -1839,6 +1871,11 @@ async function run() {
   await window.webContents.executeJavaScript(`document.getElementById('sessionStatus').textContent = 'Loading v1.12 accent test…'`);
   await click(window, '#loadSessionBtn');
   await waitFor(window, `document.getElementById('sessionStatus').textContent.startsWith('Loaded:')`, 'session v1.12 accent migration', 10000);
+  await click(window, '#shortcutsBtn');
+  await waitFor(window, `document.querySelectorAll('.midi-mapping-display[data-action="nextCuePoint"] .midi-mapping-chip').length === 1 && document.querySelector('.midi-mapping-display[data-action="nextCuePoint"]').textContent.includes('Note 66')`, 'legacy single action mapping migration');
+  await click(window, '#closeShortcutsModal');
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelectorAll('#scrubDrumDisplay .midi-mapping-chip').length`), 1);
+  assert.match(await window.webContents.executeJavaScript(`document.getElementById('scrubDrumDisplay').textContent`), /Note 60/);
   await click(window, '.clip-slot[data-clip-number="1"]');
   await waitFor(window, `document.getElementById('videoPlayer').duration > 0`, 'v1.12 accent slot restore', 10000);
   await click(window, '.scrub-target-btn[data-scrub-target="accent1"]');

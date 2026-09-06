@@ -1118,7 +1118,7 @@ During development, several features were implemented that weren't in the origin
 - **Status:** ✅ Implemented
 
 ### Enhanced Session Format
-- Session file format evolved from v1.0 to v1.18, including portable packages, a global MIDI output fade, scrub Range/Speed CC mappings, per-clip/per-accent Start/Centre/End range positioning, and per-clip controller permissions
+- Session file format evolved from v1.0 to v1.19, including portable packages, multiple mappings for discrete MIDI actions, a global MIDI output fade, scrub Range/Speed CC mappings, per-clip/per-accent Start/Centre/End range positioning, and per-clip controller permissions
 - Includes: MIDI mappings, keyboard shortcuts, tab names, playback modes, per-clip auto-play, In/Out points, per-slot scrub settings, four per-slot accent cue points, and controller-by-action MIDI restrictions
 - Comprehensive project state preservation
 - **Status:** ✅ Implemented

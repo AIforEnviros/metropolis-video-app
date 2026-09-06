@@ -4,6 +4,8 @@
 
 MIDI mappings remain shared across every connected controller. Per-clip MIDI permissions add a second, allow-by-default check: after a MIDI message matches an action, the selected clip decides whether the physical controller that sent it may execute that action.
 
+Discrete actions may have multiple shared MIDI mappings. Permissions still apply once per controller and action, covering every note or button mapped to that action. For example, blocking the SPD-20 from Next Cue blocks all of its messages that match any Next Cue mapping without affecting an allowed collaborator's controller.
+
 This prevents one performer from accidentally changing cue or scrub playback during clips controlled by the other performer without duplicating the application's MIDI mappings.
 
 ## Setup
@@ -34,7 +36,7 @@ Next/Previous Clip, tab switching, keyboard shortcuts, and Master Output Fade re
 - New clips and older sessions allow every controller by default.
 - Permissions belong to the video slot and move with it when clips are moved or swapped.
 - Selecting a new clip immediately activates that clip's permissions.
-- Mappings remain device-independent. Blocking a controller does not alter or delete the underlying mapping and does not block another allowed controller sending the same note or CC.
+- Mappings remain device-independent. Blocking a controller does not alter or delete any underlying mapping and does not block another allowed controller sending the same note or CC.
 - Saved restrictions for a disconnected controller remain visible as **Not connected** when the permission window is opened.
 - Controller identity is based on the MIDI input name reported by the operating system. If a controller appears under a different name on another computer, configure that listed input for the clip before performing.
 

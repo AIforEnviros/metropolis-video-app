@@ -610,7 +610,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         return {
-            version: '1.18',
+            version: '1.19',
             timestamp: new Date().toISOString(),
             sessionName: currentSessionName,
             currentTab: currentTab,
@@ -642,7 +642,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 ccController: scrubConfig.ccController,
                 rangeController: scrubConfig.rangeController,
                 speedController: scrubConfig.speedController,
-                drumPadNote: scrubConfig.drumPadNote,
+                drumPadNotes: scrubConfig.drumPadNotes,
                 drumPadKey: scrubConfig.drumPadKey,
                 defaults: DEFAULT_CLIP_SCRUB_SETTINGS
             }
@@ -935,6 +935,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     sessionData.midiMappings.pausePlay = null;
                 }
                 midiMappings = { ...midiMappings, ...sessionData.midiMappings };
+                Object.keys(midiMappings).forEach(action => {
+                    if (action !== 'outputFade') {
+                        midiMappings[action] = normaliseMIDIMappingList(midiMappings[action]);
+                    }
+                });
                 console.log('Restored MIDI mappings:', midiMappings);
             }
 
@@ -950,7 +955,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 scrubConfig.ccController = sessionData.scrubSettings.ccController || null;
                 scrubConfig.rangeController = sessionData.scrubSettings.rangeController || null;
                 scrubConfig.speedController = sessionData.scrubSettings.speedController || null;
-                scrubConfig.drumPadNote  = sessionData.scrubSettings.drumPadNote  || null;
+                scrubConfig.drumPadNotes = normaliseMIDIMappingList(
+                    sessionData.scrubSettings.drumPadNotes ?? sessionData.scrubSettings.drumPadNote
+                ).filter(mapping => mapping.type === 'noteon');
                 scrubConfig.drumPadKey   = sessionData.scrubSettings.drumPadKey   || null;
                 scrubConfig.range = legacyScrubDefaults.range;
                 scrubConfig.speed = legacyScrubDefaults.speed;
@@ -3617,7 +3624,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ccController: null,  // { type:'cc', channel, controller } or null
         rangeController: null, // continuous CC mapped to the visible Range slider
         speedController: null, // continuous CC mapped to the visible Speed slider
-        drumPadNote: null,   // { type:'noteon', channel, note } or null
+        drumPadNotes: [],    // multiple { type:'noteon', channel, note } mappings
         drumPadKey: null     // keyboard shortcut string e.g. 'Space', 'x', 'Shift+x'
     };
 
@@ -4037,10 +4044,16 @@ document.addEventListener('DOMContentLoaded', function() {
             speedDisplay.style.color = scrubConfig.speedController ? '#90ee90' : '#888';
         }
         if (drumDisplay) {
-            drumDisplay.textContent = scrubConfig.drumPadNote
-                ? formatMIDIMapping(scrubConfig.drumPadNote)
-                : 'Not mapped';
-            drumDisplay.style.color = scrubConfig.drumPadNote ? '#90ee90' : '#888';
+            renderMappingChips(drumDisplay, scrubConfig.drumPadNotes, (_mapping, index) => {
+                scrubConfig.drumPadNotes.splice(index, 1);
+                updateScrubMIDIDisplays();
+                markSessionModified();
+            });
+            drumDisplay.style.color = scrubConfig.drumPadNotes.length > 0 ? '#90ee90' : '#888';
+            const drumLearnButton = document.getElementById('scrubDrumLearnBtn');
+            if (drumLearnButton && !drumLearnButton.classList.contains('learning')) {
+                drumLearnButton.textContent = scrubConfig.drumPadNotes.length > 0 ? 'Add' : 'Learn';
+            }
         }
         if (drumKeyDisplay) {
             drumKeyDisplay.textContent = scrubConfig.drumPadKey || 'Not mapped';
@@ -6389,11 +6402,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // === SCRUB DRUM PAD INTERCEPT ===
-        if (scrubConfig.drumPadNote &&
-            message.type === 'noteon' &&
+        if (message.type === 'noteon' &&
             message.velocity > 0 &&
-            message.channel === scrubConfig.drumPadNote.channel &&
-            message.note === scrubConfig.drumPadNote.note) {
+            scrubConfig.drumPadNotes.some(mapping => matchesMIDIMapping(message, mapping))) {
             if (!isMIDIActionAllowedForSelectedClip('scrubTrigger', message)) return;
             const trace = beginMIDILatencyTrace(message, `scrub trigger: ${scrubMode || selectedScrubMode || 'inactive'}`);
             const triggered = triggerClipScrubHit();
@@ -6406,8 +6417,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Try to match message against mapped actions
-        for (const [action, mapping] of Object.entries(midiMappings)) {
-            if (mapping && matchesMIDIMapping(message, mapping)) {
+        for (const [action, storedMappings] of Object.entries(midiMappings)) {
+            if (matchesStoredMIDIMapping(message, storedMappings)) {
                 if (!isMIDIActionAllowedForSelectedClip(action, message)) return;
                 // Check debounce timing
                 const now = Date.now();
@@ -6560,8 +6571,71 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function normaliseMIDIMappingList(value) {
+        if (!value) return [];
+        return (Array.isArray(value) ? value : [value]).filter(mapping =>
+            mapping && typeof mapping === 'object' && mapping.type && Number.isFinite(Number(mapping.channel))
+        );
+    }
+
+    function midiMappingsEqual(first, second) {
+        if (!first || !second || first.type !== second.type || Number(first.channel) !== Number(second.channel)) return false;
+        if (first.type === 'noteon' || first.type === 'noteoff') return Number(first.note) === Number(second.note);
+        if (first.type === 'cc') return Number(first.controller) === Number(second.controller);
+        if (first.type === 'program') return Number(first.program) === Number(second.program);
+        return false;
+    }
+
+    function matchesStoredMIDIMapping(message, storedMappings) {
+        if (Array.isArray(storedMappings)) {
+            return storedMappings.some(mapping => matchesMIDIMapping(message, mapping));
+        }
+        return Boolean(storedMappings && matchesMIDIMapping(message, storedMappings));
+    }
+
+    function appendMIDIMapping(existing, mapping) {
+        const mappings = normaliseMIDIMappingList(existing);
+        if (!mappings.some(candidate => midiMappingsEqual(candidate, mapping))) mappings.push(mapping);
+        return mappings;
+    }
+
+    function renderMappingChips(container, storedMappings, onRemove = null) {
+        const mappings = normaliseMIDIMappingList(storedMappings);
+        container.replaceChildren();
+        if (mappings.length === 0) {
+            container.textContent = 'Not Mapped';
+            container.classList.remove('has-mapping');
+            return;
+        }
+
+        container.classList.add('has-mapping');
+        mappings.forEach((mapping, index) => {
+            const chip = document.createElement('span');
+            chip.className = 'midi-mapping-chip';
+            const label = document.createElement('span');
+            label.textContent = formatMIDIMapping(mapping);
+            chip.appendChild(label);
+            if (onRemove) {
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'midi-mapping-chip-remove';
+                remove.textContent = '×';
+                remove.title = `Remove ${formatMIDIMapping(mapping)}`;
+                remove.addEventListener('click', event => {
+                    event.stopPropagation();
+                    onRemove(mapping, index);
+                });
+                chip.appendChild(remove);
+            }
+            container.appendChild(chip);
+        });
+    }
+
     // Format MIDI mapping for display
     function formatMIDIMapping(mapping) {
+        const mappings = normaliseMIDIMappingList(mapping);
+        if (mappings.length > 1) return mappings.map(formatMIDIMapping).join(' · ');
+        if (mappings.length === 1 && Array.isArray(mapping)) mapping = mappings[0];
         if (!mapping) return 'Not Mapped';
 
         let result = `Ch${mapping.channel} `;
@@ -6580,7 +6654,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function getMIDIPermissionMapping(action) {
-        if (action === 'scrubTrigger') return scrubConfig.drumPadNote;
+        if (action === 'scrubTrigger') return scrubConfig.drumPadNotes;
         if (action === 'scrubFader') return scrubConfig.ccController;
         if (action === 'scrubRange') return scrubConfig.rangeController;
         if (action === 'scrubSpeed') return scrubConfig.speedController;
@@ -6775,12 +6849,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (midiLearnAction === '_scrub_drum') {
             if (message.type !== 'noteon') return; // drum pad must be a note
-            scrubConfig.drumPadNote = {
+            const mapping = {
                 type: 'noteon',
                 channel: message.channel,
                 note: message.note
             };
-            console.log('Scrub drum pad mapped:', scrubConfig.drumPadNote);
+            scrubConfig.drumPadNotes = appendMIDIMapping(scrubConfig.drumPadNotes, mapping);
+            console.log('Scrub drum pad mapping added:', mapping);
             exitScrubMIDILearn();
             updateScrubMIDIDisplays();
             markSessionModified();
@@ -6802,8 +6877,11 @@ document.addEventListener('DOMContentLoaded', function() {
             mapping.controller = message.controller;
         }
 
-        // Save to the action we're learning
-        midiMappings[midiLearnAction] = mapping;
+        // Continuous controls retain a single owner. Discrete actions append
+        // distinct mappings so multiple performers can trigger the same action.
+        midiMappings[midiLearnAction] = midiLearnAction === 'outputFade'
+            ? mapping
+            : appendMIDIMapping(midiMappings[midiLearnAction], mapping);
         console.log(`Learned MIDI mapping for ${midiLearnAction}:`, mapping);
 
         // Exit learn mode
@@ -6919,18 +6997,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const midiDisplay = document.createElement('div');
             midiDisplay.className = 'midi-mapping-display';
-            const mapping = midiMappings[action];
-            if (mapping) {
-                midiDisplay.textContent = formatMIDIMapping(mapping);
-                midiDisplay.classList.add('has-mapping');
-            } else {
-                midiDisplay.textContent = 'Not Mapped';
-            }
+            const mappings = normaliseMIDIMappingList(midiMappings[action]);
+            renderMappingChips(midiDisplay, mappings, (_mapping, index) => removeMIDIMapping(action, index));
             midiDisplay.dataset.action = action;
 
             const learnBtn = document.createElement('button');
             learnBtn.className = 'midi-learn-btn';
-            learnBtn.textContent = 'Learn';
+            learnBtn.textContent = mappings.length > 0 && action !== 'outputFade' ? 'Add' : 'Learn';
             learnBtn.dataset.action = action;
             learnBtn.addEventListener('click', function() {
                 startMIDILearn(action, learnBtn);
@@ -6938,10 +7011,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const clearBtn = document.createElement('button');
             clearBtn.className = 'midi-clear-btn';
-            clearBtn.textContent = '✕';
-            clearBtn.title = 'Clear MIDI mapping';
+            clearBtn.textContent = mappings.length > 1 ? 'Clear All' : '✕';
+            clearBtn.title = 'Clear all MIDI mappings';
             clearBtn.dataset.action = action;
-            clearBtn.disabled = !mapping;
+            clearBtn.disabled = mappings.length === 0;
             clearBtn.addEventListener('click', function() {
                 clearMIDIMapping(action);
             });
@@ -6974,8 +7047,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function clearMIDIMapping(action) {
-        midiMappings[action] = null;
-        console.log(`Cleared MIDI mapping for action: ${action}`);
+        midiMappings[action] = action === 'outputFade' ? null : [];
+        console.log(`Cleared MIDI mappings for action: ${action}`);
+        populateShortcutsGrid();
+    }
+
+    function removeMIDIMapping(action, index) {
+        const mappings = normaliseMIDIMappingList(midiMappings[action]);
+        mappings.splice(index, 1);
+        midiMappings[action] = action === 'outputFade' ? (mappings[0] || null) : mappings;
+        console.log(`Removed MIDI mapping ${index} for action: ${action}`);
         populateShortcutsGrid();
     }
 
@@ -7533,7 +7614,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const scrubDrumClearBtn = document.getElementById('scrubDrumClearBtn');
     if (scrubDrumClearBtn) {
         scrubDrumClearBtn.addEventListener('click', function() {
-            scrubConfig.drumPadNote = null;
+            scrubConfig.drumPadNotes = [];
             updateScrubMIDIDisplays();
             markSessionModified();
         });
