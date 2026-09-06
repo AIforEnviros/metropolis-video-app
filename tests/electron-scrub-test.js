@@ -540,6 +540,16 @@ async function run() {
   window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 66, velocity: 100, deviceId: 0, deviceName: 'SPD-20' });
   await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="nextCuePoint"]').textContent.includes('Note 66')`, 'next cue MIDI learn');
   assert.equal(
+    await window.webContents.executeJavaScript(`document.querySelector('.shortcut-input[data-action="previousTab"]').textContent`),
+    'MIDI only'
+  );
+  await click(window, '.midi-learn-btn[data-action="previousTab"]');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 67, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="previousTab"]').textContent.includes('Note 67')`, 'previous tab MIDI learn');
+  await click(window, '.midi-learn-btn[data-action="nextTab"]');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 68, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.querySelector('.midi-mapping-display[data-action="nextTab"]').textContent.includes('Note 68')`, 'next tab MIDI learn');
+  assert.equal(
     await window.webContents.executeJavaScript(`document.querySelector('.shortcut-input[data-action="outputFade"]').textContent`),
     'MIDI CC only'
   );
@@ -1690,6 +1700,16 @@ async function run() {
   window.webContents.sendInputEvent({ type: 'keyDown', keyCode: '2' });
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: '2' });
   await waitFor(window, `document.querySelector('.tab-btn.active').dataset.tab === '0'`, 'Tab 2 shortcut follows reordered position');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 67, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.querySelector('.tab-btn.active').dataset.tab === '2'`, 'previous tab MIDI follows reordered position');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 67, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.querySelector('.tab-btn.active').dataset.tab === '4'`, 'previous tab MIDI wraps to last tab');
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 68, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.querySelector('.tab-btn.active').dataset.tab === '2'`, 'next tab MIDI wraps to first tab');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  window.webContents.send('midi-message', { type: 'noteon', channel: 1, note: 68, velocity: 100, deviceId: 1, deviceName: 'DJ Controller' });
+  await waitFor(window, `document.querySelector('.tab-btn.active').dataset.tab === '0'`, 'next tab MIDI returns to reordered second tab');
 
   savedSessionData = null;
   await click(window, '#saveSessionBtn');
@@ -1698,6 +1718,8 @@ async function run() {
   assert.deepEqual(savedSessionData.allTabs, [2, 0, 1, 3, 4]);
   assert.deepEqual(savedSessionData.midiMappings.accent2, { type: 'noteon', channel: 1, note: 62 });
   assert.deepEqual(savedSessionData.midiMappings.toggleScrubMode, { type: 'noteon', channel: 1, note: 63 });
+  assert.deepEqual(savedSessionData.midiMappings.previousTab, { type: 'noteon', channel: 1, note: 67 });
+  assert.deepEqual(savedSessionData.midiMappings.nextTab, { type: 'noteon', channel: 1, note: 68 });
   assert.deepEqual(savedSessionData.midiMappings.outputFade, { type: 'cc', channel: 1, controller: 21 });
   assert.deepEqual(savedSessionData.outputFadeSettings, { reversed: true });
   assert.deepEqual(savedSessionData.tabs.midiPermissions['0']['1'].devices['spd-20'], {

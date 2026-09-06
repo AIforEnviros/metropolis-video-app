@@ -555,6 +555,8 @@ document.addEventListener('DOMContentLoaded', function() {
         'pausePlay': null,
         'toggleScrubMode': null,
         'outputFade': null,
+        'previousTab': null,
+        'nextTab': null,
         'tab1': null,
         'tab2': null,
         'tab3': null,
@@ -5418,6 +5420,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (tabIndex !== undefined) switchTab(tabIndex);
     }
 
+    function navigateTabs(direction) {
+        if (allTabs.length < 2) return;
+        const currentPosition = allTabs.indexOf(currentTab);
+        const safePosition = currentPosition >= 0 ? currentPosition : 0;
+        const targetPosition = (safePosition + direction + allTabs.length) % allTabs.length;
+        switchTab(allTabs[targetPosition]);
+    }
+
     // Add a new tab
     function addNewTab() {
         const newTabIndex = nextTabIndex++;
@@ -6514,6 +6524,12 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'toggleScrubMode':
                 scrubActivateBtn?.click();
                 break;
+            case 'previousTab':
+                navigateTabs(-1);
+                break;
+            case 'nextTab':
+                navigateTabs(1);
+                break;
             case 'tab1':
                 switchToTabPosition(0);
                 break;
@@ -6827,6 +6843,8 @@ document.addEventListener('DOMContentLoaded', function() {
         'pausePlay': 'Pause/Play Video',
         'toggleScrubMode': 'Toggle Clip Scrub On/Off',
         'outputFade': 'Master Output Fade Fader',
+        'previousTab': 'Previous Tab',
+        'nextTab': 'Next Tab',
         'tab1': 'Switch to Tab 1',
         'tab2': 'Switch to Tab 2',
         'tab3': 'Switch to Tab 3',
@@ -6879,8 +6897,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // Keyboard shortcut column
             const inputDiv = document.createElement('div');
             inputDiv.className = 'shortcut-input';
-            const midiOnly = action === 'outputFade';
-            inputDiv.textContent = midiOnly ? 'MIDI CC only' : tempKeyboardShortcuts[action];
+            const midiOnly = action === 'outputFade' || action === 'previousTab' || action === 'nextTab';
+            inputDiv.textContent = action === 'outputFade'
+                ? 'MIDI CC only'
+                : midiOnly
+                    ? 'MIDI only'
+                    : tempKeyboardShortcuts[action];
             inputDiv.dataset.action = action;
 
             if (midiOnly) {

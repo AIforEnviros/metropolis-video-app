@@ -228,6 +228,8 @@ Right-click a loaded clip and choose **Duplicate Clip**, then click an empty slo
 
 Drag a tab left or right and drop it on the desired side of another tab. The new order is stored in the session without changing the tab's clips or settings. Keyboard and MIDI actions named **Switch to Tab 1-5** follow the first five visible tab positions after reordering.
 
+The same mapping window also provides MIDI-only **Previous Tab** and **Next Tab** actions. They move relative to the current visible order and wrap between the first and last tabs.
+
 ### Master Output Fade
 
 The compact **Master Output** slider fades both the embedded preview and pop-out output to black while video playback and performance controls continue underneath. Assign **Master Output Fade Fader** to a MIDI CC through the Keyboard Shortcuts window. Use **Reverse MIDI direction** if the physical fader orientation is opposite to the desired movement.

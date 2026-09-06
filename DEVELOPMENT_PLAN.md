@@ -1105,6 +1105,7 @@ During development, several features were implemented that weren't in the origin
 ### Dynamic Tab Management
 - **Add Tabs:** Unlimited tabs via + button (original plan showed fixed 5)
 - **Drag-to-Reorder:** Tab order persists in sessions while stable tab IDs keep all clip data attached
+- **Relative MIDI Navigation:** Previous Tab and Next Tab mappings follow visible order and wrap at either end
 - **Remove Tabs:** × button on each tab to remove when not needed
 - **Rename Tabs:** Double-click tab to rename for song titles
 - Flexible organization for different performance sections
